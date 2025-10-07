@@ -135,12 +135,71 @@ const mockRoutes: RouteData[] = [
   }
 ];
 
-const MapCenter = ({ center }: { center: LatLngExpression }) => {
+const MapController = ({ center, route, places }: { 
+  center: LatLngExpression; 
+  route: RouteData | null;
+  places: Place[];
+}) => {
   const map = useMap();
+  
   useEffect(() => {
     map.setView(center, 13);
   }, [center, map]);
-  return null;
+  
+  return (
+    <>
+      {route && (
+        <Polyline
+          positions={route.coordinates}
+          color={getRouteColor(route.mode)}
+          weight={4}
+          opacity={0.8}
+        />
+      )}
+
+      {places.map((place) => (
+        <Marker key={place.id} position={place.coordinates}>
+          <Popup>
+            <div className="p-2">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-2xl">{place.icon}</span>
+                <h3 className="font-semibold">{place.name}</h3>
+              </div>
+              <p className="text-sm text-muted-foreground">{place.description}</p>
+            </div>
+          </Popup>
+        </Marker>
+      ))}
+
+      {route && route.coordinates.length > 0 && (
+        <>
+          <Marker position={route.coordinates[0]}>
+            <Popup>
+              <div className="font-semibold">🚩 Начало маршрута</div>
+            </Popup>
+          </Marker>
+          <Marker position={route.coordinates[route.coordinates.length - 1]}>
+            <Popup>
+              <div className="font-semibold">🎯 Конец маршрута</div>
+            </Popup>
+          </Marker>
+        </>
+      )}
+    </>
+  );
+};
+
+const getRouteColor = (mode: string) => {
+  switch (mode) {
+    case "walking":
+      return "#0ea5e9";
+    case "bike":
+      return "#10b981";
+    case "car":
+      return "#f97316";
+    default:
+      return "#0ea5e9";
+  }
 };
 
 const Map = () => {
@@ -175,19 +234,6 @@ const Map = () => {
     }, 1500);
   };
 
-  const getRouteColor = (mode: string) => {
-    switch (mode) {
-      case "walking":
-        return "#0ea5e9";
-      case "bike":
-        return "#10b981";
-      case "car":
-        return "#f97316";
-      default:
-        return "#0ea5e9";
-    }
-  };
-
   const getModeIcon = (mode: string) => {
     const modeObj = transportModes.find(m => m.id === mode);
     return modeObj ? modeObj.icon : Footprints;
@@ -210,49 +256,11 @@ const Map = () => {
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
-            
-            <MapCenter center={mapCenter} />
-
-            {/* Route Line */}
-            {selectedRoute && (
-              <Polyline
-                positions={selectedRoute.coordinates}
-                color={getRouteColor(selectedRoute.mode)}
-                weight={4}
-                opacity={0.8}
-              />
-            )}
-
-            {/* Place Markers */}
-            {mockPlaces.map((place) => (
-              <Marker key={place.id} position={place.coordinates}>
-                <Popup>
-                  <div className="p-2">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-2xl">{place.icon}</span>
-                      <h3 className="font-semibold">{place.name}</h3>
-                    </div>
-                    <p className="text-sm text-muted-foreground">{place.description}</p>
-                  </div>
-                </Popup>
-              </Marker>
-            ))}
-
-            {/* Start and End Markers */}
-            {selectedRoute && (
-              <>
-                <Marker position={selectedRoute.coordinates[0]}>
-                  <Popup>
-                    <div className="font-semibold">🚩 Начало маршрута</div>
-                  </Popup>
-                </Marker>
-                <Marker position={selectedRoute.coordinates[selectedRoute.coordinates.length - 1]}>
-                  <Popup>
-                    <div className="font-semibold">🎯 Конец маршрута</div>
-                  </Popup>
-                </Marker>
-              </>
-            )}
+            <MapController 
+              center={mapCenter} 
+              route={selectedRoute}
+              places={mockPlaces}
+            />
           </MapContainer>
         </div>
 
