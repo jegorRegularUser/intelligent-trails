@@ -1,8 +1,7 @@
-import { useState, useEffect } from "react";
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
-import { Icon, LatLngExpression } from "leaflet";
+import { useEffect, useMemo, useRef, useState } from "react";
+import L, { LatLngExpression, Map as LeafletMap, LayerGroup, Polyline as LeafletPolyline, Marker as LeafletMarker } from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { Navigation, MapPin, X, Route as RouteIcon, Clock, TrendingUp, Footprints, Bike, Car } from "lucide-react";
+import { Navigation, MapPin, X, Route as RouteIcon, Clock, TrendingUp, Footprints, Bike, Car, } from "lucide-react";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,13 +11,16 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 
-// Fix Leaflet default marker icon
-delete (Icon.Default.prototype as any)._getIconUrl;
-Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
-  iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
-  shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
-});
+// Настройка дефолтных иконок Leaflet
+const setupLeafletIcons = () => {
+  // @ts-expect-error private api
+  delete L.Icon.Default.prototype._getIconUrl;
+  L.Icon.Default.mergeOptions({
+    iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png",
+    iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png",
+    shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
+  });
+};
 
 interface Place {
   id: string;
@@ -36,51 +38,16 @@ interface RouteData {
   duration: number;
   coordinates: [number, number][];
   places: Place[];
-  mode: string;
+  mode: "walking" | "bike" | "car";
 }
 
-// Мок данные для демонстрации
+// Мок данные
 const mockPlaces: Place[] = [
-  {
-    id: "1",
-    name: "Исторический музей",
-    type: "historical",
-    coordinates: [55.7558, 37.6173],
-    description: "Крупнейший музей российской истории",
-    icon: "🏛️"
-  },
-  {
-    id: "2",
-    name: "Парк Горького",
-    type: "park",
-    coordinates: [55.7307, 37.6015],
-    description: "Центральный парк культуры и отдыха",
-    icon: "🌳"
-  },
-  {
-    id: "3",
-    name: "Кафе Пушкинъ",
-    type: "food",
-    coordinates: [55.7655, 37.6067],
-    description: "Знаменитый ресторан русской кухни",
-    icon: "🍽️"
-  },
-  {
-    id: "4",
-    name: "Третьяковская галерея",
-    type: "cultural",
-    coordinates: [55.7415, 37.6207],
-    description: "Художественный музей",
-    icon: "🎭"
-  },
-  {
-    id: "5",
-    name: "Смотровая площадка",
-    type: "viewpoint",
-    coordinates: [55.7510, 37.5982],
-    description: "Панорамный вид на город",
-    icon: "🌅"
-  }
+  { id: "1", name: "Исторический музей", type: "historical", coordinates: [55.7558, 37.6173], description: "Крупнейший музей российской истории", icon: "🏛️" },
+  { id: "2", name: "Парк Горького", type: "park", coordinates: [55.7307, 37.6015], description: "Центральный парк культуры и отдыха", icon: "🌳" },
+  { id: "3", name: "Кафе Пушкинъ", type: "food", coordinates: [55.7655, 37.6067], description: "Знаменитый ресторан русской кухни", icon: "🍽️" },
+  { id: "4", name: "Третьяковская галерея", type: "cultural", coordinates: [55.7415, 37.6207], description: "Художественный музей", icon: "🎭" },
+  { id: "5", name: "Смотровая площадка", type: "viewpoint", coordinates: [55.751, 37.5982], description: "Панорамный вид на город", icon: "🌅" },
 ];
 
 const mockRoutes: RouteData[] = [
@@ -93,14 +60,14 @@ const mockRoutes: RouteData[] = [
     places: [mockPlaces[0], mockPlaces[3], mockPlaces[2]],
     coordinates: [
       [55.7558, 37.6173],
-      [55.7520, 37.6150],
-      [55.7480, 37.6180],
+      [55.752, 37.615],
+      [55.748, 37.618],
       [55.7415, 37.6207],
-      [55.7450, 37.6150],
-      [55.7500, 37.6100],
-      [55.7580, 37.6080],
-      [55.7655, 37.6067]
-    ]
+      [55.745, 37.615],
+      [55.75, 37.61],
+      [55.758, 37.608],
+      [55.7655, 37.6067],
+    ],
   },
   {
     id: "2",
@@ -111,12 +78,12 @@ const mockRoutes: RouteData[] = [
     places: [mockPlaces[1], mockPlaces[4]],
     coordinates: [
       [55.7558, 37.6173],
-      [55.7500, 37.6100],
-      [55.7450, 37.6050],
-      [55.7400, 37.6020],
-      [55.7350, 37.6000],
-      [55.7307, 37.6015]
-    ]
+      [55.75, 37.61],
+      [55.745, 37.605],
+      [55.74, 37.602],
+      [55.735, 37.6],
+      [55.7307, 37.6015],
+    ],
   },
   {
     id: "3",
@@ -127,69 +94,15 @@ const mockRoutes: RouteData[] = [
     places: [],
     coordinates: [
       [55.7558, 37.6173],
-      [55.7520, 37.6100],
-      [55.7480, 37.6050],
-      [55.7450, 37.6020],
-      [55.7415, 37.6000]
-    ]
-  }
+      [55.752, 37.61],
+      [55.748, 37.605],
+      [55.745, 37.602],
+      [55.7415, 37.6],
+    ],
+  },
 ];
 
-const MapController = ({ center, route, places }: { 
-  center: LatLngExpression; 
-  route: RouteData | null;
-  places: Place[];
-}) => {
-  const map = useMap();
-  
-  useEffect(() => {
-    map.setView(center, 13);
-  }, [center, map]);
-  
-  return (
-    <>
-      {route && (
-        <Polyline
-          positions={route.coordinates}
-          color={getRouteColor(route.mode)}
-          weight={4}
-          opacity={0.8}
-        />
-      )}
-
-      {places.map((place) => (
-        <Marker key={place.id} position={place.coordinates}>
-          <Popup>
-            <div className="p-2">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-2xl">{place.icon}</span>
-                <h3 className="font-semibold">{place.name}</h3>
-              </div>
-              <p className="text-sm text-muted-foreground">{place.description}</p>
-            </div>
-          </Popup>
-        </Marker>
-      ))}
-
-      {route && route.coordinates.length > 0 && (
-        <>
-          <Marker position={route.coordinates[0]}>
-            <Popup>
-              <div className="font-semibold">🚩 Начало маршрута</div>
-            </Popup>
-          </Marker>
-          <Marker position={route.coordinates[route.coordinates.length - 1]}>
-            <Popup>
-              <div className="font-semibold">🎯 Конец маршрута</div>
-            </Popup>
-          </Marker>
-        </>
-      )}
-    </>
-  );
-};
-
-const getRouteColor = (mode: string) => {
+const getRouteColor = (mode: RouteData["mode"]) => {
   switch (mode) {
     case "walking":
       return "#0ea5e9";
@@ -202,19 +115,94 @@ const getRouteColor = (mode: string) => {
   }
 };
 
-const Map = () => {
+const MapPage = () => {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<LeafletMap | null>(null);
+  const graphicsLayerRef = useRef<LayerGroup | null>(null);
+
   const [selectedRoute, setSelectedRoute] = useState<RouteData | null>(mockRoutes[0]);
   const [showRoutePanel, setShowRoutePanel] = useState(true);
   const [fromLocation, setFromLocation] = useState("Красная площадь");
   const [toLocation, setToLocation] = useState("Парк Горького");
-  const [transportMode, setTransportMode] = useState("walking");
+  const [transportMode, setTransportMode] = useState<RouteData["mode"]>("walking");
   const [mapCenter, setMapCenter] = useState<LatLngExpression>([55.7558, 37.6173]);
 
-  const transportModes = [
-    { id: "walking", label: "Пешком", icon: Footprints },
-    { id: "bike", label: "Велосипед", icon: Bike },
-    { id: "car", label: "Авто", icon: Car }
-  ];
+  const transportModes = useMemo(() => [
+    { id: "walking" as const, label: "Пешком", icon: Footprints },
+    { id: "bike" as const, label: "Велосипед", icon: Bike },
+    { id: "car" as const, label: "Авто", icon: Car },
+  ], []);
+
+  // Init map once
+  useEffect(() => {
+    setupLeafletIcons();
+    if (containerRef.current && !mapRef.current) {
+      mapRef.current = L.map(containerRef.current, {
+        center: mapCenter as [number, number],
+        zoom: 13,
+        zoomControl: false,
+      });
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+      }).addTo(mapRef.current);
+
+      graphicsLayerRef.current = L.layerGroup().addTo(mapRef.current);
+    }
+
+    return () => {
+      // Cleanup on unmount
+      mapRef.current?.remove();
+      mapRef.current = null;
+      graphicsLayerRef.current = null;
+    };
+  }, []);
+
+  // Update view when center changes
+  useEffect(() => {
+    if (mapRef.current) {
+      mapRef.current.setView(mapCenter as [number, number], 13);
+    }
+  }, [mapCenter]);
+
+  // Draw route and places
+  useEffect(() => {
+    const map = mapRef.current;
+    const layer = graphicsLayerRef.current;
+    if (!map || !layer) return;
+
+    layer.clearLayers();
+
+    // Draw route polyline
+    if (selectedRoute) {
+      const polyline: LeafletPolyline = L.polyline(selectedRoute.coordinates, {
+        color: getRouteColor(selectedRoute.mode),
+        weight: 4,
+        opacity: 0.85,
+      });
+      polyline.addTo(layer);
+
+      // Start marker
+      const start = selectedRoute.coordinates[0];
+      const end = selectedRoute.coordinates[selectedRoute.coordinates.length - 1];
+
+      const startMarker: LeafletMarker = L.marker(start).bindPopup("<b>🚩 Начало маршрута</b>");
+      const endMarker: LeafletMarker = L.marker(end).bindPopup("<b>🎯 Конец маршрута</b>");
+      startMarker.addTo(layer);
+      endMarker.addTo(layer);
+
+      // Fit bounds
+      const bounds = L.latLngBounds(selectedRoute.coordinates);
+      map.fitBounds(bounds, { padding: [40, 40] });
+    }
+
+    // Place markers
+    mockPlaces.forEach((place) => {
+      L.marker(place.coordinates)
+        .bindPopup(`<div style="font-weight:600;display:flex;align-items:center;gap:8px;font-size:14px;">${place.icon} ${place.name}</div><div style="margin-top:6px;color:#6b7280;font-size:12px;">${place.description}</div>`)
+        .addTo(layer);
+    });
+  }, [selectedRoute]);
 
   const handleRouteSelect = (route: RouteData) => {
     setSelectedRoute(route);
@@ -223,51 +211,33 @@ const Map = () => {
   };
 
   const handleRebuildRoute = () => {
-    toast.info("Перестраиваем маршрут...", {
-      description: "Учитываем новые параметры"
-    });
-    
+    toast.info("Перестраиваем маршрут...", { description: "Учитываем новые параметры" });
     setTimeout(() => {
-      toast.success("Маршрут обновлен!", {
-        description: "Найдено новое оптимальное решение"
-      });
-    }, 1500);
+      toast.success("Маршрут обновлен!", { description: "Найдено новое оптимальное решение" });
+      // Имитация: меняем центр чуть-чуть
+      setMapCenter(([55.7558 + Math.random() * 0.01, 37.6173 + Math.random() * 0.01]));
+    }, 1000);
   };
 
-  const getModeIcon = (mode: string) => {
-    const modeObj = transportModes.find(m => m.id === mode);
-    return modeObj ? modeObj.icon : Footprints;
+  const getModeIcon = (mode: RouteData["mode"]) => {
+    const found = transportModes.find((m) => m.id === mode);
+    return found ? found.icon : Footprints;
   };
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Header />
-      
+
       <div className="flex-1 relative">
         {/* Map Container */}
-        <div className="absolute inset-0">
-          <MapContainer
-            center={mapCenter}
-            zoom={13}
-            className="h-full w-full"
-            zoomControl={false}
-          >
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
-            <MapController 
-              center={mapCenter} 
-              route={selectedRoute}
-              places={mockPlaces}
-            />
-          </MapContainer>
-        </div>
+        <div ref={containerRef} className="absolute inset-0" />
 
         {/* Control Panel */}
-        <div className={`absolute top-4 right-4 z-[1000] transition-all duration-300 ${
-          showRoutePanel ? 'translate-x-0' : 'translate-x-[calc(100%+1rem)]'
-        }`}>
+        <div
+          className={`absolute top-4 right-4 z-[1000] transition-all duration-300 ${
+            showRoutePanel ? "translate-x-0" : "translate-x-[calc(100%+1rem)]"
+          }`}
+        >
           <Card className="w-[380px] max-h-[calc(100vh-120px)] shadow-2xl">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
@@ -275,17 +245,12 @@ const Map = () => {
                   <RouteIcon className="h-5 w-5 text-primary" />
                   Управление маршрутом
                 </CardTitle>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setShowRoutePanel(false)}
-                  className="h-8 w-8"
-                >
+                <Button variant="ghost" size="icon" onClick={() => setShowRoutePanel(false)} className="h-8 w-8">
                   <X className="h-4 w-4" />
                 </Button>
               </div>
             </CardHeader>
-            
+
             <CardContent className="space-y-4">
               {/* Location Inputs */}
               <div className="space-y-3">
@@ -294,23 +259,15 @@ const Map = () => {
                     <div className="h-2 w-2 rounded-full bg-primary" />
                     Откуда
                   </div>
-                  <Input
-                    value={fromLocation}
-                    onChange={(e) => setFromLocation(e.target.value)}
-                    placeholder="Начальная точка"
-                  />
+                  <Input value={fromLocation} onChange={(e) => setFromLocation(e.target.value)} placeholder="Начальная точка" />
                 </div>
-                
+
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-2 text-sm font-medium">
                     <div className="h-2 w-2 rounded-full bg-accent" />
                     Куда
                   </div>
-                  <Input
-                    value={toLocation}
-                    onChange={(e) => setToLocation(e.target.value)}
-                    placeholder="Конечная точка"
-                  />
+                  <Input value={toLocation} onChange={(e) => setToLocation(e.target.value)} placeholder="Конечная точка" />
                 </div>
               </div>
 
@@ -325,9 +282,7 @@ const Map = () => {
                         key={mode.id}
                         onClick={() => setTransportMode(mode.id)}
                         className={`flex flex-col items-center gap-1 p-2 rounded-lg border-2 transition-all text-xs ${
-                          transportMode === mode.id
-                            ? "border-primary bg-primary/5 text-primary"
-                            : "border-border hover:border-primary/50"
+                          transportMode === mode.id ? "border-primary bg-primary/5 text-primary" : "border-border hover:border-primary/50"
                         }`}
                       >
                         <Icon className="h-4 w-4" />
@@ -369,7 +324,7 @@ const Map = () => {
                               {route.mode === "walking" ? "Пешком" : route.mode === "bike" ? "Вело" : "Авто"}
                             </Badge>
                           </div>
-                          
+
                           <div className="flex items-center gap-4 text-xs text-muted-foreground">
                             <div className="flex items-center gap-1">
                               <TrendingUp className="h-3 w-3" />
@@ -406,16 +361,11 @@ const Map = () => {
                     {selectedRoute.places.length > 0 ? (
                       <div className="space-y-2">
                         {selectedRoute.places.map((place, index) => (
-                          <div
-                            key={place.id}
-                            className="flex items-start gap-2 p-2 rounded-md bg-secondary/50"
-                          >
+                          <div key={place.id} className="flex items-start gap-2 p-2 rounded-md bg-secondary/50">
                             <span className="text-lg">{place.icon}</span>
                             <div className="flex-1 min-w-0">
                               <div className="text-sm font-medium">{place.name}</div>
-                              <div className="text-xs text-muted-foreground truncate">
-                                {place.description}
-                              </div>
+                              <div className="text-xs text-muted-foreground truncate">{place.description}</div>
                             </div>
                             <Badge variant="outline" className="text-xs shrink-0">
                               {index + 1}
@@ -424,9 +374,7 @@ const Map = () => {
                         ))}
                       </div>
                     ) : (
-                      <p className="text-sm text-muted-foreground">
-                        Прямой маршрут без остановок
-                      </p>
+                      <p className="text-sm text-muted-foreground">Прямой маршрут без остановок</p>
                     )}
                   </div>
                 </>
@@ -437,11 +385,7 @@ const Map = () => {
 
         {/* Toggle Button when panel is hidden */}
         {!showRoutePanel && (
-          <Button
-            onClick={() => setShowRoutePanel(true)}
-            className="absolute top-4 right-4 z-[1000] shadow-lg"
-            size="icon"
-          >
+          <Button onClick={() => setShowRoutePanel(true)} className="absolute top-4 right-4 z-[1000] shadow-lg" size="icon">
             <MapPin className="h-5 w-5" />
           </Button>
         )}
@@ -454,7 +398,9 @@ const Map = () => {
               {mockPlaces.slice(0, 3).map((place) => (
                 <div key={place.id} className="flex items-center gap-2 text-xs">
                   <span>{place.icon}</span>
-                  <span className="text-muted-foreground">{place.type === "historical" ? "Исторические" : place.type === "park" ? "Парки" : "Рестораны"}</span>
+                  <span className="text-muted-foreground">
+                    {place.type === "historical" ? "Исторические" : place.type === "park" ? "Парки" : "Рестораны"}
+                  </span>
                 </div>
               ))}
             </div>
@@ -465,4 +411,4 @@ const Map = () => {
   );
 };
 
-export default Map;
+export default MapPage;
