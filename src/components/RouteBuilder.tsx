@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { MapPin, Clock, Car, Bike, Footprints, Search, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 
 const RouteBuilder = () => {
+  const navigate = useNavigate();
   const [fromLocation, setFromLocation] = useState("");
   const [toLocation, setToLocation] = useState("");
   const [travelTime, setTravelTime] = useState("");
@@ -44,15 +46,13 @@ const RouteBuilder = () => {
     }
 
     toast.success("Строим ваш умный маршрут...", {
-      description: "Это может занять несколько секунд",
+      description: "Переход на карту",
     });
 
-    // В будущем здесь будет вызов API
+    // Переход на страницу с картой
     setTimeout(() => {
-      toast.success("Маршрут построен!", {
-        description: "Найдено 3 оптимальных варианта",
-      });
-    }, 2000);
+      navigate("/map");
+    }, 800);
   };
 
   return (

@@ -23,10 +23,10 @@ const Header = () => {
               Главная
             </Link>
             <Link 
-              to="/about" 
+              to="/map" 
               className="text-sm font-medium text-foreground/80 transition-colors hover:text-foreground"
             >
-              О сервисе
+              Карта
             </Link>
           </nav>
         </div>
