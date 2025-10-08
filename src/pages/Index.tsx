@@ -18,7 +18,7 @@ const Index = () => {
             </div>
             
             <h1 className="text-4xl md:text-6xl font-bold tracking-tight">
-              Путешествуйте{" "}
+              Путешестлорпополрвуйте{" "}
               <span className="bg-gradient-to-r from-primary via-primary to-accent bg-clip-text text-transparent">
                 с умом
               </span>

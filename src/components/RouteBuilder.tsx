@@ -1,20 +1,27 @@
+// RouteBuilder.tsx
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { MapPin, Clock, Car, Bike, Footprints, Search, Sparkles } from "lucide-react";
+import { MapPin, Clock, Car, Bike, Footprints, Search, Sparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
+import { useYandexMaps } from "@/hooks/useYandexMaps";
+
+const YANDEX_API_KEY = "7637c9ce-fc0e-4f1d-a6e2-2d6e85cf7193";
 
 const RouteBuilder = () => {
   const navigate = useNavigate();
+  const { geocode, calculateRoute, loading } = useYandexMaps(YANDEX_API_KEY);
+  
   const [fromLocation, setFromLocation] = useState("");
   const [toLocation, setToLocation] = useState("");
   const [travelTime, setTravelTime] = useState("");
   const [transportMode, setTransportMode] = useState<string>("walking");
   const [selectedPlaces, setSelectedPlaces] = useState<string[]>([]);
+  const [isBuilding, setIsBuilding] = useState(false);
 
   const placeTypes = [
     { id: "historical", label: "Исторические места", icon: "🏛️" },
@@ -39,24 +46,67 @@ const RouteBuilder = () => {
     );
   };
 
-  const handleBuildRoute = () => {
+  const handleBuildRoute = async (isSmart: boolean = false) => {
     if (!fromLocation || !toLocation) {
       toast.error("Заполните точки маршрута");
       return;
     }
 
-    toast.success("Строим ваш умный маршрут...", {
-      description: "Переход на карту",
-    });
+    setIsBuilding(true);
 
-    // Переход на страницу с картой
-    setTimeout(() => {
-      navigate("/map");
-    }, 800);
+    try {
+      // Геокодируем адреса
+      const fromCoords = await geocode(fromLocation);
+      const toCoords = await geocode(toLocation);
+
+      if (!fromCoords || !toCoords) {
+        toast.error("Не удалось найти указанные адреса");
+        return;
+      }
+
+      // Сохраняем данные в localStorage для передачи на карту
+      const routeData = {
+        from: fromLocation,
+        to: toLocation,
+        fromCoords,
+        toCoords,
+        mode: transportMode,
+        isSmart,
+        selectedPlaces: isSmart ? selectedPlaces : [],
+        maxTime: travelTime ? parseInt(travelTime) : null
+      };
+
+      localStorage.setItem('routeData', JSON.stringify(routeData));
+
+      toast.success("Маршрут построен!", {
+        description: "Переход на карту",
+      });
+
+      // Переход на страницу с картой
+      setTimeout(() => {
+        navigate("/map");
+      }, 800);
+
+    } catch (error) {
+      toast.error("Ошибка при построении маршрута");
+    } finally {
+      setIsBuilding(false);
+    }
   };
 
+  if (loading) {
+    return (
+      <div className="w-full max-w-4xl mx-auto flex items-center justify-center py-20">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p>Загружаем карту...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-6">
+    <div className="w-full max-w-4xl mx-auto space-y-6 min-h-screen py-6">
       <Card className="shadow-lg">
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl flex items-center gap-2">
@@ -97,12 +147,17 @@ const RouteBuilder = () => {
           </div>
 
           <Button 
-            onClick={handleBuildRoute} 
+            onClick={() => handleBuildRoute(false)} 
             className="w-full" 
             size="lg"
+            disabled={isBuilding}
           >
-            <Search className="h-4 w-4" />
-            Построить простой маршрут
+            {isBuilding ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Search className="h-4 w-4" />
+            )}
+            {isBuilding ? "Строим маршрут..." : "Построить простой маршрут"}
           </Button>
         </CardContent>
       </Card>
@@ -158,37 +213,44 @@ const RouteBuilder = () => {
 
           <div className="space-y-3">
             <Label className="text-base">Места для посещения</Label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {placeTypes.map((place) => (
-                <div
-                  key={place.id}
-                  className="flex items-center space-x-3 p-3 rounded-lg border hover:bg-secondary transition-colors"
-                >
-                  <Checkbox
-                    id={place.id}
-                    checked={selectedPlaces.includes(place.id)}
-                    onCheckedChange={() => handlePlaceToggle(place.id)}
-                  />
-                  <label
-                    htmlFor={place.id}
-                    className="flex items-center gap-2 flex-1 cursor-pointer text-sm font-medium"
+            <div className="max-h-48 overflow-y-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pr-2">
+                {placeTypes.map((place) => (
+                  <div
+                    key={place.id}
+                    className="flex items-center space-x-3 p-3 rounded-lg border hover:bg-secondary transition-colors"
                   >
-                    <span className="text-lg">{place.icon}</span>
-                    {place.label}
-                  </label>
-                </div>
-              ))}
+                    <Checkbox
+                      id={place.id}
+                      checked={selectedPlaces.includes(place.id)}
+                      onCheckedChange={() => handlePlaceToggle(place.id)}
+                    />
+                    <label
+                      htmlFor={place.id}
+                      className="flex items-center gap-2 flex-1 cursor-pointer text-sm font-medium"
+                    >
+                      <span className="text-lg">{place.icon}</span>
+                      {place.label}
+                    </label>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
           <Button 
-            onClick={handleBuildRoute} 
-            className="w-full" 
+            onClick={() => handleBuildRoute(true)} 
+            className="w-full mt-6" 
             size="lg"
             variant="accent"
+            disabled={isBuilding}
           >
-            <Sparkles className="h-4 w-4" />
-            Построить умный маршрут
+            {isBuilding ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4" />
+            )}
+            {isBuilding ? "Строим умный маршрут..." : "Построить умный маршрут"}
           </Button>
         </CardContent>
       </Card>
