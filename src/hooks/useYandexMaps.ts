@@ -79,7 +79,7 @@ export const useYandexMaps = (apiKey: string) => {
     });
   };
 
-  // Упрощенная функция построения маршрута без сложных методов API
+  // Реальное построение маршрута через Yandex Router API
   const calculateRoute = async (
     from: [number, number],
     to: [number, number],
@@ -89,24 +89,60 @@ export const useYandexMaps = (apiKey: string) => {
 
     return new Promise((resolve) => {
       try {
-        // Используем упрощенный подход - создаем прямую линию с промежуточными точками
-        const distance = calculateDirectDistance(from, to);
-        const duration = calculateDirectDuration(distance, mode);
+        // Преобразуем режим в формат Яндекса
+        const routingMode = mode === 'walking' ? 'pedestrian' : mode === 'bike' ? 'bicycle' : 'auto';
         
-        // Создаем упрощенный маршрут с промежуточными точками для визуализации
-        const coordinates = generateRouteCoordinates(from, to, 5); // 5 промежуточных точек
-        
-        resolve({
-          distance,
-          duration,
-          coordinates
+        // Создаем мультимаршрут через Yandex Router
+        const multiRoute = new ymaps.multiRouter.MultiRoute({
+          referencePoints: [from, to],
+          params: {
+            routingMode: routingMode,
+            results: 1
+          }
+        }, {
+          boundsAutoApply: false,
+          wayPointVisible: false,
+          routeActiveStrokeWidth: 6,
+          routeActiveStrokeColor: mode === 'walking' ? '#4CAF50' : mode === 'bike' ? '#2196F3' : '#F44336'
         });
+
+        // Обработка результата
+        multiRoute.model.events.once('requestsuccess', function () {
+          const activeRoute = multiRoute.getActiveRoute();
+          if (activeRoute) {
+            const routeData = activeRoute.properties.getAll();
+            const coordinates = activeRoute.geometry.getCoordinates();
+            
+            resolve({
+              distance: routeData.distance?.value || calculateDirectDistance(from, to) * 1000,
+              duration: routeData.duration?.value || calculateDirectDuration(calculateDirectDistance(from, to), mode) * 60,
+              coordinates: coordinates.map((coord: number[]) => [coord[0], coord[1]] as [number, number])
+            });
+          } else {
+            // Fallback
+            resolve({
+              distance: calculateDirectDistance(from, to) * 1000,
+              duration: calculateDirectDuration(calculateDirectDistance(from, to), mode) * 60,
+              coordinates: generateRouteCoordinates(from, to, 5)
+            });
+          }
+        });
+
+        multiRoute.model.events.once('requesterror', function () {
+          console.error('Yandex routing error, using fallback');
+          resolve({
+            distance: calculateDirectDistance(from, to) * 1000,
+            duration: calculateDirectDuration(calculateDirectDistance(from, to), mode) * 60,
+            coordinates: generateRouteCoordinates(from, to, 5)
+          });
+        });
+
       } catch (error) {
         console.error('Route calculation error:', error);
         // Fallback на прямую линию
         resolve({
-          distance: calculateDirectDistance(from, to),
-          duration: calculateDirectDuration(calculateDirectDistance(from, to), mode),
+          distance: calculateDirectDistance(from, to) * 1000,
+          duration: calculateDirectDuration(calculateDirectDistance(from, to), mode) * 60,
           coordinates: [from, to]
         });
       }
