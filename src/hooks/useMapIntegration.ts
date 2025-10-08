@@ -5,7 +5,8 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useYandexMaps } from './useYandexMaps';
-import { useMultiModalRouting } from './useMultiModalRouting';
+import { useMultiModalRouting, RouteRequest } from './useMultiModalRouting';
+import { YandexRouteAdapter, YandexRouteData } from './useYandexRouteAdapter';
 import {
   MultiModalRoute,
   RouteSegment,
@@ -77,18 +78,16 @@ export const useMapIntegration = (apiKey: string) => {
   const interactionHandlersRef = useRef<MapInteractionHandlers>({});
 
   // Hooks
-  const { ymaps, loading: mapsLoading, error: mapsError, geocode } = useYandexMaps(apiKey);
+  const { ymaps, loading: mapsLoading, error: mapsError, geocode, calculateRoute: yandexCalculateRoute } = useYandexMaps(apiKey);
   const {
     isCalculating,
     isInitialized,
-    currentRoute,
-    alternativeRoutes,
     routeComparison,
     visualization,
     realTimeConditions,
     error: routingError,
-    calculateRoute,
-    selectAlternativeRoute,
+    calculateRoute: internalCalculateRoute,
+    selectAlternativeRoute: internalSelectAlternative,
     setVisualizationTheme,
     startRouteAnimation,
     pauseRouteAnimation,
@@ -97,8 +96,13 @@ export const useMapIntegration = (apiKey: string) => {
     getRouteStatistics,
     addEventListener,
     removeEventListener,
-    clearRoute
+    clearRoute: internalClearRoute
   } = useMultiModalRouting();
+
+  // Local state for actual routes from Yandex
+  const [currentRoute, setCurrentRoute] = useState<MultiModalRoute | null>(null);
+  const [alternativeRoutes, setAlternativeRoutes] = useState<MultiModalRoute[]>([]);
+  const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
 
   // Initialize map
   const initializeMap = useCallback(async () => {
@@ -272,6 +276,15 @@ export const useMapIntegration = (apiKey: string) => {
       console.error('Error displaying route:', error);
     }
   }, [ymaps]);
+
+  // Select alternative route (defined before being used in displayAlternativeRoutes)
+  const selectAlternativeRoute = useCallback(async (routeId: string) => {
+    const route = alternativeRoutes.find(r => r.id === routeId);
+    if (route) {
+      setCurrentRoute(route);
+      setAlternativeRoutes([currentRoute, ...alternativeRoutes.filter(r => r.id !== routeId)].filter(Boolean) as MultiModalRoute[]);
+    }
+  }, [currentRoute, alternativeRoutes]);
 
   // Display alternative routes
   const displayAlternativeRoutes = useCallback(async (routes: MultiModalRoute[]) => {
@@ -497,11 +510,90 @@ export const useMapIntegration = (apiKey: string) => {
     };
   }, [addEventListener, removeEventListener]);
 
+  // Calculate route using Yandex API
+  const calculateRoute = useCallback(async (request: RouteRequest) => {
+    if (!ymaps) {
+      return {
+        success: false,
+        route: null,
+        alternatives: [],
+        comparison: null,
+        visualization: null,
+        error: 'Maps not loaded'
+      };
+    }
+
+    setIsCalculatingRoute(true);
+
+    try {
+      // Get the primary transport mode
+      const primaryMode = request.preferences.preferredModes[0] || TransportMode.WALKING;
+      const yandexMode = primaryMode === TransportMode.WALKING ? 'walking' : 
+                         primaryMode === TransportMode.BICYCLE ? 'bike' : 'car';
+
+      // Calculate route using Yandex
+      const yandexRoute = await yandexCalculateRoute(
+        [request.origin.latitude, request.origin.longitude],
+        [request.destination.latitude, request.destination.longitude],
+        yandexMode
+      );
+
+      if (!yandexRoute) {
+        throw new Error('No routes found');
+      }
+
+      // Convert to MultiModalRoute
+      const route = YandexRouteAdapter.toMultiModalRoute(
+        {
+          distance: yandexRoute.distance,
+          duration: yandexRoute.duration,
+          coordinates: yandexRoute.coordinates,
+          mode: primaryMode
+        },
+        'Start',
+        'Destination'
+      );
+
+      setCurrentRoute(route);
+      setIsCalculatingRoute(false);
+
+      return {
+        success: true,
+        route,
+        alternatives: [],
+        comparison: null,
+        visualization: null,
+        error: null
+      };
+    } catch (error) {
+      setIsCalculatingRoute(false);
+      const errorMessage = error instanceof Error ? error.message : 'Route calculation failed';
+      return {
+        success: false,
+        route: null,
+        alternatives: [],
+        comparison: null,
+        visualization: null,
+        error: errorMessage
+      };
+    }
+  }, [ymaps, yandexCalculateRoute]);
+
+  // Defined earlier before displayAlternativeRoutes callback
+
+  // Clear route
+  const clearRoute = useCallback(() => {
+    setCurrentRoute(null);
+    setAlternativeRoutes([]);
+    clearRouteFromMap();
+    internalClearRoute();
+  }, [clearRouteFromMap, internalClearRoute]);
+
   return {
     // State
     mapState,
     visualizationOptions,
-    isLoading: mapsLoading || isCalculating,
+    isLoading: mapsLoading || isCalculating || isCalculatingRoute,
     error: mapsError || routingError,
 
     // Map refs

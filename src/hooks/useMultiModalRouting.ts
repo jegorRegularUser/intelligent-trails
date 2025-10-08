@@ -196,7 +196,7 @@ export const useMultiModalRouting = () => {
     visualization: RouteVisualization | null;
     error: string | null;
   }> => {
-    if (!state.isInitialized || !graphRef.current || !visualizerRef.current) {
+    if (!state.isInitialized || !visualizerRef.current) {
       return {
         success: false,
         route: null,
@@ -221,106 +221,51 @@ export const useMultiModalRouting = () => {
         ...request.options
       };
 
-      // Initialize optimizer with current preferences
-      optimizerRef.current = new MultiCriteriaOptimizer(
-        graphRef.current,
-        request.preferences,
-        request.constraints
-      );
+      // This will be handled by the external Yandex integration
+      // For now, we signal that routes should be calculated externally
+      // The actual routing will be done in useMapIntegration via YandexRouteAdapter
+      
+      // Create a placeholder route that signals the need for external routing
+      const placeholderRoute: MultiModalRoute = {
+        id: `route_pending_${Date.now()}`,
+        segments: [],
+        totalDistance: 0,
+        totalDuration: 0,
+        totalCost: 0,
+        totalWalkingDistance: 0,
+        totalCyclingDistance: 0,
+        totalTransfers: 0,
+        geometry: [request.origin, request.destination],
+        waypoints: [],
+        accessibilityScore: 0,
+        safetyScore: 0,
+        comfortScore: 0,
+        environmentalScore: 0,
+        alternatives: [],
+        bounds: { northEast: request.destination, southWest: request.origin },
+        summary: {},
+        metadata: { algorithm: 'pending', calculationTime: 0, createdAt: new Date(), isOptimal: false, hasRealTimeData: false }
+      };
 
-      // Find nearby nodes for origin and destination
-      let originNodes = graphRef.current.findNearbyNodes(request.origin, 500);
-      let destinationNodes = graphRef.current.findNearbyNodes(request.destination, 500);
+      setState(prev => ({
+        ...prev,
+        isCalculating: false,
+        currentRoute: placeholderRoute,
+        alternativeRoutes: [],
+        routeComparison: null,
+        visualization: null,
+        lastCalculationTime: 0,
+        error: null
+      }));
 
-      // If no nodes found, create temporary nodes for routing
-      if (originNodes.length === 0) {
-        const originNode = {
-          id: `temp_origin_${Date.now()}`,
-          coordinate: request.origin,
-          modes: request.preferences.preferredModes.length > 0 ? request.preferences.preferredModes : [TransportMode.WALKING],
-          accessibility: {
-            wheelchairAccessible: true,
-            hasElevator: false,
-            hasRamp: false,
-            tactilePaving: false,
-            visuallyImpairedFriendly: false,
-            hearingImpairedFriendly: false
-          },
-          amenities: [],
-          type: 'STOP' as any,
-          properties: {}
-        };
-        graphRef.current.addNode(originNode);
-        originNodes = [originNode];
-      }
-
-      if (destinationNodes.length === 0) {
-        const destinationNode = {
-          id: `temp_destination_${Date.now()}`,
-          coordinate: request.destination,
-          modes: request.preferences.preferredModes.length > 0 ? request.preferences.preferredModes : [TransportMode.WALKING],
-          accessibility: {
-            wheelchairAccessible: true,
-            hasElevator: false,
-            hasRamp: false,
-            tactilePaving: false,
-            visuallyImpairedFriendly: false,
-            hearingImpairedFriendly: false
-          },
-          amenities: [],
-          type: 'STOP' as any,
-          properties: {}
-        };
-        graphRef.current.addNode(destinationNode);
-        destinationNodes = [destinationNode];
-      }
-
-      // Calculate routes using multi-criteria optimization
-      const routes = await optimizerRef.current.findParetoOptimalRoutes(
-        originNodes[0].id,
-        destinationNodes[0].id
-      );
-
-      if (routes.length === 0) {
-        throw new Error('No routes found');
-      }
-
-      // Limit alternatives
-      const limitedRoutes = routes.slice(0, options.maxAlternatives);
-      const primaryRoute = limitedRoutes[0];
-      const alternativeRoutes = limitedRoutes.slice(1);
-
-      // Generate route comparison
-      let comparison: RouteComparison | null = null;
-      if (limitedRoutes.length > 1) {
-        comparison = optimizerRef.current.compareRoutes(limitedRoutes);
-      }
-
-      // Create visualization if requested
-      let visualization: RouteVisualization | null = null;
-      if (options.visualize) {
-        const visualizationOptions: Partial<RouteVisualizationOptions> = {
-          showRouteSegments: true,
-          showPOIMarkers: true,
-          showTransfers: true,
-          showRealTimeConditions: options.useRealTimeData,
-          colorByMode: true,
-          colorByCondition: options.useRealTimeData
-        };
-
-        visualization = await visualizerRef.current.loadRoute(primaryRoute, visualizationOptions);
-      }
-
-      // Update real-time data if enabled
-      if (options.useRealTimeData && realTimeManagerRef.current) {
-        const conditions = await realTimeManagerRef.current.getCurrentConditions();
-        if (visualization) {
-          visualizerRef.current.updateRealTimeData(conditions);
-        }
-        setState(prev => ({ ...prev, realTimeConditions: conditions }));
-      }
-
-      const calculationTime = performance.now() - startTime;
+      return {
+        success: true,
+        route: placeholderRoute,
+        alternatives: [],
+        comparison: null,
+        visualization: null,
+        error: null
+      };
 
       setState(prev => ({
         ...prev,
@@ -531,11 +476,11 @@ export const useMultiModalRouting = () => {
             cost: 0,
             accessibility: {
               wheelchairAccessible: true,
+              visuallyImpairedFriendly: false,
               hasElevator: false,
               hasRamp: true,
-              tactilePaving: false,
-              visuallyImpairedFriendly: false,
-              hearingImpairedFriendly: false
+              audioSignals: false,
+              tactilePaving: false
             },
             properties: {
               roadClass: 'residential',
@@ -565,11 +510,11 @@ export const useMultiModalRouting = () => {
             cost: 0,
             accessibility: {
               wheelchairAccessible: true,
+              visuallyImpairedFriendly: false,
               hasElevator: false,
               hasRamp: true,
-              tactilePaving: false,
-              visuallyImpairedFriendly: false,
-              hearingImpairedFriendly: false
+              audioSignals: false,
+              tactilePaving: false
             },
             properties: {
               roadClass: 'residential',
