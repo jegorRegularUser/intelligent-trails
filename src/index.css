@@ -126,3 +126,26 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+.sidebar-content::-webkit-scrollbar {
+  width: 4px;
+}
+
+.sidebar-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-content::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 2px;
+}
+
+.sidebar-content::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Для Firefox */
+.sidebar-content {
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db transparent;
+}
