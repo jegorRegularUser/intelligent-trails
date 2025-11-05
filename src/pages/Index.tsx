@@ -1,6 +1,5 @@
 import { Map, Route, Zap, MapPin, Clock, Heart } from "lucide-react";
 import Header from "@/components/Header";
-import RouteBuilder from "@/components/RouteBuilder";
 
 const Index = () => {
   return (
@@ -18,7 +17,7 @@ const Index = () => {
             </div>
             
             <h1 className="text-4xl md:text-6xl font-bold tracking-tight">
-              Путешестлорпополрвуйте{" "}
+              Путешествуйте{" "}
               <span className="bg-gradient-to-r from-primary via-primary to-accent bg-clip-text text-transparent">
                 с умом
               </span>
@@ -66,7 +65,6 @@ const Index = () => {
           </div>
         </div>
 
-        <RouteBuilder />
       </section>
 
       {/* How it works Section */}
