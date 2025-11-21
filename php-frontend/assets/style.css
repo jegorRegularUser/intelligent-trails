@@ -1,457 +1,81 @@
+/* пример обновленных стилей под модалку */
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    margin: 0;
-    background-color: #f0f2f5;
-    color: #333;
-    line-height: 1.6;
+  font-family: 'Inter', Arial, sans-serif;
+  background: linear-gradient(120deg, #302262 30%, #8858a7 100%);
+  min-height: 100vh;
+  margin: 0;
+  color: #fafbfc;
+  transition: background 0.5s ease;
 }
 .container {
-    width: 90%;
-    max-width: 1100px;
-    margin: 0 auto;
+  background: #26224c;
+  box-shadow: 0 8px 36px 8px #0000001f;
+  border-radius: 24px;
+  padding: 32px;
+  margin: 32px auto;
+  max-width: 600px;
 }
-.navbar {
-    background: rgba(255, 255, 255, 0.9);
-    padding: 15px 0;
-    border-bottom: 1px solid #e7e7e7;
-    position: sticky;
-    top: 0;
-    z-index: 1000;
-    backdrop-filter: blur(10px);
+input, select, textarea {
+  border: none;
+  border-radius: 12px;
+  padding: 12px;
+  background: #2f295e;
+  color: #fafbfc;
+  margin-bottom: 16px;
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 1rem;
+  transition: background 0.3s;
 }
-.navbar .container {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  background: #443e87;
 }
-.navbar .logo {
-    font-size: 26px;
-    font-weight: 700;
-    color: #0056b3;
-    text-decoration: none;
+.btn {
+  background: linear-gradient(90deg, #6c43b7, #c085ff);
+  color: #fff;
+  border-radius: 14px;
+  padding: 12px 32px;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 16px 0 #443e8733;
+  font-weight: 600;
+  transition: background 0.3s;
 }
-.nav-links a {
-    color: #333;
-    text-decoration: none;
-    font-weight: 500;
-    margin-left: 30px;
-    font-size: 16px;
-    transition: color 0.3s ease;
+.btn:hover {
+  background: linear-gradient(90deg, #8858a7, #e2abff);
 }
-.nav-links a:hover, .nav-links a.active {
-    color: #007bff;
+table {
+  width: 100%;
+  background: #25204a;
+  color: #fff;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px 0 #220c3f29;
 }
-.hero {
-    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
-    color: white;
-    text-align: center;
-    padding: 120px 20px;
+th, td {
+  padding: 16px;
+  background: #332d5f;
+  border-bottom: 1px solid #3d3573;
 }
-.hero h1 {
-    font-size: 52px;
-    margin-bottom: 20px;
-    font-weight: 700;
+th {
+  background: #443e87ee;
 }
-.hero p {
-    font-size: 22px;
-    max-width: 700px;
-    margin: 0 auto 40px;
-    opacity: 0.9;
+h1, h2, h3, h4 {
+  color: #f9e6fe;
+  text-shadow: 0 1px 2px #8858a7cc;
 }
-.cta-button {
-    background-color: #ffc107;
-    color: #333;
-    padding: 18px 35px;
-    font-size: 18px;
-    border: none;
-    border-radius: 50px;
-    text-decoration: none;
-    font-weight: bold;
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+.modal {
+  background: #25204a;
+  border-radius: 40px;
+  box-shadow: 0 16px 64px 4px #44115c57;
+  padding: 48px;
+  color: #fafbfc;
 }
-.cta-button:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+::-webkit-scrollbar {
+  width: 6px;
 }
-.features-section {
-    padding: 80px 0;
-    background: #f8f9fa;
-}
-.features-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 40px;
-    text-align: center;
-}
-.feature-item {
-    background: #fff;
-    padding: 40px 20px;
-    border-radius: 12px;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.05);
-    transition: transform 0.3s;
-}
-.feature-item:hover {
-    transform: translateY(-10px);
-}
-.feature-item h3 {
-    font-size: 22px;
-    margin-top: 20px;
-}
-.feature-item .icon { font-size: 48px; color: #007bff; }
-.content-section { padding: 80px 0; background: #fff; }
-.content-section .container-flex { display: flex; align-items: center; gap: 50px; }
-.content-section .text-content { flex: 1; }
-.content-section .visual-content { flex: 1; text-align: center; }
-.content-section .visual-content img { max-width: 100%; border-radius: 12px; }
-.form-wrapper { max-width: 450px; margin: 60px auto; padding: 40px; background: #fff; border-radius: 12px; box-shadow: 0 8px 25px rgba(0,0,0,0.1); }
-.form-wrapper h2 { text-align: center; margin-bottom: 30px; }
-.form-group { margin-bottom: 20px; }
-.form-control { width: 100%; padding: 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
-.btn-primary { width: 100%; padding: 14px; font-size: 18px; font-weight: bold; background-color: #007bff; color: #fff; border: none; cursor: pointer; transition: background-color 0.3s; border-radius: 6px; }
-.btn-primary:hover { background-color: #0056b3; }
-.yandex-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 12px; background-color: #ffde00; color: #000; border: 1px solid #ffde00; font-weight: bold; text-decoration: none; border-radius: 6px; transition: background-color 0.3s; }
-.yandex-btn:hover { background-color: #f2d000; }
-.or-separator { text-align: center; margin: 20px 0; color: #aaa; position: relative; }
-.or-separator::before, .or-separator::after { content: ''; display: block; width: 40%; height: 1px; background: #ddd; position: absolute; top: 50%; }
-.or-separator::before { left: 0; }
-.or-separator::after { right: 0; }
-.page-content { padding: 30px 0; }
-#map-container { display: flex; gap: 20px; }
-#controls { flex: 1; min-width: 320px; background: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.07); }
-#map { flex: 3; height: 75vh; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.07); }
-#history-list .route-item { background: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 8px; cursor: pointer; transition: background-color 0.3s; border: 1px solid #eee; }
-#history-list .route-item:hover { background-color: #e9ecef; }
-.alert { padding: 15px; margin-bottom: 20px; border: 1px solid transparent; border-radius: 4px; }
-.alert-success { color: #155724; background-color: #d4edda; border-color: #c3e6cb; }
-.alert-danger { color: #721c24; background-color: #f8d7da; border-color: #f5c6cb; }
-.alert-info { color: #0c5460; background-color: #d1ecf1; border-color: #bee5eb; }
-/* ============================================
-   СТРАНИЦА КАРТЫ
-   ============================================ */
-
-.map-page-container {
-    position: relative;
-    height: calc(100vh - 60px);
-    overflow: hidden;
-}
-
-#map {
-    width: 100%;
-    height: 100%;
-}
-
-/* ============================================
-   КНОПКА ПОСТРОЕНИЯ МАРШРУТА
-   ============================================ */
-
-.floating-action-btn {
-    position: absolute;
-    bottom: 35px;
-    right: 35px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border: none;
-    padding: 20px 36px;
-    border-radius: 60px;
-    font-size: 17px;
-    font-weight: 700;
-    cursor: pointer;
-    box-shadow: 0 10px 30px rgba(102, 126, 234, 0.5);
-    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    z-index: 1000;
-}
-
-.floating-action-btn:hover {
-    transform: translateY(-5px) scale(1.05);
-    box-shadow: 0 15px 40px rgba(102, 126, 234, 0.6);
-}
-
-.floating-action-btn:active {
-    transform: translateY(-2px) scale(1.02);
-}
-
-.fab-icon {
-    font-size: 26px;
-    animation: pulse 2s ease-in-out infinite;
-}
-
-@keyframes pulse {
-    0%, 100% {
-        transform: scale(1);
-    }
-    50% {
-        transform: scale(1.1);
-    }
-}
-
-.fab-text {
-    font-size: 17px;
-}
-
-/* ============================================
-   ПАНЕЛЬ ИНФОРМАЦИИ О МАРШРУТЕ
-   ============================================ */
-
-.route-info-panel {
-    position: absolute;
-    top: 25px;
-    left: 25px;
-    background: white;
-    border-radius: 18px;
-    padding: 0;
-    box-shadow: 0 12px 35px rgba(0, 0, 0, 0.2);
-    max-width: 360px;
-    max-height: calc(100vh - 120px);
-    overflow-y: auto;
-    z-index: 1000;
-    animation: slideInLeft 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-
-.route-info-panel::-webkit-scrollbar {
-    width: 6px;
-}
-
-.route-info-panel::-webkit-scrollbar-track {
-    background: #f1f1f1;
-    border-radius: 0 18px 18px 0;
-}
-
-.route-info-panel::-webkit-scrollbar-thumb {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-radius: 10px;
-}
-
-@keyframes slideInLeft {
-    from {
-        transform: translateX(-100px);
-        opacity: 0;
-    }
-    to {
-        transform: translateX(0);
-        opacity: 1;
-    }
-}
-
-.route-info-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 20px 25px;
-    border-bottom: 2px solid #f0f2f5;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border-radius: 18px 18px 0 0;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-}
-
-.route-info-header h3 {
-    margin: 0;
-    font-size: 18px;
-    font-weight: 700;
-}
-
-.close-panel-btn {
-    background: rgba(255, 255, 255, 0.2);
-    border: none;
-    color: white;
-    font-size: 26px;
-    width: 34px;
-    height: 34px;
-    border-radius: 50%;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.3s ease;
-    line-height: 1;
-    font-weight: 300;
-}
-
-.close-panel-btn:hover {
-    background: rgba(255, 255, 255, 0.3);
-    transform: rotate(90deg);
-}
-
-.route-info-body {
-    padding: 20px 25px;
-}
-
-.route-stat {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-    padding: 15px 0;
-    border-bottom: 1px solid #f3f4f6;
-}
-
-.route-stat:last-child {
-    border-bottom: none;
-}
-
-.stat-icon {
-    font-size: 32px;
-    flex-shrink: 0;
-}
-
-.stat-label {
-    font-size: 13px;
-    color: #6b7280;
-    margin-bottom: 4px;
-}
-
-.stat-value {
-    font-size: 18px;
-    font-weight: 700;
-    color: #1f2937;
-}
-
-.route-warnings {
-    margin-top: 15px;
-    padding: 15px;
-    background: #fef3c7;
-    border-left: 4px solid #f59e0b;
-    border-radius: 8px;
-}
-
-.route-warnings strong {
-    display: block;
-    margin-bottom: 10px;
-    color: #92400e;
-}
-
-.warning-item {
-    font-size: 13px;
-    color: #78350f;
-    margin-bottom: 6px;
-}
-
-.warning-item:last-child {
-    margin-bottom: 0;
-}
-
-/* ============================================
-   СПИСОК МЕСТ В МАРШРУТЕ
-   ============================================ */
-
-.route-places-list {
-    padding: 0 25px 25px 25px;
-}
-
-.places-header {
-    font-size: 16px;
-    font-weight: 700;
-    color: #1f2937;
-    margin-bottom: 15px;
-    padding-bottom: 10px;
-    border-bottom: 2px solid #f0f2f5;
-}
-
-.place-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px;
-    margin-bottom: 8px;
-    background: #f9fafb;
-    border-radius: 10px;
-    transition: all 0.3s ease;
-}
-
-.place-item:hover {
-    background: #f0f4ff;
-    transform: translateX(5px);
-}
-
-.place-item.start {
-    background: linear-gradient(135deg, #d1fae5, #a7f3d0);
-}
-
-.place-item.end {
-    background: linear-gradient(135deg, #fee2e2, #fecaca);
-}
-
-.place-number {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border-radius: 50%;
-    font-weight: 700;
-    font-size: 13px;
-    flex-shrink: 0;
-}
-
-.place-item.start .place-number {
-    background: linear-gradient(135deg, #10b981, #059669);
-}
-
-.place-item.end .place-number {
-    background: linear-gradient(135deg, #ef4444, #dc2626);
-}
-
-.place-name {
-    font-size: 14px;
-    font-weight: 600;
-    color: #374151;
-    line-height: 1.4;
-}
-
-/* ============================================
-   АДАПТИВНОСТЬ ДЛЯ КАРТЫ
-   ============================================ */
-
-@media (max-width: 768px) {
-    .floating-action-btn {
-        bottom: 25px;
-        right: 25px;
-        padding: 16px 24px;
-    }
-
-    .fab-text {
-        display: none;
-    }
-
-    .fab-icon {
-        font-size: 24px;
-    }
-
-    .route-info-panel {
-        left: 15px;
-        right: 15px;
-        max-width: none;
-        top: 15px;
-        max-height: calc(100vh - 100px);
-    }
-}
-
-@media (max-width: 480px) {
-    .floating-action-btn {
-        padding: 14px 20px;
-        bottom: 20px;
-        right: 20px;
-    }
-
-    .route-info-panel {
-        left: 10px;
-        right: 10px;
-        top: 10px;
-    }
-
-    .route-info-header {
-        padding: 16px 20px;
-    }
-
-    .route-info-body,
-    .route-places-list {
-        padding: 16px 20px;
-    }
+::-webkit-scrollbar-thumb {
+  background: #4a3973;
+  border-radius: 10px;
 }
