@@ -158,6 +158,12 @@ body {
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
+.section-title h2 span { 
+    background: none;
+    -webkit-text-fill-color: unset;
+    background-clip: unset;
+    -webkit-background-clip: unset;
+}
 
 .section-title p {
   font-size: 18px;

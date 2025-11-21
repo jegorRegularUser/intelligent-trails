@@ -39,7 +39,7 @@
         <section id="features" class="features-section">
             <div class="container">
                 <div class="section-title">
-                    <h2>🌟 Возможности</h2>
+                    <h2><span>🌟</span> Возможности</h2>
                     <p>Все, что нужно для идеальных прогулок</p>
                 </div>
                 <div class="features-grid">
@@ -80,7 +80,7 @@
         <section class="how-it-works-section">
             <div class="container">
                 <div class="section-title">
-                    <h2>🛠️ Как это работает?</h2>
+                    <h2><span>🛠️</span> Как это работает?</h2>
                     <p>Простой процесс в три шага</p>
                 </div>
                 <div class="steps-grid">
@@ -106,7 +106,7 @@
         <section class="categories-section">
             <div class="container">
                 <div class="section-title">
-                    <h2>🎯 Категории мест</h2>
+                    <h2><span>🎯</span> Категории мест</h2>
                     <p>Выберите, куда хотите заглянуть</p>
                 </div>
                 <div class="categories-showcase">
@@ -153,7 +153,7 @@
             <div class="container">
                 <div class="benefits-grid">
                     <div class="benefit-text">
-                        <h2>📊 Почему Intelligent Trails?</h2>
+                        <h2><span> 📊</span> Почему Intelligent Trails?</h2>
                         <div class="benefit-list">
                             <div class="benefit-item">
                                 <div class="benefit-icon">✅</div>
@@ -208,7 +208,7 @@
         <section class="cta-section">
             <div class="container">
                 <div class="cta-content">
-                    <h2>🎉 Готовы начать?</h2>
+                    <h2><span>🎉</span> Готовы начать?</h2>
                     <p>Создайте аккаунт и начните исследовать свой город по-новому</p>
                     <div class="cta-buttons">
                         <?php if(!isset($_SESSION["loggedin"]) || $_SESSION["loggedin"] !== true): ?>
