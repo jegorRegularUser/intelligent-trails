@@ -491,170 +491,188 @@ class RouteModal {
     }
   }
 
-  async buildSmartRoute() {
-    const startPoint = document.getElementById("smartStartPoint").value.trim();
-    const returnToStart =
-      document.querySelector('input[name="routeEnd"]:checked').value ===
-      "return";
-    const endPoint = returnToStart
-      ? null
-      : document.getElementById("smartEndPoint").value.trim();
-    const timeLimit = parseInt(document.getElementById("timeSlider").value);
+async buildSmartRoute() {
+    const startPoint = document.getElementById('smartStartPoint').value.trim();
+    const returnToStart = document.querySelector('input[name="routeEnd"]:checked').value === 'return';
+    const endPoint = returnToStart ? null : document.getElementById('smartEndPoint').value.trim();
+    const timeLimit = parseInt(document.getElementById('timeSlider').value);
     const pace = document.querySelector('input[name="pace"]:checked').value;
-    const strictness = parseInt(
-      document.getElementById("strictnessSlider").value
-    );
+    const strictness = parseInt(document.getElementById('strictnessSlider').value);
 
     const categories = [];
-    document
-      .querySelectorAll(".category-option input:checked")
-      .forEach((cb) => {
+    document.querySelectorAll('.category-option input:checked').forEach(cb => {
         categories.push(cb.value);
-      });
+    });
 
+    // Валидация
     if (!startPoint) {
-      this.showNotification("Укажите точку старта", "error");
-      return;
+        this.showNotification('⚠️ Укажите точку старта', 'error');
+        return;
     }
 
     if (categories.length === 0) {
-      this.showNotification(
-        "Выберите хотя бы одну категорию мест для посещения",
-        "error"
-      );
-      return;
+        this.showNotification('⚠️ Выберите хотя бы одну категорию мест для посещения', 'error');
+        return;
     }
 
     if (!returnToStart && !endPoint) {
-      this.showNotification(
-        "Укажите точку финиша или выберите возврат к началу",
-        "error"
-      );
-      return;
+        this.showNotification('⚠️ Укажите точку финиша или выберите возврат к началу', 'error');
+        return;
     }
 
-    this.showLoading(true, "Определяем координаты...");
-
+    this.showLoading(true, 'Определяем координаты...');
+    
     try {
-      const startCoords = await this.geocodeAddress(startPoint);
-      let endCoords = null;
-
-      if (!returnToStart && endPoint) {
-        endCoords = await this.geocodeAddress(endPoint);
-      }
-
-      const routeData = {
-        start_point: {
-          name: startPoint,
-          coords: startCoords,
-        },
-        end_point: endCoords
-          ? {
-              name: endPoint,
-              coords: endCoords,
-            }
-          : null,
-        categories: categories,
-        time_limit_minutes: timeLimit,
-        return_to_start: returnToStart,
-        mode: "pedestrian",
-        settings: {
-          // ИСПРАВЛЕНО: обернуто в объект settings
-          pace: pace,
-          time_strictness: strictness,
-        },
-      };
-
-      this.showLoading(true, "Ищем интересные места и строим маршрут...");
-
-      const response = await fetch("api.php?action=build_smart_route", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(routeData),
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        this.currentRoute = result.data;
-        this.displaySmartRouteOnMap(result.data);
-
-        let message = "Умный маршрут построен!";
-        if (result.data.warnings && result.data.warnings.length > 0) {
-          message += "\n" + result.data.warnings.join("\n");
+        const startCoords = await this.geocodeAddress(startPoint);
+        let endCoords = null;
+        
+        if (!returnToStart && endPoint) {
+            endCoords = await this.geocodeAddress(endPoint);
         }
 
-        this.showNotification(message, "success");
-        this.close();
-      } else {
-        this.showNotification(
-          "Ошибка: " + (result.error || "Неизвестная ошибка"),
-          "error"
-        );
-        console.error("Backend error:", result);
-      }
+        // ИСПРАВЛЕНО: правильная структура данных для API
+        const routeData = {
+            start_point: {
+                name: startPoint,
+                coords: startCoords
+            },
+            end_point: endCoords ? {
+                name: endPoint,
+                coords: endCoords
+            } : null,
+            categories: categories,
+            time_limit_minutes: timeLimit,
+            return_to_start: returnToStart,
+            mode: 'pedestrian',
+            min_places_per_category: {}, // ИСПРАВЛЕНО: пустой объект вместо массива
+            settings: {
+                pace: pace,
+                time_strictness: strictness
+            }
+        };
+
+        this.showLoading(true, 'Ищем интересные места и строим маршрут...');
+
+        const response = await fetch('api.php?action=build_smart_route', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(routeData)
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            this.currentRoute = result.data;
+            
+            // Закрываем модалку и показываем результат
+            this.close();
+            this.displaySmartRouteOnMap(result.data);
+            
+            // Уведомление с предупреждениями
+            let message = '✅ Умный маршрут построен!';
+            if (result.data.warnings && result.data.warnings.length > 0) {
+                message = '✅ Маршрут построен!\n\n⚠️ ' + result.data.warnings.join('\n⚠️ ');
+            }
+            
+            setTimeout(() => {
+                this.showNotification(message, result.data.warnings && result.data.warnings.length > 0 ? 'warning' : 'success');
+            }, 300);
+            
+        } else {
+            // Детальная обработка ошибок
+            let errorMessage = '❌ Не удалось построить маршрут';
+            
+            if (result.details && result.details.detail) {
+                // Ошибка валидации от FastAPI
+                const validationErrors = result.details.detail;
+                if (Array.isArray(validationErrors) && validationErrors.length > 0) {
+                    const fieldErrors = validationErrors.map(err => {
+                        const field = err.loc ? err.loc[err.loc.length - 1] : 'unknown';
+                        return `• ${field}: ${err.msg}`;
+                    }).join('\n');
+                    errorMessage = `❌ Ошибка валидации данных:\n\n${fieldErrors}`;
+                } else {
+                    errorMessage = `❌ Ошибка валидации: ${JSON.stringify(validationErrors)}`;
+                }
+            } else if (result.error) {
+                errorMessage = `❌ ${result.error}`;
+            }
+            
+            this.showNotification(errorMessage, 'error');
+            console.error('Backend error:', result);
+        }
     } catch (error) {
-      console.error("Error building smart route:", error);
-      this.showNotification("Ошибка соединения с сервером", "error");
+        console.error('Error building smart route:', error);
+        this.showNotification('❌ Ошибка соединения с сервером.\n\nПроверьте подключение к интернету и попробуйте снова.', 'error');
     } finally {
-      this.showLoading(false);
+        this.showLoading(false);
     }
-  }
+}
 
-  async buildSimpleRoute() {
-    const startPoint = document.getElementById("simpleStartPoint").value.trim();
-    const endPoint = document.getElementById("simpleEndPoint").value.trim();
-    const mode = document.querySelector(
-      'input[name="simpleTransport"]:checked'
-    ).value;
+async buildSimpleRoute() {
+    const startPoint = document.getElementById('simpleStartPoint').value.trim();
+    const endPoint = document.getElementById('simpleEndPoint').value.trim();
+    const mode = document.querySelector('input[name="simpleTransport"]:checked').value;
 
+    // Валидация
     if (!startPoint || !endPoint) {
-      this.showNotification("Укажите начальную и конечную точки", "error");
-      return;
+        this.showNotification('⚠️ Укажите начальную и конечную точки', 'error');
+        return;
     }
 
     const waypoints = [];
-    document.querySelectorAll(".waypoint-input").forEach((input) => {
-      const value = input.value.trim();
-      if (value) waypoints.push(value);
+    document.querySelectorAll('.waypoint-input').forEach(input => {
+        const value = input.value.trim();
+        if (value) waypoints.push(value);
     });
 
     const routeData = {
-      start_point: startPoint,
-      end_point: endPoint,
-      waypoints: waypoints,
-      mode: mode,
+        start_point: startPoint,
+        end_point: endPoint,
+        waypoints: waypoints,
+        mode: mode
     };
 
-    this.showLoading(true, "Строим маршрут...");
+    this.showLoading(true, 'Строим маршрут...');
 
     try {
-      const response = await fetch("api.php?action=build_simple_route", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(routeData),
-      });
+        const response = await fetch('api.php?action=build_simple_route', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(routeData)
+        });
 
-      const result = await response.json();
+        const result = await response.json();
 
-      if (result.success) {
-        this.displaySimpleRouteOnMap(result.data);
-        this.showNotification("Маршрут построен!", "success");
-        this.close();
-      } else {
-        this.showNotification("Ошибка: " + result.error, "error");
-      }
+        if (result.success) {
+            // Закрываем модалку и показываем результат
+            this.close();
+            this.displaySimpleRouteOnMap(result.data);
+            
+            setTimeout(() => {
+                this.showNotification('✅ Маршрут построен!', 'success');
+            }, 300);
+        } else {
+            let errorMessage = '❌ Не удалось построить маршрут';
+            
+            if (result.error) {
+                errorMessage = `❌ ${result.error}`;
+            }
+            
+            this.showNotification(errorMessage, 'error');
+            console.error('Backend error:', result);
+        }
     } catch (error) {
-      console.error("Error building simple route:", error);
-      this.showNotification("Ошибка соединения", "error");
+        console.error('Error building simple route:', error);
+        this.showNotification('❌ Ошибка соединения с сервером.\n\nПроверьте подключение к интернету и попробуйте снова.', 'error');
     } finally {
-      this.showLoading(false);
+        this.showLoading(false);
     }
-  }
+}
 
   async geocodeAddress(address) {
     return new Promise((resolve, reject) => {
@@ -687,28 +705,43 @@ class RouteModal {
     }
   }
 
-  showLoading(show, text = "Строим оптимальный маршрут...") {
-    const overlay = document.getElementById("loadingOverlay");
-    const loadingText = document.getElementById("loadingText");
-    overlay.style.display = show ? "flex" : "none";
-    if (text) loadingText.textContent = text;
-  }
+showLoading(show, text = 'Строим оптимальный маршрут...') {
+    const overlay = document.getElementById('loadingOverlay');
+    const loadingText = document.getElementById('loadingText');
+    
+    if (show) {
+        overlay.classList.add('active');
+        if (text) loadingText.textContent = text;
+    } else {
+        overlay.classList.remove('active');
+    }
+}
 
-  showNotification(message, type = "info") {
-    const notification = document.createElement("div");
+
+showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
     notification.className = `notification notification-${type}`;
+    
+    // Добавляем класс для длинных сообщений
+    if (message.length > 150 || message.split('\n').length > 4) {
+        notification.classList.add('long');
+    }
+    
     notification.textContent = message;
     document.body.appendChild(notification);
 
     setTimeout(() => {
-      notification.classList.add("show");
+        notification.classList.add('show');
     }, 10);
 
+    // Увеличиваем время для длинных сообщений
+    const duration = message.length > 150 ? 7000 : 5000;
+    
     setTimeout(() => {
-      notification.classList.remove("show");
-      setTimeout(() => notification.remove(), 300);
-    }, 4000);
-  }
+        notification.classList.remove('show');
+        setTimeout(() => notification.remove(), 400);
+    }, duration);
+}
 
   open() {
     this.modal.classList.add("active");
