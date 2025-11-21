@@ -1,12 +1,24 @@
 class RouteModal {
     constructor() {
         this.modal = null;
-        this.currentRouteType = 'smart'; // 'smart' или 'simple'
+        this.currentRouteType = 'smart';
         this.waypoints = [];
         this.currentRoute = null;
         this.map = null;
         this.selectedCategories = [];
-        this.init();
+        // Отложенная инициализация после загрузки ymaps
+        if (typeof ymaps !== 'undefined' && ymaps.ready) {
+            ymaps.ready(() => this.init());
+        } else {
+            // Если ymaps еще не загружен, дождемся события
+            window.addEventListener('load', () => {
+                if (typeof ymaps !== 'undefined') {
+                    ymaps.ready(() => this.init());
+                } else {
+                    this.init();
+                }
+            });
+        }
     }
 
     init() {
@@ -23,7 +35,6 @@ class RouteModal {
                         <button class="modal-close" id="closeModal">&times;</button>
                     </div>
                     
-                    <!-- Переключатель типа маршрута -->
                     <div class="route-type-selector">
                         <button class="route-type-btn active" data-type="smart">
                             <span class="type-icon">🧠</span>
@@ -42,7 +53,6 @@ class RouteModal {
                     </div>
 
                     <div class="modal-body">
-                        <!-- УМНАЯ ПРОГУЛКА -->
                         <div id="smartRoutePanel" class="route-panel active">
                             <div class="section-header">
                                 <span class="section-icon">📍</span>
@@ -61,7 +71,6 @@ class RouteModal {
                                     placeholder="Например: Москва, Красная площадь"
                                     autocomplete="off"
                                 />
-                                <div class="suggestions-dropdown" id="smartStartSuggestions"></div>
                             </div>
 
                             <div class="route-end-options">
@@ -93,7 +102,6 @@ class RouteModal {
                                     placeholder="Куда хотите прийти?"
                                     autocomplete="off"
                                 />
-                                <div class="suggestions-dropdown" id="smartEndSuggestions"></div>
                             </div>
 
                             <div class="section-header">
@@ -232,7 +240,6 @@ class RouteModal {
                             </div>
                         </div>
 
-                        <!-- ПРОСТОЙ МАРШРУТ -->
                         <div id="simpleRoutePanel" class="route-panel">
                             <div class="section-header">
                                 <span class="section-icon">📍</span>
@@ -251,7 +258,6 @@ class RouteModal {
                                     placeholder="Начальная точка"
                                     autocomplete="off"
                                 />
-                                <div class="suggestions-dropdown" id="simpleStartSuggestions"></div>
                             </div>
 
                             <div id="simpleWaypointsContainer"></div>
@@ -272,7 +278,6 @@ class RouteModal {
                                     placeholder="Конечная точка"
                                     autocomplete="off"
                                 />
-                                <div class="suggestions-dropdown" id="simpleEndSuggestions"></div>
                             </div>
 
                             <div class="section-header">
@@ -334,7 +339,6 @@ class RouteModal {
     }
 
     attachEventListeners() {
-        // Закрытие модального окна
         document.getElementById('closeModal').addEventListener('click', () => this.close());
         document.getElementById('cancelRoute').addEventListener('click', () => this.close());
         
@@ -342,28 +346,24 @@ class RouteModal {
             if (e.target === this.modal) this.close();
         });
 
-        // Переключение типа маршрута
         document.querySelectorAll('.route-type-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 this.switchRouteType(e.currentTarget.dataset.type);
             });
         });
 
-        // Слайдер времени
         const timeSlider = document.getElementById('timeSlider');
         const timeValue = document.getElementById('timeValue');
         timeSlider.addEventListener('input', (e) => {
             timeValue.textContent = e.target.value;
         });
 
-        // Слайдер строгости
         const strictnessSlider = document.getElementById('strictnessSlider');
         const strictnessValue = document.getElementById('strictnessValue');
         strictnessSlider.addEventListener('input', (e) => {
             strictnessValue.textContent = e.target.value;
         });
 
-        // Переключатель конечной точки
         document.querySelectorAll('input[name="routeEnd"]').forEach(radio => {
             radio.addEventListener('change', (e) => {
                 const endGroup = document.getElementById('smartEndPointGroup');
@@ -371,19 +371,14 @@ class RouteModal {
             });
         });
 
-        // Построение маршрута
         document.getElementById('buildRoute').addEventListener('click', () => this.buildRoute());
-
-        // Добавление промежуточных точек для простого маршрута
         document.getElementById('addSimpleWaypoint').addEventListener('click', () => this.addSimpleWaypoint());
 
-        // Автодополнение
-        this.setupYandexSuggest('smartStartPoint', 'smartStartSuggestions');
-        this.setupYandexSuggest('smartEndPoint', 'smartEndSuggestions');
-        this.setupYandexSuggest('simpleStartPoint', 'simpleStartSuggestions');
-        this.setupYandexSuggest('simpleEndPoint', 'simpleEndSuggestions');
+        this.setupYandexSuggest('smartStartPoint');
+        this.setupYandexSuggest('smartEndPoint');
+        this.setupYandexSuggest('simpleStartPoint');
+        this.setupYandexSuggest('simpleEndPoint');
 
-        // ESC для закрытия
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && this.modal.classList.contains('active')) {
                 this.close();
@@ -394,28 +389,23 @@ class RouteModal {
     switchRouteType(type) {
         this.currentRouteType = type;
         
-        // Переключить активную кнопку
         document.querySelectorAll('.route-type-btn').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.type === type);
         });
 
-        // Показать соответствующую панель
         document.getElementById('smartRoutePanel').classList.toggle('active', type === 'smart');
         document.getElementById('simpleRoutePanel').classList.toggle('active', type === 'simple');
 
-        // Обновить текст кнопки
         const btnText = type === 'smart' ? 'Построить умный маршрут' : 'Построить маршрут';
         document.getElementById('buildBtnText').textContent = btnText;
     }
 
-    setupYandexSuggest(inputId, suggestionsId) {
+    setupYandexSuggest(inputId) {
         const input = document.getElementById(inputId);
-        const suggestionsDiv = document.getElementById(suggestionsId);
         
-        if (typeof ymaps !== 'undefined') {
-            const suggestView = new ymaps.SuggestView(input, {
-                results: 5,
-                offset: [0, 5]
+        if (typeof ymaps !== 'undefined' && ymaps.suggest) {
+            new ymaps.SuggestView(input, {
+                results: 5
             });
         }
     }
@@ -446,10 +436,20 @@ class RouteModal {
         document.getElementById('simpleWaypointsContainer').insertAdjacentHTML('beforeend', waypointHTML);
         this.waypoints.push('');
 
-        // Обработчик удаления
         document.querySelector(`.remove-waypoint-btn[data-index="${waypointIndex}"]`).addEventListener('click', (e) => {
             this.removeWaypoint(parseInt(e.target.dataset.index));
         });
+
+        const waypointInput = document.querySelector(`.waypoint-input[data-index="${waypointIndex}"]`);
+        this.setupYandexSuggestForElement(waypointInput);
+    }
+
+    setupYandexSuggestForElement(element) {
+        if (typeof ymaps !== 'undefined' && ymaps.suggest) {
+            new ymaps.SuggestView(element, {
+                results: 5
+            });
+        }
     }
 
     removeWaypoint(index) {
@@ -476,7 +476,6 @@ class RouteModal {
         const pace = document.querySelector('input[name="pace"]:checked').value;
         const strictness = parseInt(document.getElementById('strictnessSlider').value);
 
-        // Собрать выбранные категории
         const categories = [];
         document.querySelectorAll('.category-option input:checked').forEach(cb => {
             categories.push(cb.value);
@@ -497,7 +496,6 @@ class RouteModal {
             return;
         }
 
-        // Геокодировать адреса
         this.showLoading(true, 'Определяем координаты...');
         
         try {
@@ -696,7 +694,11 @@ class RouteModal {
     }
 }
 
-// Инициализация при загрузке страницы
-document.addEventListener('DOMContentLoaded', () => {
+// Отложенная инициализация после загрузки DOM
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        window.routeModal = new RouteModal();
+    });
+} else {
     window.routeModal = new RouteModal();
-});
+}
