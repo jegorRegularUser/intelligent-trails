@@ -63,6 +63,21 @@ switch ($action) {
         
         $input = json_decode(file_get_contents('php://input'), true);
         
+        // ИСПРАВЛЕНО: Правильная обработка settings
+        $settings = $input['settings'] ?? [];
+        if (!is_array($settings)) {
+            $settings = [];
+        }
+        $pace = $settings['pace'] ?? 'balanced';
+        $time_strictness = isset($settings['time_strictness']) ? intval($settings['time_strictness']) : 5;
+        
+        // ИСПРАВЛЕНО: min_places_per_category должен быть объектом, а не массивом
+        $min_places = $input['min_places_per_category'] ?? [];
+        if (!is_array($min_places) || array_values($min_places) === $min_places) {
+            // Если пришёл пустой массив [], преобразуем в пустой объект {}
+            $min_places = new stdClass();
+        }
+        
         // Подготовка данных для бэкенда
         $routeData = [
             'start_point' => [
@@ -77,10 +92,10 @@ switch ($action) {
             'time_limit_minutes' => intval($input['time_limit_minutes'] ?? 60),
             'return_to_start' => boolval($input['return_to_start'] ?? false),
             'mode' => $input['mode'] ?? 'pedestrian',
-            'min_places_per_category' => $input['min_places_per_category'] ?? [],
+            'min_places_per_category' => $min_places,
             'settings' => [
-                'pace' => $input['pace'] ?? 'balanced',
-                'time_strictness' => intval($input['time_strictness'] ?? 5)
+                'pace' => $pace,
+                'time_strictness' => $time_strictness
             ]
         ];
         
@@ -91,14 +106,17 @@ switch ($action) {
             if (isset($_SESSION["loggedin"]) && $_SESSION["loggedin"] === true) {
                 $userId = $_SESSION["id"];
                 $stmt = $link->prepare("INSERT INTO route_history (user_id, route_type, start_point, end_point, categories, time_limit, route_data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())");
-                $routeType = 'smart';
-                $startName = $routeData['start_point']['name'];
-                $endName = $routeData['end_point']['name'] ?? null;
-                $categoriesJson = json_encode($routeData['categories']);
-                $timeLimit = $routeData['time_limit_minutes'];
-                $routeJson = json_encode($result['data']);
-                $stmt->bind_param("issisis", $userId, $routeType, $startName, $endName, $categoriesJson, $timeLimit, $routeJson);
-                $stmt->execute();
+                if ($stmt) {
+                    $routeType = 'smart';
+                    $startName = $routeData['start_point']['name'];
+                    $endName = $routeData['end_point']['name'] ?? null;
+                    $categoriesJson = json_encode($routeData['categories']);
+                    $timeLimit = $routeData['time_limit_minutes'];
+                    $routeJson = json_encode($result['data']);
+                    $stmt->bind_param("issisis", $userId, $routeType, $startName, $endName, $categoriesJson, $timeLimit, $routeJson);
+                    $stmt->execute();
+                    $stmt->close();
+                }
             }
             
             echo json_encode(['success' => true, 'data' => $result['data']]);
@@ -136,12 +154,15 @@ switch ($action) {
         if (isset($_SESSION["loggedin"]) && $_SESSION["loggedin"] === true) {
             $userId = $_SESSION["id"];
             $stmt = $link->prepare("INSERT INTO route_history (user_id, route_type, start_point, end_point, transport_mode, created_at) VALUES (?, ?, ?, ?, ?, NOW())");
-            $routeType = 'simple';
-            $startName = $input['start_point'];
-            $endName = $input['end_point'];
-            $mode = $input['mode'] ?? 'auto';
-            $stmt->bind_param("issss", $userId, $routeType, $startName, $endName, $mode);
-            $stmt->execute();
+            if ($stmt) {
+                $routeType = 'simple';
+                $startName = $input['start_point'];
+                $endName = $input['end_point'];
+                $mode = $input['mode'] ?? 'auto';
+                $stmt->bind_param("issss", $userId, $routeType, $startName, $endName, $mode);
+                $stmt->execute();
+                $stmt->close();
+            }
         }
         break;
         
