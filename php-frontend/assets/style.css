@@ -126,3 +126,155 @@ body {
 .alert-success { color: #155724; background-color: #d4edda; border-color: #c3e6cb; }
 .alert-danger { color: #721c24; background-color: #f8d7da; border-color: #f5c6cb; }
 .alert-info { color: #0c5460; background-color: #d1ecf1; border-color: #bee5eb; }
+/* Страница карты */
+.map-page-container {
+    position: relative;
+    height: calc(100vh - 60px);
+}
+
+#map {
+    width: 100%;
+    height: 100%;
+}
+
+/* Кнопка построения маршрута */
+.floating-action-btn {
+    position: absolute;
+    bottom: 30px;
+    right: 30px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    padding: 18px 32px;
+    border-radius: 50px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    z-index: 1000;
+}
+
+.floating-action-btn:hover {
+    transform: translateY(-3px) scale(1.05);
+    box-shadow: 0 12px 35px rgba(102, 126, 234, 0.5);
+}
+
+.fab-icon {
+    font-size: 24px;
+}
+
+.fab-text {
+    font-size: 16px;
+}
+
+/* Панель информации о маршруте */
+.route-info-panel {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background: white;
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+    max-width: 320px;
+    z-index: 1000;
+    animation: slideInLeft 0.4s ease;
+}
+
+@keyframes slideInLeft {
+    from {
+        transform: translateX(-100px);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.route-info-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid #f0f2f5;
+}
+
+.route-info-header h3 {
+    margin: 0;
+    font-size: 18px;
+    color: #333;
+}
+
+.close-panel-btn {
+    background: #f0f0f0;
+    border: none;
+    color: #666;
+    font-size: 24px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    line-height: 1;
+}
+
+.close-panel-btn:hover {
+    background: #e0e0e0;
+}
+
+.route-stat {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid #f5f5f5;
+}
+
+.route-stat:last-child {
+    border-bottom: none;
+}
+
+.stat-icon {
+    font-size: 28px;
+}
+
+.stat-label {
+    font-size: 13px;
+    color: #888;
+    margin-bottom: 2px;
+}
+
+.stat-value {
+    font-size: 16px;
+    font-weight: 700;
+    color: #333;
+}
+
+/* Адаптивность для мобильных */
+@media (max-width: 768px) {
+    .floating-action-btn {
+        bottom: 20px;
+        right: 20px;
+        padding: 14px 20px;
+    }
+
+    .fab-text {
+        display: none;
+    }
+
+    .route-info-panel {
+        left: 10px;
+        right: 10px;
+        max-width: none;
+    }
+}
+

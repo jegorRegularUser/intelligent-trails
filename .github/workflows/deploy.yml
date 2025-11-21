@@ -1,0 +1,50 @@
+name: 🚀 Deploy to Beget
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'php-frontend/**'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: 🎉 Deploy PHP Frontend
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 🚚 Get latest code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: 📋 Display changed files
+        run: |
+          echo "Files changed in this commit:"
+          git diff --name-only HEAD^ HEAD || echo "No changes detected"
+
+      - name: 📂 Deploy via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.6
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./php-frontend/
+          server-dir: ./dvoinydx.beget.tech/public_html/
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+            **/.vscode/**
+            **/.idea/**
+            **/tests/**
+            **/*.md
+            **/config.php
+            **/.env
+          dry-run: false
+
+      - name: ✅ Deployment Complete
+        run: |
+          echo "🎉 Deployment to Beget successful!"
+          echo "🌐 Site: http://dvoinydx.beget.tech"
