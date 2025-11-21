@@ -4,28 +4,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Карта - RouteMaster</title>
+    <title>Intelligent Trails - Карта</title>
     <link rel="stylesheet" href="assets/style.css">
     <link rel="stylesheet" href="assets/modal-styles.css">
     <script src="https://api-maps.yandex.ru/2.1/?lang=ru_RU&apikey=7637c9ce-fc0e-4f1d-a6e2-2d6e85cf7193&suggest_apikey=1019e534-8f99-42e2-85b2-d0c7ed9ccca2"></script>
 </head>
 <body>
-    <nav class="navbar">
-        <div class="container">
-            <a href="index.php" class="logo">RouteMaster</a>
-            <div class="nav-links">
-                <a href="map.php" class="active">Карта</a>
-                <?php if(isset($_SESSION["loggedin"]) && $_SESSION["loggedin"] === true): ?>
-                    <a href="profile.php">Профиль</a>
-                    <a href="route_history.php">История</a>
-                    <a href="logout.php">Выйти</a>
-                <?php else: ?>
-                    <a href="login.php">Вход</a>
-                    <a href="register.php">Регистрация</a>
-                <?php endif; ?>
-            </div>
-        </div>
-    </nav>
+    <?php require_once "components/navigation.php"; ?>
 
     <main class="map-page-container">
         <div id="map"></div>

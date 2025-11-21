@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Literal
 from dotenv import load_dotenv
 
@@ -27,8 +27,8 @@ class RouteRequest(BaseModel):
     time_limit_minutes: int
     return_to_start: bool
     mode: str = "pedestrian"
-    min_places_per_category: Optional[Dict[str, int]] = {}
-    settings: Optional[RouteSettings] = RouteSettings() # Новое поле настроек
+    min_places_per_category: Dict[str, int] = Field(default_factory=dict)  # ИСПРАВЛЕНО
+    settings: RouteSettings = Field(default_factory=RouteSettings)  # ИСПРАВЛЕНО
 
 class RouteResponse(BaseModel):
     ordered_route: List[Point]
@@ -48,7 +48,8 @@ async def calculate_route_endpoint(request: RouteRequest):
             center_coords=request.start_point.coords,
             categories=request.categories
         )
-    except Exception:
+    except Exception as e:
+        print(f"Search places error: {e}")
         places_of_interest = []
 
     if not places_of_interest:
@@ -58,7 +59,6 @@ async def calculate_route_endpoint(request: RouteRequest):
     start_point_dict = {"name": request.start_point.name, "coords": request.start_point.coords, "type": "start"}
     
     # Адаптивный лимит точек в зависимости от "Темпа"
-    # Если "active" - берем больше точек для расчета, если "relaxed" - меньше
     base_limit = yandex_api.MAX_POINTS_FOR_MATRIX - 1
     if request.settings.pace == "active":
         limit = base_limit
@@ -90,7 +90,8 @@ async def calculate_route_endpoint(request: RouteRequest):
         time_matrix, success_rate = await yandex_api.get_routing_matrix(all_points_dicts, request.mode)
         # ПРИНУДИТЕЛЬНО приводим все к int, чтобы ortools не падал
         time_matrix = [[int(cell) for cell in row] for row in time_matrix]
-    except Exception:
+    except Exception as e:
+        print(f"Matrix calculation error: {e}")
         time_matrix = yandex_api.generate_fallback_matrix(all_points_dicts)
         warnings.append("Ошибка сервиса карт. Маршрут построен геометрически.")
 
@@ -105,9 +106,10 @@ async def calculate_route_endpoint(request: RouteRequest):
             strictness=request.settings.time_strictness
         )
     except Exception as e:
-        print(f"Solver fatal: {e}")
+        print(f"Solver error: {e}")
         ordered_indices = [0]
-        if end_point_index: ordered_indices.append(end_point_index)
+        if end_point_index: 
+            ordered_indices.append(end_point_index)
 
     # 5. Сборка ответа
     final_route_points = []
@@ -115,16 +117,19 @@ async def calculate_route_endpoint(request: RouteRequest):
     
     for i in range(len(ordered_indices)):
         idx = ordered_indices[i]
-        final_route_points.append(Point(name=all_points_dicts[idx]['name'], coords=all_points_dicts[idx]['coords']))
+        final_route_points.append(Point(
+            name=all_points_dicts[idx]['name'], 
+            coords=all_points_dicts[idx]['coords']
+        ))
         if i > 0:
             prev = ordered_indices[i-1]
             total_time_sec += time_matrix[prev][idx]
 
     real_time_min = int(total_time_sec / 60)
     
-    # Если насчитали 0 минут (старт-старт), но точек было много - это ошибка алгоритма, форсируем хотя бы 1 точку
+    # Проверка качества маршрута
     if len(final_route_points) <= 2 and len(all_points_dicts) > 5 and real_time_min < 5:
-         warnings.append("Не удалось построить оптимальный маршрут. Попробуйте увеличить время или сменить локацию.")
+        warnings.append("Не удалось построить оптимальный маршрут. Попробуйте увеличить время или сменить локацию.")
 
     if real_time_min > request.time_limit_minutes:
         warnings.append(f"Внимание! Маршрут займет {real_time_min} мин (лимит {request.time_limit_minutes} мин).")
