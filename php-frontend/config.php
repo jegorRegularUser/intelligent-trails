@@ -21,4 +21,6 @@ session_start();
 define('YANDEX_CLIENT_ID', '***REMOVED-YANDEX-OAUTH-ID***');
 define('YANDEX_CLIENT_SECRET', '***REMOVED-YANDEX-OAUTH-SECRET***');
 define('YANDEX_REDIRECT_URI', 'http://dvoinydx.beget.tech/yandex_callback.php');
+define('BACKEND_API_URL', 'https://intelligent-trails.onrender.com');
+
 ?>

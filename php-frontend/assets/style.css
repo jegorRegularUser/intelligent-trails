@@ -126,10 +126,14 @@ body {
 .alert-success { color: #155724; background-color: #d4edda; border-color: #c3e6cb; }
 .alert-danger { color: #721c24; background-color: #f8d7da; border-color: #f5c6cb; }
 .alert-info { color: #0c5460; background-color: #d1ecf1; border-color: #bee5eb; }
-/* Страница карты */
+/* ============================================
+   СТРАНИЦА КАРТЫ
+   ============================================ */
+
 .map-page-container {
     position: relative;
     height: calc(100vh - 60px);
+    overflow: hidden;
 }
 
 #map {
@@ -137,21 +141,24 @@ body {
     height: 100%;
 }
 
-/* Кнопка построения маршрута */
+/* ============================================
+   КНОПКА ПОСТРОЕНИЯ МАРШРУТА
+   ============================================ */
+
 .floating-action-btn {
     position: absolute;
-    bottom: 30px;
-    right: 30px;
+    bottom: 35px;
+    right: 35px;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
     border: none;
-    padding: 18px 32px;
-    border-radius: 50px;
-    font-size: 16px;
+    padding: 20px 36px;
+    border-radius: 60px;
+    font-size: 17px;
     font-weight: 700;
     cursor: pointer;
-    box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
-    transition: all 0.3s ease;
+    box-shadow: 0 10px 30px rgba(102, 126, 234, 0.5);
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     display: flex;
     align-items: center;
     gap: 12px;
@@ -159,30 +166,63 @@ body {
 }
 
 .floating-action-btn:hover {
-    transform: translateY(-3px) scale(1.05);
-    box-shadow: 0 12px 35px rgba(102, 126, 234, 0.5);
+    transform: translateY(-5px) scale(1.05);
+    box-shadow: 0 15px 40px rgba(102, 126, 234, 0.6);
+}
+
+.floating-action-btn:active {
+    transform: translateY(-2px) scale(1.02);
 }
 
 .fab-icon {
-    font-size: 24px;
+    font-size: 26px;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.1);
+    }
 }
 
 .fab-text {
-    font-size: 16px;
+    font-size: 17px;
 }
 
-/* Панель информации о маршруте */
+/* ============================================
+   ПАНЕЛЬ ИНФОРМАЦИИ О МАРШРУТЕ
+   ============================================ */
+
 .route-info-panel {
     position: absolute;
-    top: 20px;
-    left: 20px;
+    top: 25px;
+    left: 25px;
     background: white;
-    border-radius: 16px;
-    padding: 20px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
-    max-width: 320px;
+    border-radius: 18px;
+    padding: 0;
+    box-shadow: 0 12px 35px rgba(0, 0, 0, 0.2);
+    max-width: 360px;
+    max-height: calc(100vh - 120px);
+    overflow-y: auto;
     z-index: 1000;
-    animation: slideInLeft 0.4s ease;
+    animation: slideInLeft 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.route-info-panel::-webkit-scrollbar {
+    width: 6px;
+}
+
+.route-info-panel::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 0 18px 18px 0;
+}
+
+.route-info-panel::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 10px;
 }
 
 @keyframes slideInLeft {
@@ -200,24 +240,29 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 15px;
-    padding-bottom: 15px;
+    padding: 20px 25px;
     border-bottom: 2px solid #f0f2f5;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 18px 18px 0 0;
+    position: sticky;
+    top: 0;
+    z-index: 10;
 }
 
 .route-info-header h3 {
     margin: 0;
     font-size: 18px;
-    color: #333;
+    font-weight: 700;
 }
 
 .close-panel-btn {
-    background: #f0f0f0;
+    background: rgba(255, 255, 255, 0.2);
     border: none;
-    color: #666;
-    font-size: 24px;
-    width: 32px;
-    height: 32px;
+    color: white;
+    font-size: 26px;
+    width: 34px;
+    height: 34px;
     border-radius: 50%;
     cursor: pointer;
     display: flex;
@@ -225,18 +270,24 @@ body {
     justify-content: center;
     transition: all 0.3s ease;
     line-height: 1;
+    font-weight: 300;
 }
 
 .close-panel-btn:hover {
-    background: #e0e0e0;
+    background: rgba(255, 255, 255, 0.3);
+    transform: rotate(90deg);
+}
+
+.route-info-body {
+    padding: 20px 25px;
 }
 
 .route-stat {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 12px 0;
-    border-bottom: 1px solid #f5f5f5;
+    gap: 15px;
+    padding: 15px 0;
+    border-bottom: 1px solid #f3f4f6;
 }
 
 .route-stat:last-child {
@@ -244,37 +295,163 @@ body {
 }
 
 .stat-icon {
-    font-size: 28px;
+    font-size: 32px;
+    flex-shrink: 0;
 }
 
 .stat-label {
     font-size: 13px;
-    color: #888;
-    margin-bottom: 2px;
+    color: #6b7280;
+    margin-bottom: 4px;
 }
 
 .stat-value {
-    font-size: 16px;
+    font-size: 18px;
     font-weight: 700;
-    color: #333;
+    color: #1f2937;
 }
 
-/* Адаптивность для мобильных */
+.route-warnings {
+    margin-top: 15px;
+    padding: 15px;
+    background: #fef3c7;
+    border-left: 4px solid #f59e0b;
+    border-radius: 8px;
+}
+
+.route-warnings strong {
+    display: block;
+    margin-bottom: 10px;
+    color: #92400e;
+}
+
+.warning-item {
+    font-size: 13px;
+    color: #78350f;
+    margin-bottom: 6px;
+}
+
+.warning-item:last-child {
+    margin-bottom: 0;
+}
+
+/* ============================================
+   СПИСОК МЕСТ В МАРШРУТЕ
+   ============================================ */
+
+.route-places-list {
+    padding: 0 25px 25px 25px;
+}
+
+.places-header {
+    font-size: 16px;
+    font-weight: 700;
+    color: #1f2937;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #f0f2f5;
+}
+
+.place-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    margin-bottom: 8px;
+    background: #f9fafb;
+    border-radius: 10px;
+    transition: all 0.3s ease;
+}
+
+.place-item:hover {
+    background: #f0f4ff;
+    transform: translateX(5px);
+}
+
+.place-item.start {
+    background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+}
+
+.place-item.end {
+    background: linear-gradient(135deg, #fee2e2, #fecaca);
+}
+
+.place-number {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 50%;
+    font-weight: 700;
+    font-size: 13px;
+    flex-shrink: 0;
+}
+
+.place-item.start .place-number {
+    background: linear-gradient(135deg, #10b981, #059669);
+}
+
+.place-item.end .place-number {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+}
+
+.place-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #374151;
+    line-height: 1.4;
+}
+
+/* ============================================
+   АДАПТИВНОСТЬ ДЛЯ КАРТЫ
+   ============================================ */
+
 @media (max-width: 768px) {
     .floating-action-btn {
-        bottom: 20px;
-        right: 20px;
-        padding: 14px 20px;
+        bottom: 25px;
+        right: 25px;
+        padding: 16px 24px;
     }
 
     .fab-text {
         display: none;
     }
 
+    .fab-icon {
+        font-size: 24px;
+    }
+
     .route-info-panel {
-        left: 10px;
-        right: 10px;
+        left: 15px;
+        right: 15px;
         max-width: none;
+        top: 15px;
+        max-height: calc(100vh - 100px);
     }
 }
 
+@media (max-width: 480px) {
+    .floating-action-btn {
+        padding: 14px 20px;
+        bottom: 20px;
+        right: 20px;
+    }
+
+    .route-info-panel {
+        left: 10px;
+        right: 10px;
+        top: 10px;
+    }
+
+    .route-info-header {
+        padding: 16px 20px;
+    }
+
+    .route-info-body,
+    .route-places-list {
+        padding: 16px 20px;
+    }
+}
