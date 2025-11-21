@@ -2,9 +2,16 @@
 require_once "config.php";
 
 header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type');
 
-// URL вашего бэкенда
-define('BACKEND_API_URL', 'http://localhost:8000/api'); // Измените на ваш URL
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
+
+define('BACKEND_API_URL', 'https://intelligent-trails.onrender.com');
 
 function callBackendAPI($endpoint, $method = 'GET', $data = null) {
     $url = BACKEND_API_URL . $endpoint;
@@ -13,6 +20,8 @@ function callBackendAPI($endpoint, $method = 'GET', $data = null) {
     curl_setopt($ch, CURLOPT_URL, $url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
     
     if ($method === 'POST') {
         curl_setopt($ch, CURLOPT_POST, true);
@@ -25,18 +34,28 @@ function callBackendAPI($endpoint, $method = 'GET', $data = null) {
     
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
     curl_close($ch);
+    
+    if ($error) {
+        return [
+            'code' => 0,
+            'data' => null,
+            'error' => $error
+        ];
+    }
     
     return [
         'code' => $httpCode,
-        'data' => json_decode($response, true)
+        'data' => json_decode($response, true),
+        'raw' => $response
     ];
 }
 
 $action = $_GET['action'] ?? $_POST['action'] ?? '';
 
 switch ($action) {
-    case 'build_route':
+    case 'build_smart_route':
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             echo json_encode(['success' => false, 'error' => 'Method not allowed']);
             exit;
@@ -44,53 +63,86 @@ switch ($action) {
         
         $input = json_decode(file_get_contents('php://input'), true);
         
+        // Подготовка данных для бэкенда
         $routeData = [
-            'start_point' => $input['start_point'] ?? '',
-            'end_point' => $input['end_point'] ?? '',
-            'transport_mode' => $input['transport_mode'] ?? 'auto',
-            'preferences' => [
-                'avoid_tolls' => $input['avoid_tolls'] ?? false,
-                'avoid_traffic' => $input['avoid_traffic'] ?? false,
-                'scenic_route' => $input['scenic_route'] ?? false,
-                'fastest_route' => $input['fastest_route'] ?? true
+            'start_point' => [
+                'name' => $input['start_point']['name'] ?? 'Начало',
+                'coords' => $input['start_point']['coords'] ?? [55.751574, 37.573856]
             ],
-            'waypoints' => $input['waypoints'] ?? []
+            'end_point' => !empty($input['end_point']) ? [
+                'name' => $input['end_point']['name'] ?? 'Конец',
+                'coords' => $input['end_point']['coords'] ?? null
+            ] : null,
+            'categories' => $input['categories'] ?? [],
+            'time_limit_minutes' => intval($input['time_limit_minutes'] ?? 60),
+            'return_to_start' => boolval($input['return_to_start'] ?? false),
+            'mode' => $input['mode'] ?? 'pedestrian',
+            'min_places_per_category' => $input['min_places_per_category'] ?? [],
+            'settings' => [
+                'pace' => $input['pace'] ?? 'balanced',
+                'time_strictness' => intval($input['time_strictness'] ?? 5)
+            ]
         ];
         
-        $result = callBackendAPI('/route/build', 'POST', $routeData);
+        $result = callBackendAPI('/calculate_route', 'POST', $routeData);
         
-        if ($result['code'] === 200) {
+        if ($result['code'] === 200 && $result['data']) {
             // Сохранить маршрут в историю если пользователь авторизован
             if (isset($_SESSION["loggedin"]) && $_SESSION["loggedin"] === true) {
                 $userId = $_SESSION["id"];
-                $stmt = $link->prepare("INSERT INTO route_history (user_id, start_point, end_point, transport_mode, route_data, created_at) VALUES (?, ?, ?, ?, ?, NOW())");
+                $stmt = $link->prepare("INSERT INTO route_history (user_id, route_type, start_point, end_point, categories, time_limit, route_data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())");
+                $routeType = 'smart';
+                $startName = $routeData['start_point']['name'];
+                $endName = $routeData['end_point']['name'] ?? null;
+                $categoriesJson = json_encode($routeData['categories']);
+                $timeLimit = $routeData['time_limit_minutes'];
                 $routeJson = json_encode($result['data']);
-                $stmt->bind_param("issss", $userId, $input['start_point'], $input['end_point'], $input['transport_mode'], $routeJson);
+                $stmt->bind_param("issisis", $userId, $routeType, $startName, $endName, $categoriesJson, $timeLimit, $routeJson);
                 $stmt->execute();
             }
             
             echo json_encode(['success' => true, 'data' => $result['data']]);
         } else {
-            echo json_encode(['success' => false, 'error' => 'Backend error', 'details' => $result['data']]);
+            echo json_encode([
+                'success' => false, 
+                'error' => 'Backend error', 
+                'details' => $result['data'] ?? $result['error'] ?? 'Unknown error',
+                'raw' => $result['raw'] ?? null
+            ]);
         }
         break;
         
-    case 'get_suggestions':
-        $query = $_GET['query'] ?? '';
-        $result = callBackendAPI('/geocode/suggest?query=' . urlencode($query));
-        echo json_encode($result['data'] ?? []);
-        break;
-        
-    case 'optimize_route':
+    case 'build_simple_route':
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             echo json_encode(['success' => false, 'error' => 'Method not allowed']);
             exit;
         }
         
         $input = json_decode(file_get_contents('php://input'), true);
-        $result = callBackendAPI('/route/optimize', 'POST', $input);
         
-        echo json_encode(['success' => $result['code'] === 200, 'data' => $result['data']]);
+        // Для простого маршрута возвращаем данные для Yandex Maps
+        echo json_encode([
+            'success' => true,
+            'data' => [
+                'type' => 'simple',
+                'start_point' => $input['start_point'],
+                'end_point' => $input['end_point'],
+                'waypoints' => $input['waypoints'] ?? [],
+                'mode' => $input['mode'] ?? 'auto'
+            ]
+        ]);
+        
+        // Сохранить простой маршрут
+        if (isset($_SESSION["loggedin"]) && $_SESSION["loggedin"] === true) {
+            $userId = $_SESSION["id"];
+            $stmt = $link->prepare("INSERT INTO route_history (user_id, route_type, start_point, end_point, transport_mode, created_at) VALUES (?, ?, ?, ?, ?, NOW())");
+            $routeType = 'simple';
+            $startName = $input['start_point'];
+            $endName = $input['end_point'];
+            $mode = $input['mode'] ?? 'auto';
+            $stmt->bind_param("issss", $userId, $routeType, $startName, $endName, $mode);
+            $stmt->execute();
+        }
         break;
         
     default:

@@ -1,9 +1,11 @@
 class RouteModal {
     constructor() {
         this.modal = null;
+        this.currentRouteType = 'smart'; // 'smart' или 'simple'
         this.waypoints = [];
         this.currentRoute = null;
         this.map = null;
+        this.selectedCategories = [];
         this.init();
     }
 
@@ -17,110 +19,294 @@ class RouteModal {
             <div id="routeModal" class="route-modal">
                 <div class="route-modal-content">
                     <div class="modal-header">
-                        <h2>Построить интеллектуальный маршрут</h2>
+                        <h2>✨ Построить маршрут</h2>
                         <button class="modal-close" id="closeModal">&times;</button>
                     </div>
                     
+                    <!-- Переключатель типа маршрута -->
+                    <div class="route-type-selector">
+                        <button class="route-type-btn active" data-type="smart">
+                            <span class="type-icon">🧠</span>
+                            <div>
+                                <div class="type-title">Умная прогулка</div>
+                                <div class="type-desc">С посещением мест</div>
+                            </div>
+                        </button>
+                        <button class="route-type-btn" data-type="simple">
+                            <span class="type-icon">🗺️</span>
+                            <div>
+                                <div class="type-title">Простой маршрут</div>
+                                <div class="type-desc">Из точки А в точку Б</div>
+                            </div>
+                        </button>
+                    </div>
+
                     <div class="modal-body">
-                        <div class="route-points-section">
+                        <!-- УМНАЯ ПРОГУЛКА -->
+                        <div id="smartRoutePanel" class="route-panel active">
+                            <div class="section-header">
+                                <span class="section-icon">📍</span>
+                                <h3>Основные точки</h3>
+                            </div>
+
                             <div class="input-group">
-                                <label for="startPoint">
+                                <label>
+                                    <span class="point-icon start-icon">A</span>
+                                    Точка старта
+                                </label>
+                                <input 
+                                    type="text" 
+                                    id="smartStartPoint" 
+                                    class="location-input" 
+                                    placeholder="Например: Москва, Красная площадь"
+                                    autocomplete="off"
+                                />
+                                <div class="suggestions-dropdown" id="smartStartSuggestions"></div>
+                            </div>
+
+                            <div class="route-end-options">
+                                <label class="radio-option">
+                                    <input type="radio" name="routeEnd" value="return" checked />
+                                    <div class="option-card">
+                                        <span class="option-icon">🔄</span>
+                                        <span>Вернуться к началу</span>
+                                    </div>
+                                </label>
+                                <label class="radio-option">
+                                    <input type="radio" name="routeEnd" value="custom" />
+                                    <div class="option-card">
+                                        <span class="option-icon">🎯</span>
+                                        <span>Закончить в другом месте</span>
+                                    </div>
+                                </label>
+                            </div>
+
+                            <div class="input-group" id="smartEndPointGroup" style="display: none;">
+                                <label>
+                                    <span class="point-icon end-icon">B</span>
+                                    Точка финиша
+                                </label>
+                                <input 
+                                    type="text" 
+                                    id="smartEndPoint" 
+                                    class="location-input" 
+                                    placeholder="Куда хотите прийти?"
+                                    autocomplete="off"
+                                />
+                                <div class="suggestions-dropdown" id="smartEndSuggestions"></div>
+                            </div>
+
+                            <div class="section-header">
+                                <span class="section-icon">⏱️</span>
+                                <h3>Длительность прогулки</h3>
+                            </div>
+
+                            <div class="time-selector">
+                                <div class="time-display">
+                                    <span class="time-value" id="timeValue">60</span>
+                                    <span class="time-unit">минут</span>
+                                </div>
+                                <input 
+                                    type="range" 
+                                    id="timeSlider" 
+                                    min="15" 
+                                    max="180" 
+                                    value="60" 
+                                    step="15"
+                                    class="time-slider"
+                                />
+                                <div class="time-labels">
+                                    <span>15 мин</span>
+                                    <span>3 часа</span>
+                                </div>
+                            </div>
+
+                            <div class="section-header">
+                                <span class="section-icon">🏛️</span>
+                                <h3>Что хотите посетить?</h3>
+                            </div>
+
+                            <div class="categories-grid">
+                                <label class="category-option">
+                                    <input type="checkbox" value="кафе" />
+                                    <div class="category-card">
+                                        <span class="cat-icon">☕</span>
+                                        <span>Кафе</span>
+                                    </div>
+                                </label>
+                                <label class="category-option">
+                                    <input type="checkbox" value="парк" />
+                                    <div class="category-card">
+                                        <span class="cat-icon">🌳</span>
+                                        <span>Парки</span>
+                                    </div>
+                                </label>
+                                <label class="category-option">
+                                    <input type="checkbox" value="музей" />
+                                    <div class="category-card">
+                                        <span class="cat-icon">🏛️</span>
+                                        <span>Музеи</span>
+                                    </div>
+                                </label>
+                                <label class="category-option">
+                                    <input type="checkbox" value="памятник" />
+                                    <div class="category-card">
+                                        <span class="cat-icon">🗿</span>
+                                        <span>Памятники</span>
+                                    </div>
+                                </label>
+                                <label class="category-option">
+                                    <input type="checkbox" value="ресторан" />
+                                    <div class="category-card">
+                                        <span class="cat-icon">🍽️</span>
+                                        <span>Рестораны</span>
+                                    </div>
+                                </label>
+                                <label class="category-option">
+                                    <input type="checkbox" value="бар" />
+                                    <div class="category-card">
+                                        <span class="cat-icon">🍺</span>
+                                        <span>Бары</span>
+                                    </div>
+                                </label>
+                                <label class="category-option">
+                                    <input type="checkbox" value="магазин" />
+                                    <div class="category-card">
+                                        <span class="cat-icon">🛍️</span>
+                                        <span>Магазины</span>
+                                    </div>
+                                </label>
+                            </div>
+
+                            <div class="section-header">
+                                <span class="section-icon">⚙️</span>
+                                <h3>Настройки прогулки</h3>
+                            </div>
+
+                            <div class="settings-group">
+                                <div class="setting-item">
+                                    <label>Темп прогулки</label>
+                                    <div class="pace-selector">
+                                        <label class="pace-option">
+                                            <input type="radio" name="pace" value="relaxed" />
+                                            <div class="pace-card">
+                                                <span class="pace-icon">🐢</span>
+                                                <span>Спокойно</span>
+                                            </div>
+                                        </label>
+                                        <label class="pace-option">
+                                            <input type="radio" name="pace" value="balanced" checked />
+                                            <div class="pace-card">
+                                                <span class="pace-icon">🚶</span>
+                                                <span>Обычно</span>
+                                            </div>
+                                        </label>
+                                        <label class="pace-option">
+                                            <input type="radio" name="pace" value="active" />
+                                            <div class="pace-card">
+                                                <span class="pace-icon">🏃</span>
+                                                <span>Активно</span>
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div class="setting-item">
+                                    <label>
+                                        Строгость по времени
+                                        <span class="strictness-value" id="strictnessValue">5</span>/10
+                                    </label>
+                                    <input 
+                                        type="range" 
+                                        id="strictnessSlider" 
+                                        min="0" 
+                                        max="10" 
+                                        value="5" 
+                                        class="strictness-slider"
+                                    />
+                                    <div class="strictness-labels">
+                                        <span>Можно опоздать</span>
+                                        <span>Очень строго</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ПРОСТОЙ МАРШРУТ -->
+                        <div id="simpleRoutePanel" class="route-panel">
+                            <div class="section-header">
+                                <span class="section-icon">📍</span>
+                                <h3>Точки маршрута</h3>
+                            </div>
+
+                            <div class="input-group">
+                                <label>
                                     <span class="point-icon start-icon">A</span>
                                     Откуда
                                 </label>
                                 <input 
                                     type="text" 
-                                    id="startPoint" 
+                                    id="simpleStartPoint" 
                                     class="location-input" 
                                     placeholder="Начальная точка"
                                     autocomplete="off"
                                 />
-                                <div class="suggestions-dropdown" id="startSuggestions"></div>
+                                <div class="suggestions-dropdown" id="simpleStartSuggestions"></div>
                             </div>
 
-                            <div id="waypointsContainer"></div>
+                            <div id="simpleWaypointsContainer"></div>
 
-                            <button class="add-waypoint-btn" id="addWaypoint">
+                            <button class="add-waypoint-btn" id="addSimpleWaypoint">
                                 <span>+</span> Добавить промежуточную точку
                             </button>
 
                             <div class="input-group">
-                                <label for="endPoint">
+                                <label>
                                     <span class="point-icon end-icon">B</span>
                                     Куда
                                 </label>
                                 <input 
                                     type="text" 
-                                    id="endPoint" 
+                                    id="simpleEndPoint" 
                                     class="location-input" 
                                     placeholder="Конечная точка"
                                     autocomplete="off"
                                 />
-                                <div class="suggestions-dropdown" id="endSuggestions"></div>
+                                <div class="suggestions-dropdown" id="simpleEndSuggestions"></div>
                             </div>
-                        </div>
 
-                        <div class="route-options-section">
-                            <h3>Способ передвижения</h3>
+                            <div class="section-header">
+                                <span class="section-icon">🚗</span>
+                                <h3>Способ передвижения</h3>
+                            </div>
+
                             <div class="transport-mode-grid">
                                 <label class="transport-option">
-                                    <input type="radio" name="transport" value="auto" checked />
+                                    <input type="radio" name="simpleTransport" value="auto" checked />
                                     <div class="transport-card">
                                         <span class="transport-icon">🚗</span>
-                                        <span>Автомобиль</span>
+                                        <span>Авто</span>
                                     </div>
                                 </label>
                                 <label class="transport-option">
-                                    <input type="radio" name="transport" value="pedestrian" />
+                                    <input type="radio" name="simpleTransport" value="pedestrian" />
                                     <div class="transport-card">
                                         <span class="transport-icon">🚶</span>
                                         <span>Пешком</span>
                                     </div>
                                 </label>
                                 <label class="transport-option">
-                                    <input type="radio" name="transport" value="masstransit" />
+                                    <input type="radio" name="simpleTransport" value="masstransit" />
                                     <div class="transport-card">
                                         <span class="transport-icon">🚌</span>
                                         <span>Транспорт</span>
                                     </div>
                                 </label>
                                 <label class="transport-option">
-                                    <input type="radio" name="transport" value="bicycle" />
+                                    <input type="radio" name="simpleTransport" value="bicycle" />
                                     <div class="transport-card">
                                         <span class="transport-icon">🚴</span>
                                         <span>Велосипед</span>
-                                    </div>
-                                </label>
-                            </div>
-
-                            <h3>Предпочтения маршрута</h3>
-                            <div class="preferences-grid">
-                                <label class="preference-option">
-                                    <input type="checkbox" id="avoidTolls" />
-                                    <div class="preference-card">
-                                        <span class="pref-icon">💰</span>
-                                        <span>Избегать платных дорог</span>
-                                    </div>
-                                </label>
-                                <label class="preference-option">
-                                    <input type="checkbox" id="avoidTraffic" />
-                                    <div class="preference-card">
-                                        <span class="pref-icon">🚦</span>
-                                        <span>Избегать пробок</span>
-                                    </div>
-                                </label>
-                                <label class="preference-option">
-                                    <input type="checkbox" id="scenicRoute" />
-                                    <div class="preference-card">
-                                        <span class="pref-icon">🌄</span>
-                                        <span>Живописный маршрут</span>
-                                    </div>
-                                </label>
-                                <label class="preference-option">
-                                    <input type="checkbox" id="fastestRoute" checked />
-                                    <div class="preference-card">
-                                        <span class="pref-icon">⚡</span>
-                                        <span>Быстрейший маршрут</span>
                                     </div>
                                 </label>
                             </div>
@@ -131,13 +317,13 @@ class RouteModal {
                         <button class="btn-secondary" id="cancelRoute">Отмена</button>
                         <button class="btn-primary" id="buildRoute">
                             <span class="btn-icon">🗺️</span>
-                            Построить маршрут
+                            <span id="buildBtnText">Построить маршрут</span>
                         </button>
                     </div>
 
                     <div class="loading-overlay" id="loadingOverlay">
                         <div class="spinner"></div>
-                        <p>Строим оптимальный маршрут...</p>
+                        <p id="loadingText">Строим оптимальный маршрут...</p>
                     </div>
                 </div>
             </div>
@@ -148,24 +334,54 @@ class RouteModal {
     }
 
     attachEventListeners() {
-        // Открытие/закрытие модального окна
+        // Закрытие модального окна
         document.getElementById('closeModal').addEventListener('click', () => this.close());
         document.getElementById('cancelRoute').addEventListener('click', () => this.close());
         
-        // Клик вне модального окна
         this.modal.addEventListener('click', (e) => {
             if (e.target === this.modal) this.close();
         });
 
-        // Добавление промежуточных точек
-        document.getElementById('addWaypoint').addEventListener('click', () => this.addWaypoint());
+        // Переключение типа маршрута
+        document.querySelectorAll('.route-type-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                this.switchRouteType(e.currentTarget.dataset.type);
+            });
+        });
+
+        // Слайдер времени
+        const timeSlider = document.getElementById('timeSlider');
+        const timeValue = document.getElementById('timeValue');
+        timeSlider.addEventListener('input', (e) => {
+            timeValue.textContent = e.target.value;
+        });
+
+        // Слайдер строгости
+        const strictnessSlider = document.getElementById('strictnessSlider');
+        const strictnessValue = document.getElementById('strictnessValue');
+        strictnessSlider.addEventListener('input', (e) => {
+            strictnessValue.textContent = e.target.value;
+        });
+
+        // Переключатель конечной точки
+        document.querySelectorAll('input[name="routeEnd"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                const endGroup = document.getElementById('smartEndPointGroup');
+                endGroup.style.display = e.target.value === 'custom' ? 'block' : 'none';
+            });
+        });
 
         // Построение маршрута
         document.getElementById('buildRoute').addEventListener('click', () => this.buildRoute());
 
-        // Автодополнение для полей ввода
-        this.setupAutocomplete('startPoint', 'startSuggestions');
-        this.setupAutocomplete('endPoint', 'endSuggestions');
+        // Добавление промежуточных точек для простого маршрута
+        document.getElementById('addSimpleWaypoint').addEventListener('click', () => this.addSimpleWaypoint());
+
+        // Автодополнение
+        this.setupYandexSuggest('smartStartPoint', 'smartStartSuggestions');
+        this.setupYandexSuggest('smartEndPoint', 'smartEndSuggestions');
+        this.setupYandexSuggest('simpleStartPoint', 'simpleStartSuggestions');
+        this.setupYandexSuggest('simpleEndPoint', 'simpleEndSuggestions');
 
         // ESC для закрытия
         document.addEventListener('keydown', (e) => {
@@ -175,55 +391,36 @@ class RouteModal {
         });
     }
 
-    setupAutocomplete(inputId, suggestionsId) {
-        const input = document.getElementById(inputId);
-        const suggestionsDiv = document.getElementById(suggestionsId);
-        let timeout;
-
-        input.addEventListener('input', (e) => {
-            clearTimeout(timeout);
-            const query = e.target.value.trim();
-
-            if (query.length < 3) {
-                suggestionsDiv.style.display = 'none';
-                return;
-            }
-
-            timeout = setTimeout(async () => {
-                try {
-                    const response = await fetch(`api.php?action=get_suggestions&query=${encodeURIComponent(query)}`);
-                    const suggestions = await response.json();
-                    
-                    if (suggestions && suggestions.length > 0) {
-                        suggestionsDiv.innerHTML = suggestions.map(item => 
-                            `<div class="suggestion-item" data-value="${item.value}">${item.displayName}</div>`
-                        ).join('');
-                        suggestionsDiv.style.display = 'block';
-                    } else {
-                        suggestionsDiv.style.display = 'none';
-                    }
-                } catch (error) {
-                    console.error('Error fetching suggestions:', error);
-                }
-            }, 300);
+    switchRouteType(type) {
+        this.currentRouteType = type;
+        
+        // Переключить активную кнопку
+        document.querySelectorAll('.route-type-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.type === type);
         });
 
-        suggestionsDiv.addEventListener('click', (e) => {
-            if (e.target.classList.contains('suggestion-item')) {
-                input.value = e.target.dataset.value;
-                suggestionsDiv.style.display = 'none';
-            }
-        });
+        // Показать соответствующую панель
+        document.getElementById('smartRoutePanel').classList.toggle('active', type === 'smart');
+        document.getElementById('simpleRoutePanel').classList.toggle('active', type === 'simple');
 
-        // Скрыть подсказки при клике вне поля
-        document.addEventListener('click', (e) => {
-            if (!input.contains(e.target) && !suggestionsDiv.contains(e.target)) {
-                suggestionsDiv.style.display = 'none';
-            }
-        });
+        // Обновить текст кнопки
+        const btnText = type === 'smart' ? 'Построить умный маршрут' : 'Построить маршрут';
+        document.getElementById('buildBtnText').textContent = btnText;
     }
 
-    addWaypoint() {
+    setupYandexSuggest(inputId, suggestionsId) {
+        const input = document.getElementById(inputId);
+        const suggestionsDiv = document.getElementById(suggestionsId);
+        
+        if (typeof ymaps !== 'undefined') {
+            const suggestView = new ymaps.SuggestView(input, {
+                results: 5,
+                offset: [0, 5]
+            });
+        }
+    }
+
+    addSimpleWaypoint() {
         const waypointIndex = this.waypoints.length;
         const waypointHTML = `
             <div class="input-group waypoint-group" data-index="${waypointIndex}">
@@ -243,62 +440,15 @@ class RouteModal {
                         &times;
                     </button>
                 </div>
-                <div class="suggestions-dropdown" id="waypointSuggestions${waypointIndex}"></div>
             </div>
         `;
 
-        document.getElementById('waypointsContainer').insertAdjacentHTML('beforeend', waypointHTML);
+        document.getElementById('simpleWaypointsContainer').insertAdjacentHTML('beforeend', waypointHTML);
         this.waypoints.push('');
 
-        // Добавить автодополнение для новой точки
-        const input = document.querySelector(`input[data-index="${waypointIndex}"]`);
-        this.setupWaypointAutocomplete(input, waypointIndex);
-
         // Обработчик удаления
-        document.querySelector(`button[data-index="${waypointIndex}"]`).addEventListener('click', (e) => {
+        document.querySelector(`.remove-waypoint-btn[data-index="${waypointIndex}"]`).addEventListener('click', (e) => {
             this.removeWaypoint(parseInt(e.target.dataset.index));
-        });
-    }
-
-    setupWaypointAutocomplete(input, index) {
-        const suggestionsDiv = document.getElementById(`waypointSuggestions${index}`);
-        let timeout;
-
-        input.addEventListener('input', (e) => {
-            clearTimeout(timeout);
-            const query = e.target.value.trim();
-            this.waypoints[index] = query;
-
-            if (query.length < 3) {
-                suggestionsDiv.style.display = 'none';
-                return;
-            }
-
-            timeout = setTimeout(async () => {
-                try {
-                    const response = await fetch(`api.php?action=get_suggestions&query=${encodeURIComponent(query)}`);
-                    const suggestions = await response.json();
-                    
-                    if (suggestions && suggestions.length > 0) {
-                        suggestionsDiv.innerHTML = suggestions.map(item => 
-                            `<div class="suggestion-item" data-value="${item.value}">${item.displayName}</div>`
-                        ).join('');
-                        suggestionsDiv.style.display = 'block';
-                    } else {
-                        suggestionsDiv.style.display = 'none';
-                    }
-                } catch (error) {
-                    console.error('Error fetching suggestions:', error);
-                }
-            }, 300);
-        });
-
-        suggestionsDiv.addEventListener('click', (e) => {
-            if (e.target.classList.contains('suggestion-item')) {
-                input.value = e.target.dataset.value;
-                this.waypoints[index] = e.target.dataset.value;
-                suggestionsDiv.style.display = 'none';
-            }
         });
     }
 
@@ -311,30 +461,73 @@ class RouteModal {
     }
 
     async buildRoute() {
-        const startPoint = document.getElementById('startPoint').value.trim();
-        const endPoint = document.getElementById('endPoint').value.trim();
-        const transportMode = document.querySelector('input[name="transport"]:checked').value;
+        if (this.currentRouteType === 'smart') {
+            await this.buildSmartRoute();
+        } else {
+            await this.buildSimpleRoute();
+        }
+    }
 
-        if (!startPoint || !endPoint) {
-            this.showNotification('Пожалуйста, укажите начальную и конечную точки', 'error');
+    async buildSmartRoute() {
+        const startPoint = document.getElementById('smartStartPoint').value.trim();
+        const returnToStart = document.querySelector('input[name="routeEnd"]:checked').value === 'return';
+        const endPoint = returnToStart ? null : document.getElementById('smartEndPoint').value.trim();
+        const timeLimit = parseInt(document.getElementById('timeSlider').value);
+        const pace = document.querySelector('input[name="pace"]:checked').value;
+        const strictness = parseInt(document.getElementById('strictnessSlider').value);
+
+        // Собрать выбранные категории
+        const categories = [];
+        document.querySelectorAll('.category-option input:checked').forEach(cb => {
+            categories.push(cb.value);
+        });
+
+        if (!startPoint) {
+            this.showNotification('Укажите точку старта', 'error');
             return;
         }
 
-        const routeData = {
-            start_point: startPoint,
-            end_point: endPoint,
-            transport_mode: transportMode,
-            avoid_tolls: document.getElementById('avoidTolls').checked,
-            avoid_traffic: document.getElementById('avoidTraffic').checked,
-            scenic_route: document.getElementById('scenicRoute').checked,
-            fastest_route: document.getElementById('fastestRoute').checked,
-            waypoints: this.waypoints.filter(wp => wp !== null && wp !== '')
-        };
+        if (categories.length === 0) {
+            this.showNotification('Выберите хотя бы одну категорию мест для посещения', 'error');
+            return;
+        }
 
-        this.showLoading(true);
+        if (!returnToStart && !endPoint) {
+            this.showNotification('Укажите точку финиша или выберите возврат к началу', 'error');
+            return;
+        }
 
+        // Геокодировать адреса
+        this.showLoading(true, 'Определяем координаты...');
+        
         try {
-            const response = await fetch('api.php?action=build_route', {
+            const startCoords = await this.geocodeAddress(startPoint);
+            let endCoords = null;
+            
+            if (!returnToStart && endPoint) {
+                endCoords = await this.geocodeAddress(endPoint);
+            }
+
+            const routeData = {
+                start_point: {
+                    name: startPoint,
+                    coords: startCoords
+                },
+                end_point: endCoords ? {
+                    name: endPoint,
+                    coords: endCoords
+                } : null,
+                categories: categories,
+                time_limit_minutes: timeLimit,
+                return_to_start: returnToStart,
+                mode: 'pedestrian',
+                pace: pace,
+                time_strictness: strictness
+            };
+
+            this.showLoading(true, 'Ищем интересные места и строим маршрут...');
+
+            const response = await fetch('api.php?action=build_smart_route', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -346,29 +539,111 @@ class RouteModal {
 
             if (result.success) {
                 this.currentRoute = result.data;
-                this.displayRouteOnMap(result.data);
-                this.showNotification('Маршрут успешно построен!', 'success');
+                this.displaySmartRouteOnMap(result.data);
+                
+                let message = 'Умный маршрут построен!';
+                if (result.data.warnings && result.data.warnings.length > 0) {
+                    message += '\n' + result.data.warnings.join('\n');
+                }
+                
+                this.showNotification(message, 'success');
                 this.close();
             } else {
-                this.showNotification('Ошибка при построении маршрута: ' + (result.error || 'Неизвестная ошибка'), 'error');
+                this.showNotification('Ошибка: ' + (result.error || 'Неизвестная ошибка'), 'error');
+                console.error('Backend error:', result);
             }
         } catch (error) {
-            console.error('Error building route:', error);
+            console.error('Error building smart route:', error);
             this.showNotification('Ошибка соединения с сервером', 'error');
         } finally {
             this.showLoading(false);
         }
     }
 
-    displayRouteOnMap(routeData) {
-        if (window.currentMapRoute) {
-            window.currentMapRoute(routeData);
+    async buildSimpleRoute() {
+        const startPoint = document.getElementById('simpleStartPoint').value.trim();
+        const endPoint = document.getElementById('simpleEndPoint').value.trim();
+        const mode = document.querySelector('input[name="simpleTransport"]:checked').value;
+
+        if (!startPoint || !endPoint) {
+            this.showNotification('Укажите начальную и конечную точки', 'error');
+            return;
+        }
+
+        const waypoints = [];
+        document.querySelectorAll('.waypoint-input').forEach(input => {
+            const value = input.value.trim();
+            if (value) waypoints.push(value);
+        });
+
+        const routeData = {
+            start_point: startPoint,
+            end_point: endPoint,
+            waypoints: waypoints,
+            mode: mode
+        };
+
+        this.showLoading(true, 'Строим маршрут...');
+
+        try {
+            const response = await fetch('api.php?action=build_simple_route', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(routeData)
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                this.displaySimpleRouteOnMap(result.data);
+                this.showNotification('Маршрут построен!', 'success');
+                this.close();
+            } else {
+                this.showNotification('Ошибка: ' + result.error, 'error');
+            }
+        } catch (error) {
+            console.error('Error building simple route:', error);
+            this.showNotification('Ошибка соединения', 'error');
+        } finally {
+            this.showLoading(false);
         }
     }
 
-    showLoading(show) {
+    async geocodeAddress(address) {
+        return new Promise((resolve, reject) => {
+            ymaps.geocode(address, { results: 1 }).then(result => {
+                const firstGeoObject = result.geoObjects.get(0);
+                if (firstGeoObject) {
+                    const coords = firstGeoObject.geometry.getCoordinates();
+                    resolve(coords);
+                } else {
+                    reject(new Error('Адрес не найден'));
+                }
+            }, error => {
+                reject(error);
+            });
+        });
+    }
+
+    displaySmartRouteOnMap(routeData) {
+        if (window.displaySmartRoute) {
+            window.displaySmartRoute(routeData);
+        }
+    }
+
+    displaySimpleRouteOnMap(routeData) {
+        if (window.displaySimpleRoute) {
+            window.displaySimpleRoute(routeData);
+        }
+    }
+
+    showLoading(show, text = 'Строим оптимальный маршрут...') {
         const overlay = document.getElementById('loadingOverlay');
+        const loadingText = document.getElementById('loadingText');
         overlay.style.display = show ? 'flex' : 'none';
+        if (text) loadingText.textContent = text;
     }
 
     showNotification(message, type = 'info') {
@@ -384,7 +659,7 @@ class RouteModal {
         setTimeout(() => {
             notification.classList.remove('show');
             setTimeout(() => notification.remove(), 300);
-        }, 3000);
+        }, 4000);
     }
 
     open() {
@@ -399,14 +674,21 @@ class RouteModal {
     }
 
     resetForm() {
-        document.getElementById('startPoint').value = '';
-        document.getElementById('endPoint').value = '';
-        document.getElementById('waypointsContainer').innerHTML = '';
+        document.getElementById('smartStartPoint').value = '';
+        document.getElementById('smartEndPoint').value = '';
+        document.getElementById('simpleStartPoint').value = '';
+        document.getElementById('simpleEndPoint').value = '';
+        document.getElementById('simpleWaypointsContainer').innerHTML = '';
         this.waypoints = [];
-        document.querySelectorAll('.preferences-grid input[type="checkbox"]').forEach(cb => {
-            cb.checked = cb.id === 'fastestRoute';
-        });
-        document.querySelector('input[name="transport"][value="auto"]').checked = true;
+        document.getElementById('timeSlider').value = 60;
+        document.getElementById('timeValue').textContent = '60';
+        document.getElementById('strictnessSlider').value = 5;
+        document.getElementById('strictnessValue').textContent = '5';
+        document.querySelectorAll('.category-option input').forEach(cb => cb.checked = false);
+        document.querySelector('input[name="routeEnd"][value="return"]').checked = true;
+        document.querySelector('input[name="pace"][value="balanced"]').checked = true;
+        document.querySelector('input[name="simpleTransport"][value="auto"]').checked = true;
+        document.getElementById('smartEndPointGroup').style.display = 'none';
     }
 
     setMap(mapInstance) {
