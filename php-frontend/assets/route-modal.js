@@ -1,33 +1,33 @@
 class RouteModal {
-    constructor() {
-        this.modal = null;
-        this.currentRouteType = 'smart';
-        this.waypoints = [];
-        this.currentRoute = null;
-        this.map = null;
-        this.selectedCategories = [];
-        // Отложенная инициализация после загрузки ymaps
-        if (typeof ymaps !== 'undefined' && ymaps.ready) {
-            ymaps.ready(() => this.init());
+  constructor() {
+    this.modal = null;
+    this.currentRouteType = "smart";
+    this.waypoints = [];
+    this.currentRoute = null;
+    this.map = null;
+    this.selectedCategories = [];
+    // Отложенная инициализация после загрузки ymaps
+    if (typeof ymaps !== "undefined" && ymaps.ready) {
+      ymaps.ready(() => this.init());
+    } else {
+      // Если ymaps еще не загружен, дождемся события
+      window.addEventListener("load", () => {
+        if (typeof ymaps !== "undefined") {
+          ymaps.ready(() => this.init());
         } else {
-            // Если ymaps еще не загружен, дождемся события
-            window.addEventListener('load', () => {
-                if (typeof ymaps !== 'undefined') {
-                    ymaps.ready(() => this.init());
-                } else {
-                    this.init();
-                }
-            });
+          this.init();
         }
+      });
     }
+  }
 
-    init() {
-        this.createModal();
-        this.attachEventListeners();
-    }
+  init() {
+    this.createModal();
+    this.attachEventListeners();
+  }
 
-    createModal() {
-        const modalHTML = `
+  createModal() {
+    const modalHTML = `
             <div id="routeModal" class="route-modal">
                 <div class="route-modal-content">
                     <div class="modal-header">
@@ -334,88 +334,103 @@ class RouteModal {
             </div>
         `;
 
-        document.body.insertAdjacentHTML('beforeend', modalHTML);
-        this.modal = document.getElementById('routeModal');
+    document.body.insertAdjacentHTML("beforeend", modalHTML);
+    this.modal = document.getElementById("routeModal");
+  }
+
+  attachEventListeners() {
+    document
+      .getElementById("closeModal")
+      .addEventListener("click", () => this.close());
+    document
+      .getElementById("cancelRoute")
+      .addEventListener("click", () => this.close());
+
+    this.modal.addEventListener("click", (e) => {
+      if (e.target === this.modal) this.close();
+    });
+
+    document.querySelectorAll(".route-type-btn").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        this.switchRouteType(e.currentTarget.dataset.type);
+      });
+    });
+
+    const timeSlider = document.getElementById("timeSlider");
+    const timeValue = document.getElementById("timeValue");
+    timeSlider.addEventListener("input", (e) => {
+      timeValue.textContent = e.target.value;
+    });
+
+    const strictnessSlider = document.getElementById("strictnessSlider");
+    const strictnessValue = document.getElementById("strictnessValue");
+    strictnessSlider.addEventListener("input", (e) => {
+      strictnessValue.textContent = e.target.value;
+    });
+
+    document.querySelectorAll('input[name="routeEnd"]').forEach((radio) => {
+      radio.addEventListener("change", (e) => {
+        const endGroup = document.getElementById("smartEndPointGroup");
+        endGroup.style.display = e.target.value === "custom" ? "block" : "none";
+      });
+    });
+
+    document
+      .getElementById("buildRoute")
+      .addEventListener("click", () => this.buildRoute());
+    document
+      .getElementById("addSimpleWaypoint")
+      .addEventListener("click", () => this.addSimpleWaypoint());
+
+    this.setupYandexSuggest("smartStartPoint");
+    this.setupYandexSuggest("smartEndPoint");
+    this.setupYandexSuggest("simpleStartPoint");
+    this.setupYandexSuggest("simpleEndPoint");
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && this.modal.classList.contains("active")) {
+        this.close();
+      }
+    });
+  }
+
+  switchRouteType(type) {
+    this.currentRouteType = type;
+
+    document.querySelectorAll(".route-type-btn").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.type === type);
+    });
+
+    document
+      .getElementById("smartRoutePanel")
+      .classList.toggle("active", type === "smart");
+    document
+      .getElementById("simpleRoutePanel")
+      .classList.toggle("active", type === "simple");
+
+    const btnText =
+      type === "smart" ? "Построить умный маршрут" : "Построить маршрут";
+    document.getElementById("buildBtnText").textContent = btnText;
+  }
+
+  setupYandexSuggest(inputId) {
+    const input = document.getElementById(inputId);
+
+    if (typeof ymaps !== "undefined" && ymaps.suggest) {
+      new ymaps.SuggestView(input, {
+        results: 5,
+      });
     }
+  }
 
-    attachEventListeners() {
-        document.getElementById('closeModal').addEventListener('click', () => this.close());
-        document.getElementById('cancelRoute').addEventListener('click', () => this.close());
-        
-        this.modal.addEventListener('click', (e) => {
-            if (e.target === this.modal) this.close();
-        });
-
-        document.querySelectorAll('.route-type-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                this.switchRouteType(e.currentTarget.dataset.type);
-            });
-        });
-
-        const timeSlider = document.getElementById('timeSlider');
-        const timeValue = document.getElementById('timeValue');
-        timeSlider.addEventListener('input', (e) => {
-            timeValue.textContent = e.target.value;
-        });
-
-        const strictnessSlider = document.getElementById('strictnessSlider');
-        const strictnessValue = document.getElementById('strictnessValue');
-        strictnessSlider.addEventListener('input', (e) => {
-            strictnessValue.textContent = e.target.value;
-        });
-
-        document.querySelectorAll('input[name="routeEnd"]').forEach(radio => {
-            radio.addEventListener('change', (e) => {
-                const endGroup = document.getElementById('smartEndPointGroup');
-                endGroup.style.display = e.target.value === 'custom' ? 'block' : 'none';
-            });
-        });
-
-        document.getElementById('buildRoute').addEventListener('click', () => this.buildRoute());
-        document.getElementById('addSimpleWaypoint').addEventListener('click', () => this.addSimpleWaypoint());
-
-        this.setupYandexSuggest('smartStartPoint');
-        this.setupYandexSuggest('smartEndPoint');
-        this.setupYandexSuggest('simpleStartPoint');
-        this.setupYandexSuggest('simpleEndPoint');
-
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && this.modal.classList.contains('active')) {
-                this.close();
-            }
-        });
-    }
-
-    switchRouteType(type) {
-        this.currentRouteType = type;
-        
-        document.querySelectorAll('.route-type-btn').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.type === type);
-        });
-
-        document.getElementById('smartRoutePanel').classList.toggle('active', type === 'smart');
-        document.getElementById('simpleRoutePanel').classList.toggle('active', type === 'simple');
-
-        const btnText = type === 'smart' ? 'Построить умный маршрут' : 'Построить маршрут';
-        document.getElementById('buildBtnText').textContent = btnText;
-    }
-
-    setupYandexSuggest(inputId) {
-        const input = document.getElementById(inputId);
-        
-        if (typeof ymaps !== 'undefined' && ymaps.suggest) {
-            new ymaps.SuggestView(input, {
-                results: 5
-            });
-        }
-    }
-
-    addSimpleWaypoint() {
-        const waypointIndex = this.waypoints.length;
-        const waypointHTML = `
+  addSimpleWaypoint() {
+    const waypointIndex = this.waypoints.length;
+    const waypointHTML = `
             <div class="input-group waypoint-group" data-index="${waypointIndex}">
                 <label>
-                    <span class="point-icon waypoint-icon">${waypointIndex + 1}</span>
+                    <span class="point-icon waypoint-icon">${
+                      waypointIndex + 1
+                    }</span>
                     Промежуточная точка ${waypointIndex + 1}
                 </label>
                 <div class="waypoint-input-wrapper">
@@ -433,272 +448,315 @@ class RouteModal {
             </div>
         `;
 
-        document.getElementById('simpleWaypointsContainer').insertAdjacentHTML('beforeend', waypointHTML);
-        this.waypoints.push('');
+    document
+      .getElementById("simpleWaypointsContainer")
+      .insertAdjacentHTML("beforeend", waypointHTML);
+    this.waypoints.push("");
 
-        document.querySelector(`.remove-waypoint-btn[data-index="${waypointIndex}"]`).addEventListener('click', (e) => {
-            this.removeWaypoint(parseInt(e.target.dataset.index));
-        });
+    document
+      .querySelector(`.remove-waypoint-btn[data-index="${waypointIndex}"]`)
+      .addEventListener("click", (e) => {
+        this.removeWaypoint(parseInt(e.target.dataset.index));
+      });
 
-        const waypointInput = document.querySelector(`.waypoint-input[data-index="${waypointIndex}"]`);
-        this.setupYandexSuggestForElement(waypointInput);
+    const waypointInput = document.querySelector(
+      `.waypoint-input[data-index="${waypointIndex}"]`
+    );
+    this.setupYandexSuggestForElement(waypointInput);
+  }
+
+  setupYandexSuggestForElement(element) {
+    if (typeof ymaps !== "undefined" && ymaps.suggest) {
+      new ymaps.SuggestView(element, {
+        results: 5,
+      });
+    }
+  }
+
+  removeWaypoint(index) {
+    const waypointGroup = document.querySelector(
+      `.waypoint-group[data-index="${index}"]`
+    );
+    if (waypointGroup) {
+      waypointGroup.remove();
+      this.waypoints[index] = null;
+    }
+  }
+
+  async buildRoute() {
+    if (this.currentRouteType === "smart") {
+      await this.buildSmartRoute();
+    } else {
+      await this.buildSimpleRoute();
+    }
+  }
+
+  async buildSmartRoute() {
+    const startPoint = document.getElementById("smartStartPoint").value.trim();
+    const returnToStart =
+      document.querySelector('input[name="routeEnd"]:checked').value ===
+      "return";
+    const endPoint = returnToStart
+      ? null
+      : document.getElementById("smartEndPoint").value.trim();
+    const timeLimit = parseInt(document.getElementById("timeSlider").value);
+    const pace = document.querySelector('input[name="pace"]:checked').value;
+    const strictness = parseInt(
+      document.getElementById("strictnessSlider").value
+    );
+
+    const categories = [];
+    document
+      .querySelectorAll(".category-option input:checked")
+      .forEach((cb) => {
+        categories.push(cb.value);
+      });
+
+    if (!startPoint) {
+      this.showNotification("Укажите точку старта", "error");
+      return;
     }
 
-    setupYandexSuggestForElement(element) {
-        if (typeof ymaps !== 'undefined' && ymaps.suggest) {
-            new ymaps.SuggestView(element, {
-                results: 5
-            });
-        }
+    if (categories.length === 0) {
+      this.showNotification(
+        "Выберите хотя бы одну категорию мест для посещения",
+        "error"
+      );
+      return;
     }
 
-    removeWaypoint(index) {
-        const waypointGroup = document.querySelector(`.waypoint-group[data-index="${index}"]`);
-        if (waypointGroup) {
-            waypointGroup.remove();
-            this.waypoints[index] = null;
-        }
+    if (!returnToStart && !endPoint) {
+      this.showNotification(
+        "Укажите точку финиша или выберите возврат к началу",
+        "error"
+      );
+      return;
     }
 
-    async buildRoute() {
-        if (this.currentRouteType === 'smart') {
-            await this.buildSmartRoute();
-        } else {
-            await this.buildSimpleRoute();
-        }
-    }
+    this.showLoading(true, "Определяем координаты...");
 
-    async buildSmartRoute() {
-        const startPoint = document.getElementById('smartStartPoint').value.trim();
-        const returnToStart = document.querySelector('input[name="routeEnd"]:checked').value === 'return';
-        const endPoint = returnToStart ? null : document.getElementById('smartEndPoint').value.trim();
-        const timeLimit = parseInt(document.getElementById('timeSlider').value);
-        const pace = document.querySelector('input[name="pace"]:checked').value;
-        const strictness = parseInt(document.getElementById('strictnessSlider').value);
+    try {
+      const startCoords = await this.geocodeAddress(startPoint);
+      let endCoords = null;
 
-        const categories = [];
-        document.querySelectorAll('.category-option input:checked').forEach(cb => {
-            categories.push(cb.value);
-        });
+      if (!returnToStart && endPoint) {
+        endCoords = await this.geocodeAddress(endPoint);
+      }
 
-        if (!startPoint) {
-            this.showNotification('Укажите точку старта', 'error');
-            return;
-        }
-
-        if (categories.length === 0) {
-            this.showNotification('Выберите хотя бы одну категорию мест для посещения', 'error');
-            return;
-        }
-
-        if (!returnToStart && !endPoint) {
-            this.showNotification('Укажите точку финиша или выберите возврат к началу', 'error');
-            return;
-        }
-
-        this.showLoading(true, 'Определяем координаты...');
-        
-        try {
-            const startCoords = await this.geocodeAddress(startPoint);
-            let endCoords = null;
-            
-            if (!returnToStart && endPoint) {
-                endCoords = await this.geocodeAddress(endPoint);
+      const routeData = {
+        start_point: {
+          name: startPoint,
+          coords: startCoords,
+        },
+        end_point: endCoords
+          ? {
+              name: endPoint,
+              coords: endCoords,
             }
+          : null,
+        categories: categories,
+        time_limit_minutes: timeLimit,
+        return_to_start: returnToStart,
+        mode: "pedestrian",
+        settings: {
+          // ИСПРАВЛЕНО: обернуто в объект settings
+          pace: pace,
+          time_strictness: strictness,
+        },
+      };
 
-            const routeData = {
-                start_point: {
-                    name: startPoint,
-                    coords: startCoords
-                },
-                end_point: endCoords ? {
-                    name: endPoint,
-                    coords: endCoords
-                } : null,
-                categories: categories,
-                time_limit_minutes: timeLimit,
-                return_to_start: returnToStart,
-                mode: 'pedestrian',
-                pace: pace,
-                time_strictness: strictness
-            };
+      this.showLoading(true, "Ищем интересные места и строим маршрут...");
 
-            this.showLoading(true, 'Ищем интересные места и строим маршрут...');
+      const response = await fetch("api.php?action=build_smart_route", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(routeData),
+      });
 
-            const response = await fetch('api.php?action=build_smart_route', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(routeData)
-            });
+      const result = await response.json();
 
-            const result = await response.json();
+      if (result.success) {
+        this.currentRoute = result.data;
+        this.displaySmartRouteOnMap(result.data);
 
-            if (result.success) {
-                this.currentRoute = result.data;
-                this.displaySmartRouteOnMap(result.data);
-                
-                let message = 'Умный маршрут построен!';
-                if (result.data.warnings && result.data.warnings.length > 0) {
-                    message += '\n' + result.data.warnings.join('\n');
-                }
-                
-                this.showNotification(message, 'success');
-                this.close();
-            } else {
-                this.showNotification('Ошибка: ' + (result.error || 'Неизвестная ошибка'), 'error');
-                console.error('Backend error:', result);
-            }
-        } catch (error) {
-            console.error('Error building smart route:', error);
-            this.showNotification('Ошибка соединения с сервером', 'error');
-        } finally {
-            this.showLoading(false);
-        }
-    }
-
-    async buildSimpleRoute() {
-        const startPoint = document.getElementById('simpleStartPoint').value.trim();
-        const endPoint = document.getElementById('simpleEndPoint').value.trim();
-        const mode = document.querySelector('input[name="simpleTransport"]:checked').value;
-
-        if (!startPoint || !endPoint) {
-            this.showNotification('Укажите начальную и конечную точки', 'error');
-            return;
+        let message = "Умный маршрут построен!";
+        if (result.data.warnings && result.data.warnings.length > 0) {
+          message += "\n" + result.data.warnings.join("\n");
         }
 
-        const waypoints = [];
-        document.querySelectorAll('.waypoint-input').forEach(input => {
-            const value = input.value.trim();
-            if (value) waypoints.push(value);
-        });
+        this.showNotification(message, "success");
+        this.close();
+      } else {
+        this.showNotification(
+          "Ошибка: " + (result.error || "Неизвестная ошибка"),
+          "error"
+        );
+        console.error("Backend error:", result);
+      }
+    } catch (error) {
+      console.error("Error building smart route:", error);
+      this.showNotification("Ошибка соединения с сервером", "error");
+    } finally {
+      this.showLoading(false);
+    }
+  }
 
-        const routeData = {
-            start_point: startPoint,
-            end_point: endPoint,
-            waypoints: waypoints,
-            mode: mode
-        };
+  async buildSimpleRoute() {
+    const startPoint = document.getElementById("simpleStartPoint").value.trim();
+    const endPoint = document.getElementById("simpleEndPoint").value.trim();
+    const mode = document.querySelector(
+      'input[name="simpleTransport"]:checked'
+    ).value;
 
-        this.showLoading(true, 'Строим маршрут...');
+    if (!startPoint || !endPoint) {
+      this.showNotification("Укажите начальную и конечную точки", "error");
+      return;
+    }
 
-        try {
-            const response = await fetch('api.php?action=build_simple_route', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(routeData)
-            });
+    const waypoints = [];
+    document.querySelectorAll(".waypoint-input").forEach((input) => {
+      const value = input.value.trim();
+      if (value) waypoints.push(value);
+    });
 
-            const result = await response.json();
+    const routeData = {
+      start_point: startPoint,
+      end_point: endPoint,
+      waypoints: waypoints,
+      mode: mode,
+    };
 
-            if (result.success) {
-                this.displaySimpleRouteOnMap(result.data);
-                this.showNotification('Маршрут построен!', 'success');
-                this.close();
-            } else {
-                this.showNotification('Ошибка: ' + result.error, 'error');
-            }
-        } catch (error) {
-            console.error('Error building simple route:', error);
-            this.showNotification('Ошибка соединения', 'error');
-        } finally {
-            this.showLoading(false);
+    this.showLoading(true, "Строим маршрут...");
+
+    try {
+      const response = await fetch("api.php?action=build_simple_route", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(routeData),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        this.displaySimpleRouteOnMap(result.data);
+        this.showNotification("Маршрут построен!", "success");
+        this.close();
+      } else {
+        this.showNotification("Ошибка: " + result.error, "error");
+      }
+    } catch (error) {
+      console.error("Error building simple route:", error);
+      this.showNotification("Ошибка соединения", "error");
+    } finally {
+      this.showLoading(false);
+    }
+  }
+
+  async geocodeAddress(address) {
+    return new Promise((resolve, reject) => {
+      ymaps.geocode(address, { results: 1 }).then(
+        (result) => {
+          const firstGeoObject = result.geoObjects.get(0);
+          if (firstGeoObject) {
+            const coords = firstGeoObject.geometry.getCoordinates();
+            resolve(coords);
+          } else {
+            reject(new Error("Адрес не найден"));
+          }
+        },
+        (error) => {
+          reject(error);
         }
+      );
+    });
+  }
+
+  displaySmartRouteOnMap(routeData) {
+    if (window.displaySmartRoute) {
+      window.displaySmartRoute(routeData);
     }
+  }
 
-    async geocodeAddress(address) {
-        return new Promise((resolve, reject) => {
-            ymaps.geocode(address, { results: 1 }).then(result => {
-                const firstGeoObject = result.geoObjects.get(0);
-                if (firstGeoObject) {
-                    const coords = firstGeoObject.geometry.getCoordinates();
-                    resolve(coords);
-                } else {
-                    reject(new Error('Адрес не найден'));
-                }
-            }, error => {
-                reject(error);
-            });
-        });
+  displaySimpleRouteOnMap(routeData) {
+    if (window.displaySimpleRoute) {
+      window.displaySimpleRoute(routeData);
     }
+  }
 
-    displaySmartRouteOnMap(routeData) {
-        if (window.displaySmartRoute) {
-            window.displaySmartRoute(routeData);
-        }
-    }
+  showLoading(show, text = "Строим оптимальный маршрут...") {
+    const overlay = document.getElementById("loadingOverlay");
+    const loadingText = document.getElementById("loadingText");
+    overlay.style.display = show ? "flex" : "none";
+    if (text) loadingText.textContent = text;
+  }
 
-    displaySimpleRouteOnMap(routeData) {
-        if (window.displaySimpleRoute) {
-            window.displaySimpleRoute(routeData);
-        }
-    }
+  showNotification(message, type = "info") {
+    const notification = document.createElement("div");
+    notification.className = `notification notification-${type}`;
+    notification.textContent = message;
+    document.body.appendChild(notification);
 
-    showLoading(show, text = 'Строим оптимальный маршрут...') {
-        const overlay = document.getElementById('loadingOverlay');
-        const loadingText = document.getElementById('loadingText');
-        overlay.style.display = show ? 'flex' : 'none';
-        if (text) loadingText.textContent = text;
-    }
+    setTimeout(() => {
+      notification.classList.add("show");
+    }, 10);
 
-    showNotification(message, type = 'info') {
-        const notification = document.createElement('div');
-        notification.className = `notification notification-${type}`;
-        notification.textContent = message;
-        document.body.appendChild(notification);
+    setTimeout(() => {
+      notification.classList.remove("show");
+      setTimeout(() => notification.remove(), 300);
+    }, 4000);
+  }
 
-        setTimeout(() => {
-            notification.classList.add('show');
-        }, 10);
+  open() {
+    this.modal.classList.add("active");
+    document.body.style.overflow = "hidden";
+  }
 
-        setTimeout(() => {
-            notification.classList.remove('show');
-            setTimeout(() => notification.remove(), 300);
-        }, 4000);
-    }
+  close() {
+    this.modal.classList.remove("active");
+    document.body.style.overflow = "";
+    this.resetForm();
+  }
 
-    open() {
-        this.modal.classList.add('active');
-        document.body.style.overflow = 'hidden';
-    }
+  resetForm() {
+    document.getElementById("smartStartPoint").value = "";
+    document.getElementById("smartEndPoint").value = "";
+    document.getElementById("simpleStartPoint").value = "";
+    document.getElementById("simpleEndPoint").value = "";
+    document.getElementById("simpleWaypointsContainer").innerHTML = "";
+    this.waypoints = [];
+    document.getElementById("timeSlider").value = 60;
+    document.getElementById("timeValue").textContent = "60";
+    document.getElementById("strictnessSlider").value = 5;
+    document.getElementById("strictnessValue").textContent = "5";
+    document
+      .querySelectorAll(".category-option input")
+      .forEach((cb) => (cb.checked = false));
+    document.querySelector(
+      'input[name="routeEnd"][value="return"]'
+    ).checked = true;
+    document.querySelector(
+      'input[name="pace"][value="balanced"]'
+    ).checked = true;
+    document.querySelector(
+      'input[name="simpleTransport"][value="auto"]'
+    ).checked = true;
+    document.getElementById("smartEndPointGroup").style.display = "none";
+  }
 
-    close() {
-        this.modal.classList.remove('active');
-        document.body.style.overflow = '';
-        this.resetForm();
-    }
-
-    resetForm() {
-        document.getElementById('smartStartPoint').value = '';
-        document.getElementById('smartEndPoint').value = '';
-        document.getElementById('simpleStartPoint').value = '';
-        document.getElementById('simpleEndPoint').value = '';
-        document.getElementById('simpleWaypointsContainer').innerHTML = '';
-        this.waypoints = [];
-        document.getElementById('timeSlider').value = 60;
-        document.getElementById('timeValue').textContent = '60';
-        document.getElementById('strictnessSlider').value = 5;
-        document.getElementById('strictnessValue').textContent = '5';
-        document.querySelectorAll('.category-option input').forEach(cb => cb.checked = false);
-        document.querySelector('input[name="routeEnd"][value="return"]').checked = true;
-        document.querySelector('input[name="pace"][value="balanced"]').checked = true;
-        document.querySelector('input[name="simpleTransport"][value="auto"]').checked = true;
-        document.getElementById('smartEndPointGroup').style.display = 'none';
-    }
-
-    setMap(mapInstance) {
-        this.map = mapInstance;
-    }
+  setMap(mapInstance) {
+    this.map = mapInstance;
+  }
 }
 
 // Отложенная инициализация после загрузки DOM
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-        window.routeModal = new RouteModal();
-    });
-} else {
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => {
     window.routeModal = new RouteModal();
+  });
+} else {
+  window.routeModal = new RouteModal();
 }
