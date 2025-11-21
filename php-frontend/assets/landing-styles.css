@@ -160,7 +160,7 @@ body {
 }
 .section-title h2 span { 
     background: none;
-    -webkit-text-fill-color: unset;
+    -webkit-text-fill-color: red; /* тут можно задать любой цвет для иконки, это просто надо чтобы не наследовался градиент */
     background-clip: unset;
     -webkit-background-clip: unset;
 }
