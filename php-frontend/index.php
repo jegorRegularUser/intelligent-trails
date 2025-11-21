@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Intelligent Trails - Умные прогулки и маршруты</title>
     <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/landing-styles.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet">
 </head>
 <body>
