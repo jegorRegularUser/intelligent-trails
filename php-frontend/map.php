@@ -45,13 +45,12 @@
         var routeMarkers = [];
         var currentPolyline = null;
 
-        // Открытие модального окна
         document.getElementById('openRouteModal').addEventListener('click', function() {
             window.routeModal.open();
         });
 
         // ============================================
-        // ОТОБРАЖЕНИЕ УМНОГО МАРШРУТА
+        // ОТОБРАЖЕНИЕ УМНОГО МАРШРУТА (СТАРАЯ ВЕРСИЯ)
         // ============================================
         window.displaySmartRoute = function(routeData) {
             clearMap();
@@ -64,7 +63,6 @@
             const points = routeData.ordered_route;
             const coordinates = points.map(p => p.coords);
 
-            // Создать маркеры для всех точек
             points.forEach((point, index) => {
                 let iconPreset, iconColor;
                 
@@ -95,7 +93,6 @@
                 map.geoObjects.add(placemark);
             });
 
-            // Построить линию маршрута
             const polyline = new ymaps.Polyline(coordinates, {}, {
                 strokeColor: '#667eea',
                 strokeWidth: 4,
@@ -105,30 +102,52 @@
             currentPolyline = polyline;
             map.geoObjects.add(polyline);
 
-            // Центрировать карту на маршруте
             map.setBounds(polyline.geometry.getBounds(), {
                 checkZoomRange: true,
                 zoomMargin: 50
             });
 
-            // Показать информацию о маршруте
             displaySmartRouteInfo(routeData);
         };
 
         // ============================================
-        // ОТОБРАЖЕНИЕ ПРОСТОГО МАРШРУТА
+        // ОТОБРАЖЕНИЕ ПРОСТОГО МАРШРУТА (ИСПРАВЛЕНО)
         // ============================================
-        window.displaySimpleRoute = function(routeData) {
+        window.displaySimpleRoute = async function(routeData) {
             clearMap();
 
-            const points = [routeData.start_point];
+            // ИСПРАВЛЕНО: Геокодируем адреса перед построением маршрута
+            const startCoords = await geocodeAddress(routeData.start_point);
+            const endCoords = await geocodeAddress(routeData.end_point);
+            
+            const points = [startCoords];
+            
+            // Геокодируем промежуточные точки
             if (routeData.waypoints && routeData.waypoints.length > 0) {
-                points.push(...routeData.waypoints);
+                for (const waypoint of routeData.waypoints) {
+                    try {
+                        const coords = await geocodeAddress(waypoint);
+                        points.push(coords);
+                    } catch (e) {
+                        console.error('Failed to geocode waypoint:', waypoint, e);
+                    }
+                }
             }
-            points.push(routeData.end_point);
+            
+            points.push(endCoords);
+
+            // Маппинг режимов для Yandex Router
+            const modeMapping = {
+                'auto': 'auto',
+                'pedestrian': 'pedestrian',
+                'masstransit': 'masstransit',
+                'bicycle': 'bicycle'
+            };
+            
+            const yandexMode = modeMapping[routeData.mode] || 'auto';
 
             ymaps.route(points, {
-                routingMode: routeData.mode,
+                routingMode: yandexMode,
                 mapStateAutoApply: true
             }).then(function(route) {
                 currentRoute = route;
@@ -158,6 +177,23 @@
                 alert('Невозможно построить маршрут: ' + error.message);
             });
         };
+
+        // Вспомогательная функция геокодирования
+        async function geocodeAddress(address) {
+            return new Promise((resolve, reject) => {
+                ymaps.geocode(address, { results: 1 }).then(
+                    (result) => {
+                        const firstGeoObject = result.geoObjects.get(0);
+                        if (firstGeoObject) {
+                            resolve(firstGeoObject.geometry.getCoordinates());
+                        } else {
+                            reject(new Error("Адрес не найден"));
+                        }
+                    },
+                    (error) => reject(error)
+                );
+            });
+        }
 
         // ============================================
         // ОТОБРАЖЕНИЕ ИНФОРМАЦИИ О МАРШРУТЕ
@@ -193,7 +229,6 @@
                 ` : ''}
             `;
 
-            // Список мест
             const placesHTML = `
                 <div class="places-header">🗺️ Маршрут</div>
                 ${routeData.ordered_route.map((place, index) => `
@@ -280,7 +315,6 @@
             document.getElementById('routeInfoPanel').style.display = 'none';
         });
 
-        // Установить карту в модальное окно
         if (window.routeModal) {
             window.routeModal.setMap(map);
         }
