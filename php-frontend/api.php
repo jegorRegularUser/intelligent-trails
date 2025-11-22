@@ -21,7 +21,7 @@ function callBackendAPI($endpoint, $method = 'GET', $data = null) {
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 45);
     
     if ($method === 'POST') {
         curl_setopt($ch, CURLOPT_POST, true);
@@ -55,6 +55,41 @@ function callBackendAPI($endpoint, $method = 'GET', $data = null) {
 $action = $_GET['action'] ?? $_POST['action'] ?? '';
 
 switch ($action) {
+    case 'build_smart_walk':
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            echo json_encode(['success' => false, 'error' => 'Method not allowed']);
+            exit;
+        }
+        
+        $input = json_decode(file_get_contents('php://input'), true);
+        
+        $result = callBackendAPI('/calculate_smart_walk', 'POST', $input);
+        
+        if ($result['code'] === 200 && $result['data']) {
+            // Сохранить в историю
+            if (isset($_SESSION["loggedin"]) && $_SESSION["loggedin"] === true) {
+                $userId = $_SESSION["id"];
+                $stmt = $link->prepare("INSERT INTO route_history (user_id, route_type, start_point, route_data, created_at) VALUES (?, ?, ?, ?, NOW())");
+                if ($stmt) {
+                    $routeType = 'smart_walk';
+                    $startName = $input['start_point']['name'];
+                    $routeJson = json_encode($result['data']);
+                    $stmt->bind_param("isss", $userId, $routeType, $startName, $routeJson);
+                    $stmt->execute();
+                    $stmt->close();
+                }
+            }
+            
+            echo json_encode(['success' => true, 'data' => $result['data']]);
+        } else {
+            echo json_encode([
+                'success' => false,
+                'error' => 'Backend error',
+                'details' => $result['data'] ?? $result['error'] ?? 'Unknown error'
+            ]);
+        }
+        break;
+    
     case 'build_smart_route':
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             echo json_encode(['success' => false, 'error' => 'Method not allowed']);
@@ -63,7 +98,6 @@ switch ($action) {
         
         $input = json_decode(file_get_contents('php://input'), true);
         
-        // ИСПРАВЛЕНО: Правильная обработка settings
         $settings = $input['settings'] ?? [];
         if (!is_array($settings)) {
             $settings = [];
@@ -71,14 +105,11 @@ switch ($action) {
         $pace = $settings['pace'] ?? 'balanced';
         $time_strictness = isset($settings['time_strictness']) ? intval($settings['time_strictness']) : 5;
         
-        // ИСПРАВЛЕНО: min_places_per_category должен быть объектом, а не массивом
         $min_places = $input['min_places_per_category'] ?? [];
         if (!is_array($min_places) || array_values($min_places) === $min_places) {
-            // Если пришёл пустой массив [], преобразуем в пустой объект {}
             $min_places = new stdClass();
         }
         
-        // Подготовка данных для бэкенда
         $routeData = [
             'start_point' => [
                 'name' => $input['start_point']['name'] ?? 'Начало',
@@ -102,18 +133,18 @@ switch ($action) {
         $result = callBackendAPI('/calculate_route', 'POST', $routeData);
         
         if ($result['code'] === 200 && $result['data']) {
-            // Сохранить маршрут в историю если пользователь авторизован
             if (isset($_SESSION["loggedin"]) && $_SESSION["loggedin"] === true) {
                 $userId = $_SESSION["id"];
-                $stmt = $link->prepare("INSERT INTO route_history (user_id, route_type, start_point, end_point, categories, time_limit, route_data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())");
+                $stmt = $link->prepare("INSERT INTO route_history (user_id, route_type, start_point, end_point, categories, time_limit, transport_mode, route_data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())");
                 if ($stmt) {
                     $routeType = 'smart';
                     $startName = $routeData['start_point']['name'];
                     $endName = $routeData['end_point']['name'] ?? null;
                     $categoriesJson = json_encode($routeData['categories']);
                     $timeLimit = $routeData['time_limit_minutes'];
+                    $mode = $routeData['mode'];
                     $routeJson = json_encode($result['data']);
-                    $stmt->bind_param("issisis", $userId, $routeType, $startName, $endName, $categoriesJson, $timeLimit, $routeJson);
+                    $stmt->bind_param("isssiiss", $userId, $routeType, $startName, $endName, $categoriesJson, $timeLimit, $mode, $routeJson);
                     $stmt->execute();
                     $stmt->close();
                 }
@@ -122,8 +153,8 @@ switch ($action) {
             echo json_encode(['success' => true, 'data' => $result['data']]);
         } else {
             echo json_encode([
-                'success' => false, 
-                'error' => 'Backend error', 
+                'success' => false,
+                'error' => 'Backend error',
                 'details' => $result['data'] ?? $result['error'] ?? 'Unknown error',
                 'raw' => $result['raw'] ?? null
             ]);
@@ -138,7 +169,6 @@ switch ($action) {
         
         $input = json_decode(file_get_contents('php://input'), true);
         
-        // Для простого маршрута возвращаем данные для Yandex Maps
         echo json_encode([
             'success' => true,
             'data' => [
@@ -150,7 +180,6 @@ switch ($action) {
             ]
         ]);
         
-        // Сохранить простой маршрут
         if (isset($_SESSION["loggedin"]) && $_SESSION["loggedin"] === true) {
             $userId = $_SESSION["id"];
             $stmt = $link->prepare("INSERT INTO route_history (user_id, route_type, start_point, end_point, transport_mode, created_at) VALUES (?, ?, ?, ?, ?, NOW())");

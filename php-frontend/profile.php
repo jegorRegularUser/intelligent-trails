@@ -9,12 +9,12 @@ if (!isset($_SESSION["loggedin"]) || $_SESSION["loggedin"] !== true) {
 $user_id = $_SESSION["id"];
 $has_password = false;
 $sql_check_pass = "SELECT password FROM users WHERE id = ?";
-if($stmt_check = $link->prepare($sql_check_pass)){
+if ($stmt_check = $link->prepare($sql_check_pass)) {
     $stmt_check->bind_param("i", $user_id);
     $stmt_check->execute();
     $stmt_check->bind_result($password_hash);
-    if($stmt_check->fetch()){
-        if(!empty($password_hash)){
+    if ($stmt_check->fetch()) {
+        if (!empty($password_hash)) {
             $has_password = true;
         }
     }
@@ -23,6 +23,7 @@ if($stmt_check = $link->prepare($sql_check_pass)){
 ?>
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -30,16 +31,17 @@ if($stmt_check = $link->prepare($sql_check_pass)){
     <link rel="stylesheet" href="assets/style.css">
     <link rel="stylesheet" href="assets/landing-styles.css">
 </head>
+
 <body>
     <?php require_once "components/navigation.php"; ?>
-    
+
     <div style="padding: 60px 20px; min-height: calc(100vh - 70px); background: linear-gradient(to bottom, #f9fafb, #ffffff);">
         <div class="form-wrapper" style="max-width: 700px;">
-            <h2 style="margin-bottom: 15px;">👤 Профиль пользователя</h2>
+            <h2 style="margin-bottom: 15px;"><span style="-webkit-text-fill-color: red; ">👤</span> Профиль пользователя</h2>
             <p style="text-align: center; font-size: 18px; margin-bottom: 40px; color: #6b7280;">
                 Добро пожаловать, <strong style="color: #667eea;"><?php echo htmlspecialchars($_SESSION["username"]); ?></strong>!
             </p>
-            
+
             <!-- Информационная карточка -->
             <div style="background: linear-gradient(135deg, #f0f4ff 0%, #e8ecff 100%); padding: 25px; border-radius: 16px; margin-bottom: 35px; border: 2px solid #c7d2fe;">
                 <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px;">
@@ -61,11 +63,11 @@ if($stmt_check = $link->prepare($sql_check_pass)){
                         🔒 Смена пароля
                     </h3>
 
-                    <?php 
-                    if(isset($_GET['status'])){
-                        if($_GET['status'] == 'pw_success'){
+                    <?php
+                    if (isset($_GET['status'])) {
+                        if ($_GET['status'] == 'pw_success') {
                             echo '<div class="alert alert-success">✅ Пароль успешно изменен!</div>';
-                        } elseif($_GET['status'] == 'pw_error'){
+                        } elseif ($_GET['status'] == 'pw_error') {
                             echo '<div class="alert alert-danger">❌ ' . htmlspecialchars($_GET['message']) . '</div>';
                         }
                     }
@@ -123,4 +125,5 @@ if($stmt_check = $link->prepare($sql_check_pass)){
         }
     </style>
 </body>
+
 </html>
