@@ -5,8 +5,11 @@ class RouteModal {
     this.waypoints = [];
     this.currentRoute = null;
     this.map = null;
-    this.activities = []; // Список активностей
+    this.selectedCategories = [];
+    this.activities = [];
     this.totalDuration = 0;
+    this.draggedElement = null;
+    this.editingActivityIndex = null;
     
     if (typeof ymaps !== "undefined" && ymaps.ready) {
       ymaps.ready(() => this.init());
@@ -53,7 +56,6 @@ class RouteModal {
           </div>
 
           <div class="modal-body">
-            <!-- УМНАЯ ПРОГУЛКА -->
             <div id="smartRoutePanel" class="route-panel active">
               <div class="section-header">
                 <span class="section-icon">📍</span>
@@ -73,10 +75,9 @@ class RouteModal {
               <div class="section-header" style="margin-top: 25px;">
                 <span class="section-icon">⏱️</span>
                 <h3>Что будем делать?</h3>
-                <p class="section-desc">Добавьте активности: прогулки и места для посещения</p>
+                <p class="section-desc">Перетаскивайте активности для изменения порядка</p>
               </div>
 
-              <!-- ВРЕМЕННАЯ ШКАЛА -->
               <div class="timeline-container">
                 <div class="timeline-total">
                   <span class="timeline-icon">🕐</span>
@@ -90,7 +91,6 @@ class RouteModal {
                 </div>
               </div>
 
-              <!-- ДОБАВЛЕНИЕ АКТИВНОСТЕЙ -->
               <div class="add-activity-panel">
                 <div class="activity-type-selector">
                   <button class="activity-type-btn" data-type="walk">
@@ -137,7 +137,6 @@ class RouteModal {
               </div>
             </div>
 
-            <!-- ПРОСТОЙ МАРШРУТ -->
             <div id="simpleRoutePanel" class="route-panel">
               <div class="section-header">
                 <span class="section-icon">📍</span>
@@ -235,7 +234,7 @@ class RouteModal {
       <div id="addWalkModal" class="activity-modal">
         <div class="activity-modal-content">
           <div class="activity-modal-header">
-            <h3>🚶 Добавить прогулку</h3>
+            <h3>🚶 <span id="walkModalTitle">Добавить прогулку</span></h3>
             <button class="modal-close" id="closeWalkModal">&times;</button>
           </div>
           <div class="activity-modal-body">
@@ -285,7 +284,9 @@ class RouteModal {
           </div>
           <div class="activity-modal-footer">
             <button class="btn-secondary" id="cancelWalk">Отмена</button>
-            <button class="btn-primary" id="confirmWalk">Добавить</button>
+            <button class="btn-primary" id="confirmWalk">
+              <span id="walkConfirmText">Добавить</span>
+            </button>
           </div>
         </div>
       </div>
@@ -294,7 +295,7 @@ class RouteModal {
       <div id="addPlaceModal" class="activity-modal">
         <div class="activity-modal-content">
           <div class="activity-modal-header">
-            <h3>📍 Добавить место</h3>
+            <h3>📍 <span id="placeModalTitle">Добавить место</span></h3>
             <button class="modal-close" id="closePlaceModal">&times;</button>
           </div>
           <div class="activity-modal-body">
@@ -380,7 +381,9 @@ class RouteModal {
           </div>
           <div class="activity-modal-footer">
             <button class="btn-secondary" id="cancelPlace">Отмена</button>
-            <button class="btn-primary" id="confirmPlace">Добавить</button>
+            <button class="btn-primary" id="confirmPlace">
+              <span id="placeConfirmText">Добавить</span>
+            </button>
           </div>
         </div>
       </div>
@@ -411,10 +414,10 @@ class RouteModal {
       });
     });
 
-    // Кнопки добавления активностей
     document.querySelectorAll('.activity-type-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const type = e.currentTarget.dataset.type;
+        this.editingActivityIndex = null;
         if (type === 'walk') {
           this.openWalkModal();
         } else {
@@ -423,17 +426,14 @@ class RouteModal {
       });
     });
 
-    // Модалка прогулки
     document.getElementById('closeWalkModal').addEventListener('click', () => this.closeWalkModal());
     document.getElementById('cancelWalk').addEventListener('click', () => this.closeWalkModal());
-    document.getElementById('confirmWalk').addEventListener('click', () => this.addWalkActivity());
+    document.getElementById('confirmWalk').addEventListener('click', () => this.saveWalkActivity());
 
-    // Модалка места
     document.getElementById('closePlaceModal').addEventListener('click', () => this.closePlaceModal());
     document.getElementById('cancelPlace').addEventListener('click', () => this.closePlaceModal());
-    document.getElementById('confirmPlace').addEventListener('click', () => this.addPlaceActivity());
+    document.getElementById('confirmPlace').addEventListener('click', () => this.savePlaceActivity());
 
-    // Переключение табов в модалке места
     document.querySelectorAll('.place-tab').forEach(tab => {
       tab.addEventListener('click', (e) => {
         const tabName = e.currentTarget.dataset.tab;
@@ -482,23 +482,71 @@ class RouteModal {
     document.getElementById("buildBtnText").textContent = btnText;
   }
 
-  openWalkModal() {
+  openWalkModal(editIndex = null) {
+    this.editingActivityIndex = editIndex;
+    
+    if (editIndex !== null) {
+      const activity = this.activities[editIndex];
+      document.getElementById('walkModalTitle').textContent = 'Редактировать прогулку';
+      document.getElementById('walkConfirmText').textContent = 'Сохранить';
+      document.getElementById('walkDuration').value = activity.duration_minutes;
+      document.querySelector(`input[name="walkStyle"][value="${activity.walking_style}"]`).checked = true;
+      document.getElementById('walkTransport').value = activity.transport_mode;
+    } else {
+      document.getElementById('walkModalTitle').textContent = 'Добавить прогулку';
+      document.getElementById('walkConfirmText').textContent = 'Добавить';
+      document.getElementById('walkDuration').value = 30;
+      document.querySelector('input[name="walkStyle"][value="scenic"]').checked = true;
+      document.getElementById('walkTransport').value = 'pedestrian';
+    }
+    
     document.getElementById('addWalkModal').classList.add('active');
   }
 
   closeWalkModal() {
     document.getElementById('addWalkModal').classList.remove('active');
+    this.editingActivityIndex = null;
   }
 
-  openPlaceModal() {
+  openPlaceModal(editIndex = null) {
+    this.editingActivityIndex = editIndex;
+    
+    if (editIndex !== null) {
+      const activity = this.activities[editIndex];
+      document.getElementById('placeModalTitle').textContent = 'Редактировать место';
+      document.getElementById('placeConfirmText').textContent = 'Сохранить';
+      
+      if (activity.specificPlaceAddress) {
+        document.querySelector('.place-tab[data-tab="specific"]').click();
+        document.getElementById('specificPlaceInput').value = activity.specificPlaceAddress;
+      } else {
+        document.querySelector('.place-tab[data-tab="category"]').click();
+        document.querySelector(`input[name="placeCategory"][value="${activity.category}"]`).checked = true;
+      }
+      
+      document.getElementById('placeRouteTime').value = activity.duration_minutes - (activity.time_at_place || 0);
+      document.getElementById('placeStayTime').value = activity.time_at_place || 20;
+      document.getElementById('placeTransport').value = activity.transport_mode;
+    } else {
+      document.getElementById('placeModalTitle').textContent = 'Добавить место';
+      document.getElementById('placeConfirmText').textContent = 'Добавить';
+      document.querySelector('.place-tab[data-tab="category"]').click();
+      document.querySelector('input[name="placeCategory"][value="кафе"]').checked = true;
+      document.getElementById('specificPlaceInput').value = '';
+      document.getElementById('placeRouteTime').value = 15;
+      document.getElementById('placeStayTime').value = 20;
+      document.getElementById('placeTransport').value = 'pedestrian';
+    }
+    
     document.getElementById('addPlaceModal').classList.add('active');
   }
 
   closePlaceModal() {
     document.getElementById('addPlaceModal').classList.remove('active');
+    this.editingActivityIndex = null;
   }
 
-  addWalkActivity() {
+  saveWalkActivity() {
     const duration = parseInt(document.getElementById('walkDuration').value);
     const style = document.querySelector('input[name="walkStyle"]:checked').value;
     const transport = document.getElementById('walkTransport').value;
@@ -510,12 +558,17 @@ class RouteModal {
       transport_mode: transport
     };
 
-    this.activities.push(activity);
+    if (this.editingActivityIndex !== null) {
+      this.activities[this.editingActivityIndex] = activity;
+    } else {
+      this.activities.push(activity);
+    }
+    
     this.updateTimeline();
     this.closeWalkModal();
   }
 
-  addPlaceActivity() {
+  savePlaceActivity() {
     const activeTab = document.querySelector('.place-tab.active').dataset.tab;
     const routeTime = parseInt(document.getElementById('placeRouteTime').value);
     const stayTime = parseInt(document.getElementById('placeStayTime').value);
@@ -536,15 +589,17 @@ class RouteModal {
         this.showNotification('⚠️ Укажите адрес или название места', 'error');
         return;
       }
-      activity.specificPlaceAddress = placeAddress; // Сохраняем для геокодирования
+      activity.specificPlaceAddress = placeAddress;
     }
 
-    this.activities.push(activity);
+    if (this.editingActivityIndex !== null) {
+      this.activities[this.editingActivityIndex] = activity;
+    } else {
+      this.activities.push(activity);
+    }
+    
     this.updateTimeline();
     this.closePlaceModal();
-
-    // Сброс формы
-    document.getElementById('specificPlaceInput').value = '';
   }
 
   updateTimeline() {
@@ -581,29 +636,120 @@ class RouteModal {
         }
 
         html += `
-          <div class="timeline-item" data-index="${index}">
+          <div class="timeline-item" data-index="${index}" draggable="true">
+            <div class="timeline-item-drag">⋮⋮</div>
             <div class="timeline-item-icon">${icon}</div>
             <div class="timeline-item-content">
               <div class="timeline-item-title">${title}</div>
               <div class="timeline-item-details">${details}</div>
             </div>
-            <button class="timeline-item-remove" data-index="${index}">×</button>
+            <div class="timeline-item-actions">
+              <button class="timeline-item-edit" data-index="${index}" title="Редактировать">✏️</button>
+              <button class="timeline-item-remove" data-index="${index}" title="Удалить">×</button>
+            </div>
           </div>
         `;
       });
 
       timeline.innerHTML = html;
 
-      // Обработчики удаления
+      // Обработчики
       timeline.querySelectorAll('.timeline-item-remove').forEach(btn => {
         btn.addEventListener('click', (e) => {
+          e.stopPropagation();
           const index = parseInt(e.currentTarget.dataset.index);
           this.removeActivity(index);
         });
       });
+
+      timeline.querySelectorAll('.timeline-item-edit').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const index = parseInt(e.currentTarget.dataset.index);
+          this.editActivity(index);
+        });
+      });
+
+      // Drag and Drop
+      timeline.querySelectorAll('.timeline-item').forEach(item => {
+        item.addEventListener('dragstart', (e) => this.handleDragStart(e));
+        item.addEventListener('dragover', (e) => this.handleDragOver(e));
+        item.addEventListener('drop', (e) => this.handleDrop(e));
+        item.addEventListener('dragend', (e) => this.handleDragEnd(e));
+      });
     }
 
     document.getElementById('totalTimeDisplay').textContent = `${this.totalDuration} мин`;
+  }
+
+  handleDragStart(e) {
+    this.draggedElement = e.currentTarget;
+    e.currentTarget.style.opacity = '0.5';
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', e.currentTarget.innerHTML);
+  }
+
+  handleDragOver(e) {
+    if (e.preventDefault) {
+      e.preventDefault();
+    }
+    e.dataTransfer.dropEffect = 'move';
+    
+    const target = e.currentTarget;
+    if (target !== this.draggedElement) {
+      const rect = target.getBoundingClientRect();
+      const midpoint = rect.top + rect.height / 2;
+      
+      if (e.clientY < midpoint) {
+        target.style.borderTop = '3px solid #667eea';
+        target.style.borderBottom = '';
+      } else {
+        target.style.borderBottom = '3px solid #667eea';
+        target.style.borderTop = '';
+      }
+    }
+    
+    return false;
+  }
+
+  handleDrop(e) {
+    if (e.stopPropagation) {
+      e.stopPropagation();
+    }
+
+    if (this.draggedElement !== e.currentTarget) {
+      const draggedIndex = parseInt(this.draggedElement.dataset.index);
+      const targetIndex = parseInt(e.currentTarget.dataset.index);
+      
+      const draggedActivity = this.activities[draggedIndex];
+      this.activities.splice(draggedIndex, 1);
+      
+      const rect = e.currentTarget.getBoundingClientRect();
+      const midpoint = rect.top + rect.height / 2;
+      const insertIndex = e.clientY < midpoint ? targetIndex : targetIndex + 1;
+      
+      this.activities.splice(insertIndex > draggedIndex ? insertIndex - 1 : insertIndex, 0, draggedActivity);
+      this.updateTimeline();
+    }
+
+    return false;
+  }
+
+  handleDragEnd(e) {
+    e.currentTarget.style.opacity = '';
+    document.querySelectorAll('.timeline-item').forEach(item => {
+      item.style.borderTop = '';
+      item.style.borderBottom = '';
+    });
+  }
+
+  editActivity(index) {
+    const activity = this.activities[index];
+    if (activity.type === 'walk') {
+      this.openWalkModal(index);
+    } else {
+      this.openPlaceModal(index);
+    }
   }
 
   removeActivity(index) {
@@ -700,7 +846,6 @@ class RouteModal {
         endCoords = await this.geocodeAddress(endPoint);
       }
 
-      // Геокодируем конкретные места
       const activitiesData = [];
       for (const activity of this.activities) {
         const actData = { ...activity };
@@ -749,7 +894,7 @@ class RouteModal {
       if (result.success) {
         this.currentRoute = result.data;
         this.close();
-        this.displaySmartWalkOnMap(result.data, requestData.start_point, requestData.end_point, returnToStart);
+        window.displaySmartWalk(result.data, requestData.start_point, requestData.end_point, returnToStart);
         
         let message = '✅ Прогулка построена!';
         if (result.data.warnings && result.data.warnings.length > 0) {
@@ -773,34 +918,6 @@ class RouteModal {
       this.showNotification('❌ Ошибка соединения с сервером', 'error');
     } finally {
       this.showLoading(false);
-    }
-  }
-
-  displaySmartWalkOnMap(walkData, startPoint, endPoint, returnToStart) {
-    // Собираем все точки для отображения
-    const points = [startPoint];
-    
-    walkData.activities.forEach(activity => {
-      if (activity.activity_type === 'walk' && activity.route_segment) {
-        points.push(...activity.route_segment);
-      } else if (activity.activity_type === 'place' && activity.selected_place) {
-        points.push(activity.selected_place);
-      }
-    });
-    
-    if (returnToStart) {
-      points.push(startPoint);
-    } else if (endPoint) {
-      points.push(endPoint);
-    }
-
-    // Используем старую функцию отображения (адаптируем данные)
-    if (window.displaySmartRoute) {
-      window.displaySmartRoute({
-        ordered_route: points,
-        total_time_minutes: walkData.total_duration_minutes,
-        warnings: walkData.warnings || []
-      });
     }
   }
 
@@ -840,7 +957,7 @@ class RouteModal {
 
       if (result.success) {
         this.close();
-        this.displaySimpleRouteOnMap(result.data);
+        window.displaySimpleRoute(result.data);
         
         setTimeout(() => {
           this.showNotification('✅ Маршрут построен!', 'success');
@@ -876,12 +993,6 @@ class RouteModal {
         (error) => reject(error)
       );
     });
-  }
-
-  displaySimpleRouteOnMap(routeData) {
-    if (window.displaySimpleRoute) {
-      window.displaySimpleRoute(routeData);
-    }
   }
 
   showLoading(show, text = 'Строим оптимальный маршрут...') {

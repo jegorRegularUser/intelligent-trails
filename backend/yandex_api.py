@@ -41,7 +41,7 @@ async def search_places(center_coords: List[float], categories: List[str], radiu
     (
       {''.join(query_parts)}
     );
-    out center 30;
+    out center 50;
     """
 
     print(f"[OSM] Requesting from {OVERPASS_URL}")
@@ -131,7 +131,7 @@ def point_at_distance(start_coords: List[float], distance_m: int, bearing_deg: f
     bearing_deg: направление в градусах (0 = север, 90 = восток)
     """
     lat1, lon1 = start_coords
-    R = 6371000  # Радиус Земли в метрах
+    R = 6371000
     
     lat1_rad = math.radians(lat1)
     lon1_rad = math.radians(lon1)
@@ -160,69 +160,22 @@ def smart_filter(start, points, limit, priority_categories=None):
 
 
 async def get_routing_matrix(points: List[Dict[str, Any]], mode: str) -> Tuple[List[List[int]], float]:
-    """Построение матрицы времени между точками используя Yandex Router API"""
+    """Построение матрицы времени между точками"""
     n = len(points)
     matrix = [[0]*n for _ in range(n)]
     
-    if not YANDEX_API_KEY or YANDEX_API_KEY == "dummy":
-        print("[MATRIX] No Yandex API key, using fallback geometric calculation")
-        return generate_fallback_matrix_with_mode(points, mode), 0.5
-    
-    print(f"[MATRIX] Building for {n} points with mode={mode}")
-    
-    mode_mapping = {
-        'pedestrian': 'walking',
-        'auto': 'driving',
-        'masstransit': 'transit',
-        'bicycle': 'cycling'
-    }
-    
-    yandex_mode = mode_mapping.get(mode, 'walking')
-    successful_requests = 0
-    total_requests = 0
-    
-    async with httpx.AsyncClient(verify=False, timeout=10) as client:
-        tasks = []
-        
-        for i in range(n):
-            for j in range(n):
-                if i != j:
-                    tasks.append((i, j, get_single_route_time(
-                        client, 
-                        points[i]['coords'], 
-                        points[j]['coords'], 
-                        yandex_mode
-                    )))
-        
-        batch_size = 10
-        for batch_start in range(0, len(tasks), batch_size):
-            batch = tasks[batch_start:batch_start + batch_size]
-            results = await asyncio.gather(*[task[2] for task in batch], return_exceptions=True)
-            
-            for (i, j, _), result in zip(batch, results):
-                total_requests += 1
-                if isinstance(result, int) and result > 0:
-                    matrix[i][j] = result
-                    successful_requests += 1
-                else:
-                    dist_m = calculate_geo_distance(points[i]['coords'], points[j]['coords'])
-                    matrix[i][j] = estimate_time_by_mode(dist_m, mode)
-            
-            await asyncio.sleep(0.1)
-    
-    success_rate = successful_requests / total_requests if total_requests > 0 else 0
-    print(f"[MATRIX] Success rate: {success_rate:.1%} ({successful_requests}/{total_requests})")
-    
-    if successful_requests == 0:
-        print("[MATRIX] All requests failed, using fallback")
-        return generate_fallback_matrix_with_mode(points, mode), 0.0
-    
-    return matrix, success_rate
+    # ВСЕГДА используем fallback для стабильности
+    # Реальные маршруты будут строиться на фронтенде через Yandex Maps JS API
+    print(f"[MATRIX] Building fallback matrix for {n} points with mode={mode}")
+    return generate_fallback_matrix_with_mode(points, mode), 1.0
 
 
 async def get_single_route_time(client: httpx.AsyncClient, start_coords: List[float], end_coords: List[float], mode: str) -> int:
     """Получить время маршрута между двумя точками через Yandex Router API"""
     try:
+        if not YANDEX_API_KEY:
+            return -1
+            
         params = {
             'apikey': YANDEX_API_KEY,
             'waypoints': f"{start_coords[1]},{start_coords[0]}|{end_coords[1]},{end_coords[0]}",
@@ -284,43 +237,8 @@ def generate_fallback_matrix(points: List[Dict[str, Any]]) -> List[List[int]]:
 
 
 async def get_route_geometry(points: List[List[float]], mode: str) -> Optional[List[List[float]]]:
-    """Получить геометрию (точки) реального маршрута для отрисовки на карте"""
-    if not YANDEX_API_KEY or len(points) < 2:
-        return None
-    
-    mode_mapping = {
-        'pedestrian': 'walking',
-        'auto': 'driving',
-        'masstransit': 'transit',
-        'bicycle': 'cycling'
-    }
-    
-    yandex_mode = mode_mapping.get(mode, 'walking')
-    waypoints_str = "|".join([f"{p[1]},{p[0]}" for p in points])
-    
-    try:
-        async with httpx.AsyncClient(verify=False, timeout=15) as client:
-            params = {
-                'apikey': YANDEX_API_KEY,
-                'waypoints': waypoints_str,
-                'mode': yandex_mode
-            }
-            
-            response = await client.get(YANDEX_ROUTER_URL, params=params)
-            
-            if response.status_code == 200:
-                data = response.json()
-                if 'route' in data and 'legs' in data['route']:
-                    geometry = []
-                    for leg in data['route']['legs']:
-                        for step in leg.get('steps', []):
-                            polyline = step.get('polyline', {}).get('points', [])
-                            for point in polyline:
-                                geometry.append([point[0], point[1]])
-                    
-                    return geometry if geometry else None
-        
-        return None
-    except Exception as e:
-        print(f"[GEOMETRY] Error: {e}")
-        return None
+    """
+    Не используется - геометрия строится на фронтенде через Yandex Maps JS API
+    Оставлено для совместимости
+    """
+    return None

@@ -1768,3 +1768,435 @@ input[type="number"]::-webkit-outer-spin-button {
 input[type="number"] {
   -moz-appearance: textfield;
 }
+
+/* ============================================
+   DRAG AND DROP ДЛЯ АКТИВНОСТЕЙ
+   ============================================ */
+
+.timeline-item {
+  cursor: move;
+  user-select: none;
+  position: relative;
+}
+
+.timeline-item-drag {
+  position: absolute;
+  left: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #cbd5e0;
+  font-size: 18px;
+  cursor: grab;
+  padding: 5px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.timeline-item:hover .timeline-item-drag {
+  opacity: 1;
+}
+
+.timeline-item-drag:active {
+  cursor: grabbing;
+}
+
+.timeline-item-actions {
+  display: flex;
+  gap: 5px;
+  margin-left: auto;
+}
+
+.timeline-item-edit,
+.timeline-item-remove {
+  background: transparent;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 5px 8px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.timeline-item-edit {
+  color: #667eea;
+}
+
+.timeline-item-edit:hover {
+  background: rgba(102, 126, 234, 0.1);
+  transform: scale(1.1);
+}
+
+.timeline-item-remove {
+  color: #ff4757;
+}
+
+.timeline-item-remove:hover {
+  background: rgba(255, 71, 87, 0.1);
+  transform: scale(1.1);
+}
+
+.timeline-item.dragging {
+  opacity: 0.5;
+  transform: rotate(2deg);
+}
+
+/* ============================================
+   ЛЕВОЕ МЕНЮ С ИНФОРМАЦИЕЙ О МАРШРУТЕ (ПРОБЛЕМА 4)
+   ============================================ */
+
+.route-info-panel {
+  position: fixed;
+  left: 20px;
+  top: 80px;
+  width: 380px;
+  max-height: calc(100vh - 100px);
+  background: white;
+  border-radius: 20px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* ВАЖНО для работы внутреннего скролла */
+}
+
+.route-info-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 25px;
+  border-bottom: 2px solid #f1f3f5;
+  flex-shrink: 0; /* Не сжимается при скролле */
+}
+
+.route-info-header h3 {
+  margin: 0;
+  font-size: 20px;
+  color: #2d3748;
+}
+
+.close-panel-btn {
+  background: #f1f3f5;
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 20px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #718096;
+}
+
+.close-panel-btn:hover {
+  background: #e2e8f0;
+  transform: scale(1.1);
+}
+
+.route-info-stats {
+  padding: 20px 25px;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-bottom: 2px solid #f1f3f5;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex-shrink: 0; /* Не сжимается при скролле */
+}
+
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.stat-icon {
+  font-size: 24px;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #718096;
+  font-weight: 500;
+}
+
+.stat-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #2d3748;
+}
+
+/* СКРОЛЛЯЩАЯСЯ ОБЛАСТЬ С ЭТАПАМИ */
+.route-stages-list {
+  flex: 1;
+  overflow-y: auto; /* Вертикальный скролл */
+  padding: 20px 25px;
+  min-height: 0; /* Важно для работы flex в Firefox */
+}
+
+/* Кастомный скроллбар */
+.route-stages-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.route-stages-list::-webkit-scrollbar-track {
+  background: #f1f3f5;
+  border-radius: 10px;
+}
+
+.route-stages-list::-webkit-scrollbar-thumb {
+  background: #cbd5e0;
+  border-radius: 10px;
+}
+
+.route-stages-list::-webkit-scrollbar-thumb:hover {
+  background: #a0aec0;
+}
+
+.stages-header {
+  font-size: 16px;
+  font-weight: 600;
+  color: #2d3748;
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+/* ============================================
+   КАРТОЧКИ ЭТАПОВ С ВАРИАНТАМИ (ПРОБЛЕМА 3)
+   ============================================ */
+
+.stage-card {
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+  border: 2px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 15px;
+  transition: all 0.3s ease;
+}
+
+.stage-card:hover {
+  border-color: #667eea;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+  transform: translateY(-2px);
+}
+
+.stage-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.stage-icon {
+  font-size: 28px;
+  min-width: 36px;
+  text-align: center;
+}
+
+.stage-info {
+  flex: 1;
+}
+
+.stage-title {
+  font-weight: 600;
+  color: #2d3748;
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+
+.stage-details {
+  font-size: 13px;
+  color: #718096;
+}
+
+/* ВАРИАНТЫ С ИНТЕРАКТИВНЫМ СЛАЙДЕРОМ */
+.stage-variants {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 2px solid #e2e8f0;
+}
+
+.variants-slider {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  background: #f8f9fa;
+  padding: 10px;
+  margin-bottom: 10px;
+}
+
+.variant-option {
+  padding: 12px;
+  background: white;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: none;
+}
+
+.variant-option.active {
+  display: block;
+  border-color: #667eea;
+  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+}
+
+.variant-name {
+  font-weight: 600;
+  color: #2d3748;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.variant-category {
+  font-size: 12px;
+  color: #718096;
+}
+
+.slider-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.slider-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  font-size: 20px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.slider-btn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.slider-btn:disabled {
+  background: #cbd5e0;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.slider-counter {
+  font-weight: 600;
+  color: #667eea;
+  font-size: 14px;
+}
+
+/* ============================================
+   АДАПТИВНОСТЬ
+   ============================================ */
+
+@media (max-width: 1200px) {
+  .route-info-panel {
+    width: 340px;
+  }
+}
+
+@media (max-width: 992px) {
+  .route-info-panel {
+    width: 320px;
+    left: 10px;
+    top: 70px;
+    max-height: calc(100vh - 80px);
+  }
+  
+  .route-info-stats {
+    padding: 15px 20px;
+  }
+  
+  .route-stages-list {
+    padding: 15px 20px;
+  }
+}
+
+@media (max-width: 768px) {
+  .route-info-panel {
+    width: calc(100% - 20px);
+    left: 10px;
+    right: 10px;
+    max-width: 400px;
+  }
+}
+
+@media (max-width: 480px) {
+  .route-info-panel {
+    top: 60px;
+    max-height: calc(100vh - 70px);
+  }
+  
+  .route-info-header {
+    padding: 15px 20px;
+  }
+  
+  .route-info-stats {
+    padding: 12px 15px;
+    gap: 10px;
+  }
+  
+  .route-stages-list {
+    padding: 12px 15px;
+  }
+  
+  .stage-card {
+    padding: 12px;
+  }
+  
+  .stage-icon {
+    font-size: 24px;
+    min-width: 32px;
+  }
+  
+  .slider-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 18px;
+  }
+}
+
+/* ============================================
+   АНИМАЦИИ ДЛЯ СЛАЙДЕРА
+   ============================================ */
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideOut {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+}
+
+.variant-option.slide-in {
+  animation: slideIn 0.3s ease;
+}
+
+.variant-option.slide-out {
+  animation: slideOut 0.3s ease;
+}
