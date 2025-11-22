@@ -5,9 +5,8 @@ class RouteModal {
     this.waypoints = [];
     this.currentRoute = null;
     this.map = null;
-    this.selectedCategories = [];
-    this.stages = []; // Этапы прогулки
-    this.currentStageVariants = {}; // Варианты для каждого этапа
+    this.activities = []; // Список активностей
+    this.totalDuration = 0;
     
     if (typeof ymaps !== "undefined" && ymaps.ready) {
       ymaps.ready(() => this.init());
@@ -29,198 +28,366 @@ class RouteModal {
 
   createModal() {
     const modalHTML = `
-            <div id="routeModal" class="route-modal">
-                <div class="route-modal-content">
-                    <div class="modal-header">
-                        <h2>✨ Построить маршрут</h2>
-                        <button class="modal-close" id="closeModal">&times;</button>
-                    </div>
-                    
-                    <div class="route-type-selector">
-                        <button class="route-type-btn active" data-type="smart">
-                            <span class="type-icon">🧠</span>
-                            <div>
-                                <div class="type-title">Умная прогулка</div>
-                                <div class="type-desc">Поэтапный конструктор</div>
-                            </div>
-                        </button>
-                        <button class="route-type-btn" data-type="simple">
-                            <span class="type-icon">🗺️</span>
-                            <div>
-                                <div class="type-title">Простой маршрут</div>
-                                <div class="type-desc">Из точки А в точку Б</div>
-                            </div>
-                        </button>
-                    </div>
+      <div id="routeModal" class="route-modal">
+        <div class="route-modal-content">
+          <div class="modal-header">
+            <h2>✨ Построить маршрут</h2>
+            <button class="modal-close" id="closeModal">&times;</button>
+          </div>
+          
+          <div class="route-type-selector">
+            <button class="route-type-btn active" data-type="smart">
+              <span class="type-icon">🧠</span>
+              <div>
+                <div class="type-title">Умная прогулка</div>
+                <div class="type-desc">С активностями</div>
+              </div>
+            </button>
+            <button class="route-type-btn" data-type="simple">
+              <span class="type-icon">🗺️</span>
+              <div>
+                <div class="type-title">Простой маршрут</div>
+                <div class="type-desc">Из точки А в точку Б</div>
+              </div>
+            </button>
+          </div>
 
-                    <div class="modal-body">
-                        <!-- НОВЫЙ ПАНЕЛЬ: ПОЭТАПНАЯ ПРОГУЛКА -->
-                        <div id="smartRoutePanel" class="route-panel active">
-                            <div class="section-header">
-                                <span class="section-icon">📍</span>
-                                <h3>Точка старта</h3>
-                            </div>
+          <div class="modal-body">
+            <!-- УМНАЯ ПРОГУЛКА -->
+            <div id="smartRoutePanel" class="route-panel active">
+              <div class="section-header">
+                <span class="section-icon">📍</span>
+                <h3>Откуда начинаем?</h3>
+              </div>
 
-                            <div class="input-group">
-                                <label>
-                                    <span class="point-icon start-icon">A</span>
-                                    Откуда начинаем прогулку?
-                                </label>
-                                <input 
-                                    type="text" 
-                                    id="smartStartPoint" 
-                                    class="location-input" 
-                                    placeholder="Например: Москва, Красная площадь"
-                                    autocomplete="off"
-                                />
-                            </div>
+              <div class="input-group">
+                <input 
+                  type="text" 
+                  id="smartStartPoint" 
+                  class="location-input" 
+                  placeholder="Например: Москва, Красная площадь"
+                  autocomplete="off"
+                />
+              </div>
 
-                            <div class="section-header">
-                                <span class="section-icon">🎯</span>
-                                <h3>Этапы прогулки</h3>
-                                <p class="section-desc">Создайте последовательность мест, которые хотите посетить</p>
-                            </div>
+              <div class="section-header" style="margin-top: 25px;">
+                <span class="section-icon">⏱️</span>
+                <h3>Что будем делать?</h3>
+                <p class="section-desc">Добавьте активности: прогулки и места для посещения</p>
+              </div>
 
-                            <div id="stagesContainer" class="stages-container">
-                                <!-- Этапы будут добавляться динамически -->
-                            </div>
-
-                            <button class="add-stage-btn" id="addStageBtn">
-                                <span>+</span> Добавить этап
-                            </button>
-
-                            <div class="route-end-options" style="margin-top: 20px;">
-                                <label class="radio-option">
-                                    <input type="radio" name="routeEnd" value="return" checked />
-                                    <div class="option-card">
-                                        <span class="option-icon">🔄</span>
-                                        <span>Вернуться к началу</span>
-                                    </div>
-                                </label>
-                                <label class="radio-option">
-                                    <input type="radio" name="routeEnd" value="custom" />
-                                    <div class="option-card">
-                                        <span class="option-icon">🎯</span>
-                                        <span>Закончить в другом месте</span>
-                                    </div>
-                                </label>
-                            </div>
-
-                            <div class="input-group" id="smartEndPointGroup" style="display: none;">
-                                <label>
-                                    <span class="point-icon end-icon">B</span>
-                                    Точка финиша
-                                </label>
-                                <input 
-                                    type="text" 
-                                    id="smartEndPoint" 
-                                    class="location-input" 
-                                    placeholder="Куда хотите прийти?"
-                                    autocomplete="off"
-                                />
-                            </div>
-                        </div>
-
-                        <!-- ПРОСТОЙ МАРШРУТ -->
-                        <div id="simpleRoutePanel" class="route-panel">
-                            <div class="section-header">
-                                <span class="section-icon">📍</span>
-                                <h3>Точки маршрута</h3>
-                            </div>
-
-                            <div class="input-group">
-                                <label>
-                                    <span class="point-icon start-icon">A</span>
-                                    Откуда
-                                </label>
-                                <input 
-                                    type="text" 
-                                    id="simpleStartPoint" 
-                                    class="location-input" 
-                                    placeholder="Начальная точка"
-                                    autocomplete="off"
-                                />
-                            </div>
-
-                            <div id="simpleWaypointsContainer"></div>
-
-                            <button class="add-waypoint-btn" id="addSimpleWaypoint">
-                                <span>+</span> Добавить промежуточную точку
-                            </button>
-
-                            <div class="input-group">
-                                <label>
-                                    <span class="point-icon end-icon">B</span>
-                                    Куда
-                                </label>
-                                <input 
-                                    type="text" 
-                                    id="simpleEndPoint" 
-                                    class="location-input" 
-                                    placeholder="Конечная точка"
-                                    autocomplete="off"
-                                />
-                            </div>
-
-                            <div class="section-header">
-                                <span class="section-icon">🚗</span>
-                                <h3>Способ передвижения</h3>
-                            </div>
-
-                            <div class="transport-mode-grid">
-                                <label class="transport-option">
-                                    <input type="radio" name="simpleTransport" value="auto" checked />
-                                    <div class="transport-card">
-                                        <span class="transport-icon">🚗</span>
-                                        <span>Авто</span>
-                                    </div>
-                                </label>
-                                <label class="transport-option">
-                                    <input type="radio" name="simpleTransport" value="pedestrian" />
-                                    <div class="transport-card">
-                                        <span class="transport-icon">🚶</span>
-                                        <span>Пешком</span>
-                                    </div>
-                                </label>
-                                <label class="transport-option">
-                                    <input type="radio" name="simpleTransport" value="masstransit" />
-                                    <div class="transport-card">
-                                        <span class="transport-icon">🚌</span>
-                                        <span>Транспорт</span>
-                                    </div>
-                                </label>
-                                <label class="transport-option">
-                                    <input type="radio" name="simpleTransport" value="bicycle" />
-                                    <div class="transport-card">
-                                        <span class="transport-icon">🚴</span>
-                                        <span>Велосипед</span>
-                                    </div>
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="modal-footer">
-                        <button class="btn-secondary" id="cancelRoute">Отмена</button>
-                        <button class="btn-primary" id="buildRoute">
-                            <span class="btn-icon">🗺️</span>
-                            <span id="buildBtnText">Построить маршрут</span>
-                        </button>
-                    </div>
-
-                    <div class="loading-overlay" id="loadingOverlay">
-                        <div class="spinner"></div>
-                        <p id="loadingText">Строим оптимальный маршрут...</p>
-                    </div>
+              <!-- ВРЕМЕННАЯ ШКАЛА -->
+              <div class="timeline-container">
+                <div class="timeline-total">
+                  <span class="timeline-icon">🕐</span>
+                  <span>Общее время: <strong id="totalTimeDisplay">0 мин</strong></span>
                 </div>
+                
+                <div id="activitiesTimeline" class="activities-timeline">
+                  <div class="timeline-empty">
+                    <p>🎯 Добавьте активности, чтобы создать прогулку</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ДОБАВЛЕНИЕ АКТИВНОСТЕЙ -->
+              <div class="add-activity-panel">
+                <div class="activity-type-selector">
+                  <button class="activity-type-btn" data-type="walk">
+                    <span class="activity-icon">🚶</span>
+                    <span>Прогулка</span>
+                  </button>
+                  <button class="activity-type-btn" data-type="place">
+                    <span class="activity-icon">📍</span>
+                    <span>Место</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="route-end-options" style="margin-top: 25px;">
+                <div class="section-header">
+                  <span class="section-icon">🎯</span>
+                  <h3>Куда придём?</h3>
+                </div>
+                
+                <label class="radio-option">
+                  <input type="radio" name="routeEnd" value="return" checked />
+                  <div class="option-card">
+                    <span class="option-icon">🔄</span>
+                    <span>Вернуться к началу</span>
+                  </div>
+                </label>
+                <label class="radio-option">
+                  <input type="radio" name="routeEnd" value="custom" />
+                  <div class="option-card">
+                    <span class="option-icon">🎯</span>
+                    <span>Закончить в другом месте</span>
+                  </div>
+                </label>
+              </div>
+
+              <div class="input-group" id="smartEndPointGroup" style="display: none; margin-top: 15px;">
+                <input 
+                  type="text" 
+                  id="smartEndPoint" 
+                  class="location-input" 
+                  placeholder="Точка финиша"
+                  autocomplete="off"
+                />
+              </div>
             </div>
-        `;
+
+            <!-- ПРОСТОЙ МАРШРУТ -->
+            <div id="simpleRoutePanel" class="route-panel">
+              <div class="section-header">
+                <span class="section-icon">📍</span>
+                <h3>Точки маршрута</h3>
+              </div>
+
+              <div class="input-group">
+                <label>
+                  <span class="point-icon start-icon">A</span>
+                  Откуда
+                </label>
+                <input 
+                  type="text" 
+                  id="simpleStartPoint" 
+                  class="location-input" 
+                  placeholder="Начальная точка"
+                  autocomplete="off"
+                />
+              </div>
+
+              <div id="simpleWaypointsContainer"></div>
+
+              <button class="add-waypoint-btn" id="addSimpleWaypoint">
+                <span>+</span> Добавить промежуточную точку
+              </button>
+
+              <div class="input-group">
+                <label>
+                  <span class="point-icon end-icon">B</span>
+                  Куда
+                </label>
+                <input 
+                  type="text" 
+                  id="simpleEndPoint" 
+                  class="location-input" 
+                  placeholder="Конечная точка"
+                  autocomplete="off"
+                />
+              </div>
+
+              <div class="section-header">
+                <span class="section-icon">🚗</span>
+                <h3>Способ передвижения</h3>
+              </div>
+
+              <div class="transport-mode-grid">
+                <label class="transport-option">
+                  <input type="radio" name="simpleTransport" value="auto" checked />
+                  <div class="transport-card">
+                    <span class="transport-icon">🚗</span>
+                    <span>Авто</span>
+                  </div>
+                </label>
+                <label class="transport-option">
+                  <input type="radio" name="simpleTransport" value="pedestrian" />
+                  <div class="transport-card">
+                    <span class="transport-icon">🚶</span>
+                    <span>Пешком</span>
+                  </div>
+                </label>
+                <label class="transport-option">
+                  <input type="radio" name="simpleTransport" value="masstransit" />
+                  <div class="transport-card">
+                    <span class="transport-icon">🚌</span>
+                    <span>Транспорт</span>
+                  </div>
+                </label>
+                <label class="transport-option">
+                  <input type="radio" name="simpleTransport" value="bicycle" />
+                  <div class="transport-card">
+                    <span class="transport-icon">🚴</span>
+                    <span>Велосипед</span>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button class="btn-secondary" id="cancelRoute">Отмена</button>
+            <button class="btn-primary" id="buildRoute">
+              <span class="btn-icon">🗺️</span>
+              <span id="buildBtnText">Построить прогулку</span>
+            </button>
+          </div>
+
+          <div class="loading-overlay" id="loadingOverlay">
+            <div class="spinner"></div>
+            <p id="loadingText">Строим оптимальный маршрут...</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- МОДАЛЬНОЕ ОКНО ДОБАВЛЕНИЯ ПРОГУЛКИ -->
+      <div id="addWalkModal" class="activity-modal">
+        <div class="activity-modal-content">
+          <div class="activity-modal-header">
+            <h3>🚶 Добавить прогулку</h3>
+            <button class="modal-close" id="closeWalkModal">&times;</button>
+          </div>
+          <div class="activity-modal-body">
+            <div class="input-group">
+              <label>⏱️ Длительность прогулки</label>
+              <div class="time-selector-compact">
+                <input type="number" id="walkDuration" value="30" min="5" max="180" step="5" />
+                <span>минут</span>
+              </div>
+            </div>
+            
+            <div class="input-group">
+              <label>🎨 Стиль прогулки</label>
+              <div class="walk-style-selector">
+                <label class="style-option">
+                  <input type="radio" name="walkStyle" value="scenic" checked />
+                  <div class="style-card">
+                    <span class="style-icon">🌳</span>
+                    <div>
+                      <strong>Живописная</strong>
+                      <p>Через парки и красивые места</p>
+                    </div>
+                  </div>
+                </label>
+                <label class="style-option">
+                  <input type="radio" name="walkStyle" value="direct" />
+                  <div class="style-card">
+                    <span class="style-icon">➡️</span>
+                    <div>
+                      <strong>Прямая</strong>
+                      <p>Кратчайший путь к следующей точке</p>
+                    </div>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <div class="input-group">
+              <label>🚶 Способ передвижения</label>
+              <select id="walkTransport" class="transport-select">
+                <option value="pedestrian">🚶 Пешком</option>
+                <option value="bicycle">🚴 Велосипед</option>
+                <option value="auto">🚗 Авто</option>
+                <option value="masstransit">🚌 Транспорт</option>
+              </select>
+            </div>
+          </div>
+          <div class="activity-modal-footer">
+            <button class="btn-secondary" id="cancelWalk">Отмена</button>
+            <button class="btn-primary" id="confirmWalk">Добавить</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- МОДАЛЬНОЕ ОКНО ДОБАВЛЕНИЯ МЕСТА -->
+      <div id="addPlaceModal" class="activity-modal">
+        <div class="activity-modal-content">
+          <div class="activity-modal-header">
+            <h3>📍 Добавить место</h3>
+            <button class="modal-close" id="closePlaceModal">&times;</button>
+          </div>
+          <div class="activity-modal-body">
+            <div class="place-type-tabs">
+              <button class="place-tab active" data-tab="category">Категория</button>
+              <button class="place-tab" data-tab="specific">Конкретное место</button>
+            </div>
+
+            <div id="categoryTab" class="place-tab-content active">
+              <div class="input-group">
+                <label>🏛️ Выберите категорию</label>
+                <div class="category-grid-compact">
+                  <label class="category-compact">
+                    <input type="radio" name="placeCategory" value="кафе" checked />
+                    <span>☕ Кафе</span>
+                  </label>
+                  <label class="category-compact">
+                    <input type="radio" name="placeCategory" value="ресторан" />
+                    <span>🍽️ Ресторан</span>
+                  </label>
+                  <label class="category-compact">
+                    <input type="radio" name="placeCategory" value="парк" />
+                    <span>🌳 Парк</span>
+                  </label>
+                  <label class="category-compact">
+                    <input type="radio" name="placeCategory" value="музей" />
+                    <span>🏛️ Музей</span>
+                  </label>
+                  <label class="category-compact">
+                    <input type="radio" name="placeCategory" value="памятник" />
+                    <span>🗿 Памятник</span>
+                  </label>
+                  <label class="category-compact">
+                    <input type="radio" name="placeCategory" value="бар" />
+                    <span>🍺 Бар</span>
+                  </label>
+                  <label class="category-compact">
+                    <input type="radio" name="placeCategory" value="магазин" />
+                    <span>🛍️ Магазин</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div id="specificTab" class="place-tab-content">
+              <div class="input-group">
+                <label>📍 Адрес или название</label>
+                <input 
+                  type="text" 
+                  id="specificPlaceInput" 
+                  class="location-input" 
+                  placeholder="Введите адрес или название места"
+                  autocomplete="off"
+                />
+              </div>
+            </div>
+
+            <div class="input-group">
+              <label>⏱️ Время на дорогу до места</label>
+              <div class="time-selector-compact">
+                <input type="number" id="placeRouteTime" value="15" min="5" max="60" step="5" />
+                <span>минут</span>
+              </div>
+            </div>
+
+            <div class="input-group">
+              <label>🕐 Время на месте</label>
+              <div class="time-selector-compact">
+                <input type="number" id="placeStayTime" value="20" min="5" max="120" step="5" />
+                <span>минут</span>
+              </div>
+            </div>
+
+            <div class="input-group">
+              <label>🚶 Способ передвижения</label>
+              <select id="placeTransport" class="transport-select">
+                <option value="pedestrian">🚶 Пешком</option>
+                <option value="bicycle">🚴 Велосипед</option>
+                <option value="auto">🚗 Авто</option>
+                <option value="masstransit">🚌 Транспорт</option>
+              </select>
+            </div>
+          </div>
+          <div class="activity-modal-footer">
+            <button class="btn-secondary" id="cancelPlace">Отмена</button>
+            <button class="btn-primary" id="confirmPlace">Добавить</button>
+          </div>
+        </div>
+      </div>
+    `;
 
     document.body.insertAdjacentHTML("beforeend", modalHTML);
     this.modal = document.getElementById("routeModal");
-    
-    // Добавляем первый этап по умолчанию
-    this.addStage();
   }
 
   attachEventListeners() {
@@ -244,18 +411,59 @@ class RouteModal {
       });
     });
 
+    // Кнопки добавления активностей
+    document.querySelectorAll('.activity-type-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const type = e.currentTarget.dataset.type;
+        if (type === 'walk') {
+          this.openWalkModal();
+        } else {
+          this.openPlaceModal();
+        }
+      });
+    });
+
+    // Модалка прогулки
+    document.getElementById('closeWalkModal').addEventListener('click', () => this.closeWalkModal());
+    document.getElementById('cancelWalk').addEventListener('click', () => this.closeWalkModal());
+    document.getElementById('confirmWalk').addEventListener('click', () => this.addWalkActivity());
+
+    // Модалка места
+    document.getElementById('closePlaceModal').addEventListener('click', () => this.closePlaceModal());
+    document.getElementById('cancelPlace').addEventListener('click', () => this.closePlaceModal());
+    document.getElementById('confirmPlace').addEventListener('click', () => this.addPlaceActivity());
+
+    // Переключение табов в модалке места
+    document.querySelectorAll('.place-tab').forEach(tab => {
+      tab.addEventListener('click', (e) => {
+        const tabName = e.currentTarget.dataset.tab;
+        
+        document.querySelectorAll('.place-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.place-tab-content').forEach(c => c.classList.remove('active'));
+        
+        e.currentTarget.classList.add('active');
+        document.getElementById(tabName + 'Tab').classList.add('active');
+      });
+    });
+
     document.getElementById("buildRoute").addEventListener("click", () => this.buildRoute());
     document.getElementById("addSimpleWaypoint").addEventListener("click", () => this.addSimpleWaypoint());
-    document.getElementById("addStageBtn").addEventListener("click", () => this.addStage());
 
     this.setupYandexSuggest("smartStartPoint");
     this.setupYandexSuggest("smartEndPoint");
     this.setupYandexSuggest("simpleStartPoint");
     this.setupYandexSuggest("simpleEndPoint");
+    this.setupYandexSuggest("specificPlaceInput");
 
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && this.modal.classList.contains("active")) {
-        this.close();
+      if (e.key === "Escape") {
+        if (document.getElementById('addWalkModal').classList.contains('active')) {
+          this.closeWalkModal();
+        } else if (document.getElementById('addPlaceModal').classList.contains('active')) {
+          this.closePlaceModal();
+        } else if (this.modal.classList.contains("active")) {
+          this.close();
+        }
       }
     });
   }
@@ -274,118 +482,133 @@ class RouteModal {
     document.getElementById("buildBtnText").textContent = btnText;
   }
 
-  addStage() {
-    const stageIndex = this.stages.length;
-    const stageHTML = `
-      <div class="stage-card" data-stage="${stageIndex}">
-        <div class="stage-header">
-          <span class="stage-number">Этап ${stageIndex + 1}</span>
-          <button class="remove-stage-btn" data-stage="${stageIndex}">&times;</button>
-        </div>
-        
-        <div class="stage-body">
-          <div class="stage-row">
-            <div class="stage-field">
-              <label>⏱️ Время (мин)</label>
-              <input type="number" class="stage-duration" data-stage="${stageIndex}" 
-                     value="30" min="5" max="180" step="5" />
-            </div>
-            
-            <div class="stage-field">
-              <label>🚶 Передвижение</label>
-              <select class="stage-transport" data-stage="${stageIndex}">
-                <option value="pedestrian">Пешком</option>
-                <option value="auto">Авто</option>
-                <option value="bicycle">Велосипед</option>
-                <option value="masstransit">Транспорт</option>
-              </select>
-            </div>
-          </div>
-          
-          <div class="stage-place-type">
-            <label class="radio-option-inline">
-              <input type="radio" name="placeType${stageIndex}" value="category" 
-                     class="stage-place-type-radio" data-stage="${stageIndex}" checked />
-              <span>Категория места</span>
-            </label>
-            <label class="radio-option-inline">
-              <input type="radio" name="placeType${stageIndex}" value="specific" 
-                     class="stage-place-type-radio" data-stage="${stageIndex}" />
-              <span>Конкретное место</span>
-            </label>
-          </div>
-          
-          <div class="stage-category-select" data-stage="${stageIndex}">
-            <label>🏛️ Категория</label>
-            <select class="stage-category" data-stage="${stageIndex}">
-              <option value="кафе">☕ Кафе</option>
-              <option value="парк">🌳 Парк</option>
-              <option value="музей">🏛️ Музей</option>
-              <option value="памятник">🗿 Памятник</option>
-              <option value="ресторан">🍽️ Ресторан</option>
-              <option value="бар">🍺 Бар</option>
-              <option value="магазин">🛍️ Магазин</option>
-            </select>
-          </div>
-          
-          <div class="stage-specific-place" data-stage="${stageIndex}" style="display: none;">
-            <label>📍 Адрес или название</label>
-            <input type="text" class="stage-place-input location-input" 
-                   data-stage="${stageIndex}" placeholder="Введите адрес или название места" />
-          </div>
-        </div>
-      </div>
-    `;
-
-    document.getElementById("stagesContainer").insertAdjacentHTML("beforeend", stageHTML);
-    
-    this.stages.push({
-      duration: 30,
-      transport: 'pedestrian',
-      placeType: 'category',
-      category: 'кафе',
-      specificPlace: null
-    });
-
-    // Обработчики для нового этапа
-    const stageCard = document.querySelector(`.stage-card[data-stage="${stageIndex}"]`);
-    
-    stageCard.querySelector('.remove-stage-btn').addEventListener('click', () => {
-      this.removeStage(stageIndex);
-    });
-
-    stageCard.querySelectorAll('.stage-place-type-radio').forEach(radio => {
-      radio.addEventListener('change', (e) => {
-        const categoryDiv = stageCard.querySelector('.stage-category-select');
-        const specificDiv = stageCard.querySelector('.stage-specific-place');
-        
-        if (e.target.value === 'category') {
-          categoryDiv.style.display = 'block';
-          specificDiv.style.display = 'none';
-        } else {
-          categoryDiv.style.display = 'none';
-          specificDiv.style.display = 'block';
-        }
-      });
-    });
-
-    // Автодополнение для конкретного места
-    const placeInput = stageCard.querySelector('.stage-place-input');
-    this.setupYandexSuggestForElement(placeInput);
+  openWalkModal() {
+    document.getElementById('addWalkModal').classList.add('active');
   }
 
-  removeStage(index) {
-    const stageCard = document.querySelector(`.stage-card[data-stage="${index}"]`);
-    if (stageCard) {
-      stageCard.remove();
-      this.stages[index] = null;
+  closeWalkModal() {
+    document.getElementById('addWalkModal').classList.remove('active');
+  }
+
+  openPlaceModal() {
+    document.getElementById('addPlaceModal').classList.add('active');
+  }
+
+  closePlaceModal() {
+    document.getElementById('addPlaceModal').classList.remove('active');
+  }
+
+  addWalkActivity() {
+    const duration = parseInt(document.getElementById('walkDuration').value);
+    const style = document.querySelector('input[name="walkStyle"]:checked').value;
+    const transport = document.getElementById('walkTransport').value;
+
+    const activity = {
+      type: 'walk',
+      duration_minutes: duration,
+      walking_style: style,
+      transport_mode: transport
+    };
+
+    this.activities.push(activity);
+    this.updateTimeline();
+    this.closeWalkModal();
+  }
+
+  addPlaceActivity() {
+    const activeTab = document.querySelector('.place-tab.active').dataset.tab;
+    const routeTime = parseInt(document.getElementById('placeRouteTime').value);
+    const stayTime = parseInt(document.getElementById('placeStayTime').value);
+    const transport = document.getElementById('placeTransport').value;
+
+    let activity = {
+      type: 'place',
+      duration_minutes: routeTime + stayTime,
+      time_at_place: stayTime,
+      transport_mode: transport
+    };
+
+    if (activeTab === 'category') {
+      activity.category = document.querySelector('input[name="placeCategory"]:checked').value;
+    } else {
+      const placeAddress = document.getElementById('specificPlaceInput').value.trim();
+      if (!placeAddress) {
+        this.showNotification('⚠️ Укажите адрес или название места', 'error');
+        return;
+      }
+      activity.specificPlaceAddress = placeAddress; // Сохраняем для геокодирования
     }
+
+    this.activities.push(activity);
+    this.updateTimeline();
+    this.closePlaceModal();
+
+    // Сброс формы
+    document.getElementById('specificPlaceInput').value = '';
+  }
+
+  updateTimeline() {
+    const timeline = document.getElementById('activitiesTimeline');
     
-    // Пересчитываем номера оставшихся этапов
-    const remainingStages = document.querySelectorAll('.stage-card');
-    remainingStages.forEach((card, idx) => {
-      card.querySelector('.stage-number').textContent = `Этап ${idx + 1}`;
-    });
+    if (this.activities.length === 0) {
+      timeline.innerHTML = '<div class="timeline-empty"><p>🎯 Добавьте активности, чтобы создать прогулку</p></div>';
+      this.totalDuration = 0;
+    } else {
+      let html = '';
+      this.totalDuration = 0;
+
+      this.activities.forEach((activity, index) => {
+        this.totalDuration += activity.duration_minutes;
+        
+        let icon, title, details;
+        
+        if (activity.type === 'walk') {
+          icon = activity.transport_mode === 'pedestrian' ? '🚶' : 
+                 activity.transport_mode === 'bicycle' ? '🚴' :
+                 activity.transport_mode === 'auto' ? '🚗' : '🚌';
+          title = activity.walking_style === 'scenic' ? 'Живописная прогулка' : 'Прямая прогулка';
+          details = `${activity.duration_minutes} мин`;
+        } else {
+          icon = activity.category === 'кафе' ? '☕' :
+                 activity.category === 'ресторан' ? '🍽️' :
+                 activity.category === 'парк' ? '🌳' :
+                 activity.category === 'музей' ? '🏛️' :
+                 activity.category === 'памятник' ? '🗿' :
+                 activity.category === 'бар' ? '🍺' :
+                 activity.category === 'магазин' ? '🛍️' : '📍';
+          title = activity.specificPlaceAddress || activity.category;
+          details = `${activity.duration_minutes} мин (на месте ${activity.time_at_place} мин)`;
+        }
+
+        html += `
+          <div class="timeline-item" data-index="${index}">
+            <div class="timeline-item-icon">${icon}</div>
+            <div class="timeline-item-content">
+              <div class="timeline-item-title">${title}</div>
+              <div class="timeline-item-details">${details}</div>
+            </div>
+            <button class="timeline-item-remove" data-index="${index}">×</button>
+          </div>
+        `;
+      });
+
+      timeline.innerHTML = html;
+
+      // Обработчики удаления
+      timeline.querySelectorAll('.timeline-item-remove').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const index = parseInt(e.currentTarget.dataset.index);
+          this.removeActivity(index);
+        });
+      });
+    }
+
+    document.getElementById('totalTimeDisplay').textContent = `${this.totalDuration} мин`;
+  }
+
+  removeActivity(index) {
+    this.activities.splice(index, 1);
+    this.updateTimeline();
   }
 
   setupYandexSuggest(inputId) {
@@ -454,53 +677,9 @@ class RouteModal {
       return;
     }
 
-    // Собираем данные об этапах
-    const stagesData = [];
-    const stageCards = document.querySelectorAll('.stage-card');
-    
-    if (stageCards.length === 0) {
-      this.showNotification('⚠️ Добавьте хотя бы один этап прогулки', 'error');
+    if (this.activities.length === 0) {
+      this.showNotification('⚠️ Добавьте хотя бы одну активность', 'error');
       return;
-    }
-
-    for (const card of stageCards) {
-      const stageIndex = parseInt(card.dataset.stage);
-      const duration = parseInt(card.querySelector('.stage-duration').value);
-      const transport = card.querySelector('.stage-transport').value;
-      const placeType = card.querySelector('input[name="placeType' + stageIndex + '"]:checked').value;
-      
-      let stageData = {
-        duration_minutes: duration,
-        transport_mode: transport,
-        alternatives_count: 3
-      };
-
-      if (placeType === 'category') {
-        const category = card.querySelector('.stage-category').value;
-        stageData.category = category;
-      } else {
-        const placeAddress = card.querySelector('.stage-place-input').value.trim();
-        if (!placeAddress) {
-          this.showNotification(`⚠️ Этап ${stageCards.length > 1 ? stageIndex + 1 : ''}: укажите место или выберите категорию`, 'error');
-          return;
-        }
-        
-        // Геокодируем конкретное место
-        try {
-          this.showLoading(true, 'Определяем координаты мест...');
-          const coords = await this.geocodeAddress(placeAddress);
-          stageData.specific_place = {
-            name: placeAddress,
-            coords: coords
-          };
-        } catch (e) {
-          this.showLoading(false);
-          this.showNotification(`⚠️ Не удалось найти место: ${placeAddress}`, 'error');
-          return;
-        }
-      }
-
-      stagesData.push(stageData);
     }
 
     const returnToStart = document.querySelector('input[name="routeEnd"]:checked').value === 'return';
@@ -511,7 +690,7 @@ class RouteModal {
       return;
     }
 
-    this.showLoading(true, 'Геокодируем адреса...');
+    this.showLoading(true, 'Определяем координаты...');
     
     try {
       const startCoords = await this.geocodeAddress(startPoint);
@@ -521,12 +700,35 @@ class RouteModal {
         endCoords = await this.geocodeAddress(endPoint);
       }
 
+      // Геокодируем конкретные места
+      const activitiesData = [];
+      for (const activity of this.activities) {
+        const actData = { ...activity };
+        
+        if (activity.type === 'place' && activity.specificPlaceAddress) {
+          try {
+            const coords = await this.geocodeAddress(activity.specificPlaceAddress);
+            actData.specific_place = {
+              name: activity.specificPlaceAddress,
+              coords: coords
+            };
+            delete actData.specificPlaceAddress;
+          } catch (e) {
+            this.showLoading(false);
+            this.showNotification(`⚠️ Не удалось найти место: ${activity.specificPlaceAddress}`, 'error');
+            return;
+          }
+        }
+        
+        activitiesData.push(actData);
+      }
+
       const requestData = {
         start_point: {
           name: startPoint,
           coords: startCoords
         },
-        stages: stagesData,
+        activities: activitiesData,
         return_to_start: returnToStart,
         end_point: endCoords ? {
           name: endPoint,
@@ -534,7 +736,7 @@ class RouteModal {
         } : null
       };
 
-      this.showLoading(true, 'Ищем места и строим оптимальный маршрут...');
+      this.showLoading(true, 'Строим прогулку с учетом ваших активностей...');
 
       const response = await fetch('api.php?action=build_smart_walk', {
         method: 'POST',
@@ -575,35 +777,31 @@ class RouteModal {
   }
 
   displaySmartWalkOnMap(walkData, startPoint, endPoint, returnToStart) {
-    if (!window.displaySmartWalk) {
-      // Создаем функцию отображения, если её нет
-      window.displaySmartWalk = (data, start, end, returnStart) => {
-        // Здесь будет логика отображения с интерактивными слайдерами
-        console.log('Smart walk data:', data);
-        
-        // Пока используем старую функцию отображения
-        if (window.displaySmartRoute) {
-          // Преобразуем данные в старый формат
-          const points = [start];
-          data.stages.forEach(stage => {
-            points.push(stage.selected_place);
-          });
-          if (returnStart) {
-            points.push(start);
-          } else if (end) {
-            points.push(end);
-          }
-          
-          window.displaySmartRoute({
-            ordered_route: points,
-            total_time_minutes: data.total_time_minutes,
-            warnings: data.warnings || []
-          });
-        }
-      };
-    }
+    // Собираем все точки для отображения
+    const points = [startPoint];
     
-    window.displaySmartWalk(walkData, startPoint, endPoint, returnToStart);
+    walkData.activities.forEach(activity => {
+      if (activity.activity_type === 'walk' && activity.route_segment) {
+        points.push(...activity.route_segment);
+      } else if (activity.activity_type === 'place' && activity.selected_place) {
+        points.push(activity.selected_place);
+      }
+    });
+    
+    if (returnToStart) {
+      points.push(startPoint);
+    } else if (endPoint) {
+      points.push(endPoint);
+    }
+
+    // Используем старую функцию отображения (адаптируем данные)
+    if (window.displaySmartRoute) {
+      window.displaySmartRoute({
+        ordered_route: points,
+        total_time_minutes: walkData.total_duration_minutes,
+        warnings: walkData.warnings || []
+      });
+    }
   }
 
   async buildSimpleRoute() {
@@ -736,10 +934,10 @@ class RouteModal {
     document.getElementById("simpleStartPoint").value = "";
     document.getElementById("simpleEndPoint").value = "";
     document.getElementById("simpleWaypointsContainer").innerHTML = "";
-    document.getElementById("stagesContainer").innerHTML = "";
     this.waypoints = [];
-    this.stages = [];
-    this.addStage(); // Добавляем один этап по умолчанию
+    this.activities = [];
+    this.totalDuration = 0;
+    this.updateTimeline();
     
     document.querySelector('input[name="routeEnd"][value="return"]').checked = true;
     document.querySelector('input[name="simpleTransport"][value="auto"]').checked = true;

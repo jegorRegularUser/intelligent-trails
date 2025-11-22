@@ -21,7 +21,7 @@ function callBackendAPI($endpoint, $method = 'GET', $data = null) {
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 45);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 60);
     
     if ($method === 'POST') {
         curl_setopt($ch, CURLOPT_POST, true);

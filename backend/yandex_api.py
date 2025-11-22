@@ -7,15 +7,15 @@ from typing import List, Dict, Any, Tuple, Optional
 YANDEX_API_KEY = os.getenv("YANDEX_API_KEY", "")
 MAX_POINTS_FOR_MATRIX = 20
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
-
-# Yandex Router API для реальных маршрутов
 YANDEX_ROUTER_URL = "https://api.routing.yandex.net/v2/route"
+
 
 async def search_places(center_coords: List[float], categories: List[str], radius_m: int = 2000) -> List[Dict[str, Any]]:
     """Поиск мест через OSM Overpass API"""
     osm_tags = {
         "кафе": '["amenity"="cafe"]',
         "парк": '["leisure"="park"]',
+        "сквер": '["leisure"="garden"]',
         "музей": '["tourism"="museum"]',
         "памятник": '["historic"="memorial"]',
         "ресторан": '["amenity"="restaurant"]',
@@ -32,6 +32,9 @@ async def search_places(center_coords: List[float], categories: List[str], radiu
         if tag:
             query_parts.append(f'node{tag}(around:{radius_m},{lat},{lon});')
             query_parts.append(f'way{tag}(around:{radius_m},{lat},{lon});')
+
+    if not query_parts:
+        return []
 
     full_query = f"""
     [out:json][timeout:25];
@@ -73,6 +76,8 @@ async def search_places(center_coords: List[float], categories: List[str], radiu
                         cat_found = "кафе"
                     elif "park" in tags_str:
                         cat_found = "парк"
+                    elif "garden" in tags_str:
+                        cat_found = "сквер"
                     elif "museum" in tags_str:
                         cat_found = "музей"
                     elif "memorial" in tags_str:
@@ -104,7 +109,7 @@ async def search_places(center_coords: List[float], categories: List[str], radiu
     
     results = list(unique.values())
     print(f"[OSM] Total unique places: {len(results)}")
-    return results[:50]  # Возвращаем больше для выбора вариантов
+    return results[:50]
 
 
 def calculate_geo_distance(c1, c2):
@@ -120,6 +125,31 @@ def calculate_geo_distance(c1, c2):
     return int(R * c)
 
 
+def point_at_distance(start_coords: List[float], distance_m: int, bearing_deg: float = 0) -> List[float]:
+    """
+    Вычислить точку на заданном расстоянии и направлении от стартовой
+    bearing_deg: направление в градусах (0 = север, 90 = восток)
+    """
+    lat1, lon1 = start_coords
+    R = 6371000  # Радиус Земли в метрах
+    
+    lat1_rad = math.radians(lat1)
+    lon1_rad = math.radians(lon1)
+    bearing_rad = math.radians(bearing_deg)
+    
+    lat2_rad = math.asin(
+        math.sin(lat1_rad) * math.cos(distance_m / R) +
+        math.cos(lat1_rad) * math.sin(distance_m / R) * math.cos(bearing_rad)
+    )
+    
+    lon2_rad = lon1_rad + math.atan2(
+        math.sin(bearing_rad) * math.sin(distance_m / R) * math.cos(lat1_rad),
+        math.cos(distance_m / R) - math.sin(lat1_rad) * math.sin(lat2_rad)
+    )
+    
+    return [math.degrees(lat2_rad), math.degrees(lon2_rad)]
+
+
 def smart_filter(start, points, limit, priority_categories=None):
     """Фильтрация точек по расстоянию от старта"""
     if len(points) <= limit:
@@ -130,11 +160,7 @@ def smart_filter(start, points, limit, priority_categories=None):
 
 
 async def get_routing_matrix(points: List[Dict[str, Any]], mode: str) -> Tuple[List[List[int]], float]:
-    """
-    Построение матрицы времени между точками используя Yandex Router API
-    
-    mode: 'pedestrian', 'auto', 'masstransit', 'bicycle'
-    """
+    """Построение матрицы времени между точками используя Yandex Router API"""
     n = len(points)
     matrix = [[0]*n for _ in range(n)]
     
@@ -144,7 +170,6 @@ async def get_routing_matrix(points: List[Dict[str, Any]], mode: str) -> Tuple[L
     
     print(f"[MATRIX] Building for {n} points with mode={mode}")
     
-    # Маппинг режимов передвижения
     mode_mapping = {
         'pedestrian': 'walking',
         'auto': 'driving',
@@ -169,7 +194,6 @@ async def get_routing_matrix(points: List[Dict[str, Any]], mode: str) -> Tuple[L
                         yandex_mode
                     )))
         
-        # Выполняем запросы батчами по 10
         batch_size = 10
         for batch_start in range(0, len(tasks), batch_size):
             batch = tasks[batch_start:batch_start + batch_size]
@@ -181,17 +205,14 @@ async def get_routing_matrix(points: List[Dict[str, Any]], mode: str) -> Tuple[L
                     matrix[i][j] = result
                     successful_requests += 1
                 else:
-                    # Fallback для неудачных запросов
                     dist_m = calculate_geo_distance(points[i]['coords'], points[j]['coords'])
                     matrix[i][j] = estimate_time_by_mode(dist_m, mode)
             
-            # Задержка между батчами
             await asyncio.sleep(0.1)
     
     success_rate = successful_requests / total_requests if total_requests > 0 else 0
     print(f"[MATRIX] Success rate: {success_rate:.1%} ({successful_requests}/{total_requests})")
     
-    # Проверка на пустую матрицу
     if successful_requests == 0:
         print("[MATRIX] All requests failed, using fallback")
         return generate_fallback_matrix_with_mode(points, mode), 0.0
@@ -217,21 +238,19 @@ async def get_single_route_time(client: httpx.AsyncClient, start_coords: List[fl
                 return int(total_duration)
         
         return -1
-    except Exception as e:
+    except Exception:
         return -1
 
 
 def estimate_time_by_mode(distance_m: int, mode: str) -> int:
     """Оценка времени по расстоянию и режиму передвижения"""
-    # Средние скорости (м/с)
     speeds = {
-        'pedestrian': 1.25,  # 4.5 км/ч
-        'auto': 10.0,        # 36 км/ч (город)
-        'masstransit': 7.0,  # 25 км/ч
-        'bicycle': 4.5       # 16 км/ч
+        'pedestrian': 1.25,
+        'auto': 10.0,
+        'masstransit': 7.0,
+        'bicycle': 4.5
     }
     
-    # Коэффициенты извилистости пути
     tortuosity = {
         'pedestrian': 1.35,
         'auto': 1.25,
@@ -265,9 +284,7 @@ def generate_fallback_matrix(points: List[Dict[str, Any]]) -> List[List[int]]:
 
 
 async def get_route_geometry(points: List[List[float]], mode: str) -> Optional[List[List[float]]]:
-    """
-    Получить геометрию (точки) реального маршрута для отрисовки на карте
-    """
+    """Получить геометрию (точки) реального маршрута для отрисовки на карте"""
     if not YANDEX_API_KEY or len(points) < 2:
         return None
     
@@ -279,8 +296,6 @@ async def get_route_geometry(points: List[List[float]], mode: str) -> Optional[L
     }
     
     yandex_mode = mode_mapping.get(mode, 'walking')
-    
-    # Формируем waypoints
     waypoints_str = "|".join([f"{p[1]},{p[0]}" for p in points])
     
     try:
@@ -296,13 +311,11 @@ async def get_route_geometry(points: List[List[float]], mode: str) -> Optional[L
             if response.status_code == 200:
                 data = response.json()
                 if 'route' in data and 'legs' in data['route']:
-                    # Извлекаем все точки геометрии
                     geometry = []
                     for leg in data['route']['legs']:
                         for step in leg.get('steps', []):
                             polyline = step.get('polyline', {}).get('points', [])
                             for point in polyline:
-                                # point = [lat, lon]
                                 geometry.append([point[0], point[1]])
                     
                     return geometry if geometry else None

@@ -16,46 +16,54 @@ class Point(BaseModel):
     coords: List[float]
 
 
-class StageSettings(BaseModel):
-    """Настройки для одного этапа прогулки"""
-    duration_minutes: int  # Время на этап
-    transport_mode: Literal["pedestrian", "auto", "masstransit", "bicycle"] = "pedestrian"
-    category: Optional[str] = None  # Категория места (если не конкретное место)
-    specific_place: Optional[Point] = None  # Конкретное место (если выбрано)
-    alternatives_count: int = 3  # Сколько альтернатив генерировать
+class Activity(BaseModel):
+    """Активность в прогулке"""
+    type: Literal["walk", "place"]  # Прогулка или конкретное место
+    duration_minutes: int
+    
+    # Для type="walk"
+    walking_style: Optional[Literal["scenic", "direct"]] = "scenic"  # Живописный или прямой путь
+    
+    # Для type="place"
+    category: Optional[str] = None  # Категория места
+    specific_place: Optional[Point] = None  # Или конкретное место
+    time_at_place: Optional[int] = 15  # Время на месте (по умолчанию 15 мин)
+    
+    # Общее
+    transport_mode: Literal["pedestrian", "auto", "bicycle", "masstransit"] = "pedestrian"
 
 
 class SmartWalkRequest(BaseModel):
-    """Новый формат запроса для поэтапной прогулки"""
+    """Запрос на построение прогулки с активностями"""
     start_point: Point
-    stages: List[StageSettings]
+    activities: List[Activity]  # Последовательность активностей
     return_to_start: bool = False
     end_point: Optional[Point] = None
 
 
-class StageAlternative(BaseModel):
-    """Альтернативный вариант места для этапа"""
-    place: Point
-    category: str
-    estimated_time_minutes: int
-
-
-class StageResult(BaseModel):
-    """Результат одного этапа"""
-    stage_index: int
+class ActivityResult(BaseModel):
+    """Результат одной активности"""
+    activity_index: int
+    activity_type: str
     duration_minutes: int
     transport_mode: str
-    selected_place: Point
-    alternatives: List[StageAlternative]  # Другие варианты для слайдера
-    category: str
+    
+    # Для walk
+    route_segment: Optional[List[Point]] = None  # Точки маршрута прогулки
+    
+    # Для place
+    selected_place: Optional[Point] = None
+    alternatives: Optional[List[Dict]] = None  # Альтернативные места
+    category: Optional[str] = None
+    time_at_place: Optional[int] = None
 
 
 class SmartWalkResponse(BaseModel):
-    """Ответ с полным маршрутом"""
-    stages: List[StageResult]
-    total_time_minutes: int
+    """Ответ с построенной прогулкой"""
+    activities: List[ActivityResult]
+    total_duration_minutes: int
     total_distance_meters: Optional[int] = None
-    route_geometry: Optional[List[List[float]]] = None  # Для отрисовки реального маршрута
+    full_route_geometry: Optional[List[List[float]]] = None
     warnings: List[str] = []
 
 
@@ -85,105 +93,178 @@ class RouteResponse(BaseModel):
 @app.post("/calculate_smart_walk", response_model=SmartWalkResponse)
 async def calculate_smart_walk(request: SmartWalkRequest):
     """
-    Новый эндпоинт для поэтапных прогулок с альтернативами
+    Построение прогулки с активностями (прогулки + места)
     """
     if not yandex_api.YANDEX_API_KEY:
         raise HTTPException(status_code=500, detail="Yandex API key is not configured.")
 
     warnings = []
-    stage_results = []
+    activity_results = []
     current_point = request.start_point
-    total_time = 0
+    total_duration = 0
     all_route_points = [request.start_point.coords]
 
-    for stage_idx, stage in enumerate(request.stages):
-        print(f"[STAGE {stage_idx + 1}] Processing...")
+    for act_idx, activity in enumerate(request.activities):
+        print(f"[ACTIVITY {act_idx + 1}] Type: {activity.type}")
         
-        # Если указано конкретное место - используем его
-        if stage.specific_place:
-            selected_place = stage.specific_place
-            alternatives = []
+        if activity.type == "walk":
+            # === ПРОГУЛКА ===
+            walk_duration = activity.duration_minutes
+            
+            if activity.walking_style == "scenic":
+                # Живописная прогулка - ищем интересные промежуточные точки
+                try:
+                    # Ищем парки, скверы, набережные в радиусе
+                    scenic_places = await yandex_api.search_places(
+                        center_coords=current_point.coords,
+                        categories=["парк", "сквер"],
+                        radius_m=int(walk_duration * 75)  # ~75м/мин пешком
+                    )
+                    
+                    if scenic_places:
+                        # Выбираем 1-2 живописные точки для прохода
+                        scenic_places.sort(
+                            key=lambda p: yandex_api.calculate_geo_distance(current_point.coords, p['coords'])
+                        )
+                        
+                        waypoints = [Point(name=scenic_places[0]['name'], coords=scenic_places[0]['coords'])]
+                        if len(scenic_places) > 1 and walk_duration > 30:
+                            waypoints.append(Point(name=scenic_places[1]['name'], coords=scenic_places[1]['coords']))
+                        
+                        # Конечная точка прогулки - возвращаемся ближе к центру
+                        walk_end = waypoints[-1]
+                    else:
+                        # Если нет парков - просто идём по направлению
+                        angle = act_idx * 1.2  # Разный угол для каждой прогулки
+                        walk_end = yandex_api.point_at_distance(
+                            current_point.coords, 
+                            walk_duration * 60, 
+                            angle
+                        )
+                        waypoints = [Point(name="Точка прогулки", coords=walk_end)]
+                        
+                except Exception as e:
+                    print(f"[WALK] Error finding scenic route: {e}")
+                    # Fallback - просто идём прямо
+                    walk_end = yandex_api.point_at_distance(current_point.coords, walk_duration * 60, 0)
+                    waypoints = [Point(name="Точка прогулки", coords=walk_end)]
+            else:
+                # Прямая прогулка - следующая активность или конец
+                if act_idx < len(request.activities) - 1:
+                    # Есть следующая активность - идём к ней
+                    next_act = request.activities[act_idx + 1]
+                    if next_act.type == "place" and next_act.specific_place:
+                        walk_end = next_act.specific_place
+                        waypoints = [walk_end]
+                    else:
+                        # Следующая активность - категория, идём в её направлении
+                        walk_end = yandex_api.point_at_distance(current_point.coords, walk_duration * 60, 0)
+                        waypoints = [Point(name="Промежуточная точка", coords=walk_end)]
+                else:
+                    # Последняя активность - идём к финишу или старту
+                    if request.return_to_start:
+                        walk_end = request.start_point
+                    elif request.end_point:
+                        walk_end = request.end_point
+                    else:
+                        walk_end = yandex_api.point_at_distance(current_point.coords, walk_duration * 60, 0)
+                        walk_end = Point(name="Конец прогулки", coords=walk_end)
+                    waypoints = [walk_end]
+            
+            activity_results.append(ActivityResult(
+                activity_index=act_idx,
+                activity_type="walk",
+                duration_minutes=walk_duration,
+                transport_mode=activity.transport_mode,
+                route_segment=[current_point] + waypoints
+            ))
+            
+            current_point = waypoints[-1]
+            all_route_points.extend([w.coords for w in waypoints])
+            total_duration += walk_duration
+            
         else:
-            # Ищем места по категории
-            try:
-                places = await yandex_api.search_places(
-                    center_coords=current_point.coords,
-                    categories=[stage.category] if stage.category else [],
-                    radius_m=3000
-                )
-            except Exception as e:
-                print(f"[STAGE {stage_idx + 1}] Search error: {e}")
-                places = []
+            # === МЕСТО (КАФЕ, МУЗЕЙ и т.д.) ===
+            time_to_place = activity.duration_minutes - (activity.time_at_place or 0)
             
-            if not places:
-                warnings.append(f"Этап {stage_idx + 1}: места категории '{stage.category}' не найдены")
-                continue
-            
-            # Фильтруем по доступности в пределах времени этапа
-            accessible_places = []
-            for place in places[:20]:  # Проверяем топ-20 ближайших
-                dist = yandex_api.calculate_geo_distance(current_point.coords, place['coords'])
-                est_time = yandex_api.estimate_time_by_mode(dist, stage.transport_mode) // 60
+            if activity.specific_place:
+                # Конкретное место указано
+                selected_place = activity.specific_place
+                alternatives = []
+            else:
+                # Ищем места по категории
+                try:
+                    places = await yandex_api.search_places(
+                        center_coords=current_point.coords,
+                        categories=[activity.category] if activity.category else [],
+                        radius_m=int(time_to_place * 75)  # Радиус по времени до места
+                    )
+                except Exception as e:
+                    print(f"[PLACE] Search error: {e}")
+                    places = []
                 
-                if est_time <= stage.duration_minutes:
-                    accessible_places.append({
-                        **place,
-                        'estimated_time': est_time
-                    })
+                if not places:
+                    warnings.append(f"Активность {act_idx + 1}: места категории '{activity.category}' не найдены")
+                    continue
+                
+                # Фильтруем доступные места
+                accessible = []
+                for place in places[:20]:
+                    dist = yandex_api.calculate_geo_distance(current_point.coords, place['coords'])
+                    est_time = yandex_api.estimate_time_by_mode(dist, activity.transport_mode) // 60
+                    
+                    if est_time <= time_to_place:
+                        accessible.append({**place, 'est_time': est_time})
+                
+                if not accessible:
+                    warnings.append(f"Активность {act_idx + 1}: нет мест в пределах {time_to_place} мин")
+                    continue
+                
+                accessible.sort(key=lambda p: p['est_time'])
+                
+                selected_place = Point(name=accessible[0]['name'], coords=accessible[0]['coords'])
+                
+                # Альтернативы для слайдера
+                alternatives = [
+                    {
+                        'place': Point(name=p['name'], coords=p['coords']),
+                        'category': p.get('category', activity.category or 'место'),
+                        'estimated_time_minutes': p['est_time']
+                    }
+                    for p in accessible[1:4]
+                ]
             
-            if not accessible_places:
-                warnings.append(f"Этап {stage_idx + 1}: нет доступных мест в пределах {stage.duration_minutes} мин")
-                continue
+            activity_results.append(ActivityResult(
+                activity_index=act_idx,
+                activity_type="place",
+                duration_minutes=activity.duration_minutes,
+                transport_mode=activity.transport_mode,
+                selected_place=selected_place,
+                alternatives=alternatives,
+                category=activity.category or "конкретное место",
+                time_at_place=activity.time_at_place
+            ))
             
-            # Сортируем по расстоянию
-            accessible_places.sort(key=lambda p: p['estimated_time'])
-            
-            # Выбираем лучший вариант
-            selected_place = Point(
-                name=accessible_places[0]['name'],
-                coords=accessible_places[0]['coords']
-            )
-            
-            # Генерируем альтернативы для слайдера
-            alternatives = []
-            for alt_place in accessible_places[1:stage.alternatives_count + 1]:
-                alternatives.append(StageAlternative(
-                    place=Point(name=alt_place['name'], coords=alt_place['coords']),
-                    category=alt_place.get('category', stage.category or 'место'),
-                    estimated_time_minutes=alt_place['estimated_time']
-                ))
-        
-        # Добавляем результат этапа
-        stage_results.append(StageResult(
-            stage_index=stage_idx,
-            duration_minutes=stage.duration_minutes,
-            transport_mode=stage.transport_mode,
-            selected_place=selected_place,
-            alternatives=alternatives,
-            category=stage.category or "конкретное место"
-        ))
-        
-        all_route_points.append(selected_place.coords)
-        total_time += stage.duration_minutes
-        current_point = selected_place
-    
-    # Если возврат к началу
+            current_point = selected_place
+            all_route_points.append(selected_place.coords)
+            total_duration += activity.duration_minutes
+
+    # Возврат к началу или к финишу
     if request.return_to_start:
         all_route_points.append(request.start_point.coords)
     elif request.end_point:
         all_route_points.append(request.end_point.coords)
-    
-    # Получаем геометрию реального маршрута
+
+    # Получаем геометрию полного маршрута
     route_geometry = None
     if len(all_route_points) >= 2:
-        # Используем режим первого этапа (можно улучшить)
-        main_mode = request.stages[0].transport_mode if request.stages else 'pedestrian'
+        main_mode = request.activities[0].transport_mode if request.activities else 'pedestrian'
         route_geometry = await yandex_api.get_route_geometry(all_route_points, main_mode)
-    
+
     return SmartWalkResponse(
-        stages=stage_results,
-        total_time_minutes=total_time,
-        route_geometry=route_geometry,
+        activities=activity_results,
+        total_duration_minutes=total_duration,
+        full_route_geometry=route_geometry,
         warnings=warnings
     )
 
@@ -221,11 +302,7 @@ async def calculate_route_endpoint(request: RouteRequest):
     if request.end_point and not request.return_to_start:
         limit -= 1
 
-    filtered_places = yandex_api.smart_filter(
-        start_point_dict, 
-        places_of_interest, 
-        limit=limit
-    )
+    filtered_places = yandex_api.smart_filter(start_point_dict, places_of_interest, limit=limit)
     
     all_points_dicts = [start_point_dict]
     all_points_dicts.extend(filtered_places)
