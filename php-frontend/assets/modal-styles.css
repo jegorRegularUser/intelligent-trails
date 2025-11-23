@@ -339,38 +339,84 @@
    ОПЦИИ ОКОНЧАНИЯ МАРШРУТА
    ============================================ */
 
+/* ============================================
+   ОПЦИИ ОКОНЧАНИЯ МАРШРУТА
+   ============================================ */
+
 .route-end-options {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 15px;
-    margin-bottom: 22px;
+  margin-top: 25px;
+}
+
+.route-end-options .section-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #f0f2f5;
+}
+
+.route-end-options-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
 }
 
 .radio-option {
-    cursor: pointer;
+  cursor: pointer;
 }
 
 .radio-option input {
-    display: none;
+  display: none;
 }
 
 .option-card {
-    padding: 16px;
-    background: #f9fafb;
-    border: 2px solid #e5e7eb;
-    border-radius: 12px;
-    text-align: center;
-    transition: all 0.3s ease;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-    font-size: 15px;
-    font-weight: 600;
+  padding: 16px;
+  background: #f9fafb;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  text-align: center;
+  transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .option-icon {
-    font-size: 28px;
+  font-size: 28px;
+}
+
+.radio-option input:checked ~ .option-card {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-color: #667eea;
+  color: white;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(102, 126, 234, 0.3);
+}
+
+.option-card:hover {
+  border-color: #667eea;
+}
+
+/* Адаптивность для мобильных */
+@media (max-width: 768px) {
+  .route-end-options-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .option-card {
+    padding: 14px;
+    font-size: 14px;
+  }
+  
+  .option-icon {
+    font-size: 24px;
+  }
 }
 
 .radio-option input:checked ~ .option-card {
