@@ -1,0 +1,99 @@
+/* Inputs & Selects */
+input, select, textarea {
+  border: 2px solid var(--gray-200);
+  border-radius: 12px;
+  padding: 14px 18px;
+  background: white;
+  color: var(--gray-800);
+  margin-bottom: 16px;
+  width: 100%;
+  font-size: 15px;
+  transition: all var(--transition-base);
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.15);
+}
+
+/* Form Group */
+.form-group {
+  margin-bottom: 25px;
+}
+
+.form-group label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 10px;
+  color: var(--gray-700);
+  font-size: 15px;
+}
+
+.form-control {
+  width: 100%;
+  padding: 14px 18px;
+  border: 2px solid var(--gray-200);
+  border-radius: 12px;
+  font-size: 15px;
+  transition: all var(--transition-base);
+}
+
+.form-control:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.15);
+}
+
+/* Yandex Button */
+.yandex-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px;
+  background: white;
+  border: 2px solid var(--gray-200);
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--gray-700);
+  transition: all var(--transition-base);
+}
+
+.yandex-btn:hover {
+  border-color: var(--primary);
+  background: var(--gray-50);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.15);
+}
+
+.yandex-btn img {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+/* OR Separator */
+.or-separator {
+  text-align: center;
+  margin: 30px 0;
+  position: relative;
+  color: var(--gray-400);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.or-separator::before,
+.or-separator::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 40%;
+  height: 1px;
+  background: var(--gray-200);
+}
+
+.or-separator::before { left: 0; }
+.or-separator::after { right: 0; }

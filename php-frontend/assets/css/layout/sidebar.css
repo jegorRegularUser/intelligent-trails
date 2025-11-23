@@ -1,0 +1,220 @@
+/* Route Info Panel */
+.route-info-panel {
+  position: fixed;
+  top: 90px;
+  left: 25px;
+  width: 380px;
+  max-height: calc(100vh - 120px);
+  background: var(--white);
+  border-radius: 20px;
+  box-shadow: var(--shadow-2xl);
+  z-index: var(--z-dropdown);
+  overflow: hidden;
+  display: none;
+  flex-direction: column;
+  animation: slideInLeft 0.4s ease;
+}
+
+.route-info-panel.active {
+  display: flex;
+}
+
+/* Header */
+.route-info-header {
+  background: var(--primary-gradient);
+  color: white;
+  padding: 20px 25px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.route-info-header h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: white;
+}
+
+.close-panel-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  font-size: 28px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-base);
+  line-height: 1;
+}
+
+.close-panel-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: rotate(90deg);
+}
+
+/* Body with Stats */
+.route-info-body {
+  padding: 25px;
+  flex-shrink: 0;
+  border-bottom: 2px solid var(--gray-100);
+}
+
+.route-stat {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 15px;
+  background: var(--gray-50);
+  border-radius: 12px;
+  margin-bottom: 12px;
+}
+
+.route-stat:last-child {
+  margin-bottom: 0;
+}
+
+.stat-icon {
+  font-size: 32px;
+  flex-shrink: 0;
+}
+
+.stat-label {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: var(--gray-600);
+}
+
+.stat-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--gray-800);
+}
+
+/* Warnings */
+.route-warnings {
+  margin-top: 15px;
+  padding: 15px;
+  background: #fef3c7;
+  border-left: 4px solid var(--warning);
+  border-radius: 8px;
+  font-size: 14px;
+  color: #92400e;
+}
+
+.warning-item {
+  margin-top: 8px;
+}
+
+.warning-item:first-child {
+  margin-top: 0;
+}
+
+/* Scrollable Places List */
+.route-places-list {
+  padding: 20px 25px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.route-places-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.route-places-list::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.route-places-list::-webkit-scrollbar-thumb {
+  background: var(--primary-gradient);
+  border-radius: 10px;
+}
+
+.places-header {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--gray-800);
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--gray-100);
+}
+
+.place-item {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 12px 15px;
+  background: var(--gray-50);
+  border-radius: 10px;
+  margin-bottom: 10px;
+  transition: all var(--transition-base);
+  border: 2px solid transparent;
+}
+
+.place-item:hover {
+  background: #f0f4ff;
+  border-color: var(--primary);
+  transform: translateX(5px);
+}
+
+.place-item.start {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.1));
+  border-color: var(--success);
+}
+
+.place-item.end {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(220, 38, 38, 0.1));
+  border-color: var(--error);
+}
+
+.place-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: var(--primary-gradient);
+  color: white;
+  border-radius: 50%;
+  font-weight: 700;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.place-item.start .place-number {
+  background: linear-gradient(135deg, var(--success), #059669);
+}
+
+.place-item.end .place-number {
+  background: linear-gradient(135deg, var(--error), #dc2626);
+}
+
+.place-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gray-700);
+  flex: 1;
+  line-height: 1.4;
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .route-info-panel {
+    left: 15px;
+    right: 15px;
+    width: auto;
+    top: 80px;
+  }
+}
+
+@media (max-width: 480px) {
+  .route-info-panel {
+    max-height: calc(100vh - 100px);
+  }
+}
