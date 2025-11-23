@@ -16,7 +16,7 @@ export class RouteModal {
         this.currentRouteType = 'smart';
         this.waypoints = [];
         this.map = null;
-        
+        this.onReady = null;
         // Initialize modules
         this.activityManager = new ActivityManager();
         this.routeBuilder = null; // Will be set when map is ready
@@ -230,6 +230,14 @@ export class RouteModal {
         // Create walk and place modals (simplified versions)
         this.createWalkModal();
         this.createPlaceModal();
+        // В конструкторе:
+         // или передавайте через параметры
+
+// В конце createModal():
+if (typeof this.onReady === "function") {
+    this.onReady();
+}
+
     }
     
     createWalkModal() {
