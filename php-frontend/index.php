@@ -5,8 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Intelligent Trails - Умные прогулки и маршруты</title>
-    <link rel="stylesheet" href="assets/style.css">
-    <link rel="stylesheet" href="assets/landing-styles.css">
+    
+    <!-- Новая модульная архитектура CSS (включает landing.css) -->
+    <link rel="stylesheet" href="assets/css/main.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet">
 </head>
 <body>
@@ -141,7 +142,7 @@
                         <p>Вечерний отдых</p>
                     </div>
                     <div class="category-showcase-item">
-                        <div class="category-icon">🛍️</div>
+                        <div class="category-icon">🛑️</div>
                         <h4>Магазины</h4>
                         <p>Шопинг зоны</p>
                     </div>
@@ -273,7 +274,7 @@
         });
     });
 
-    // Анимация появления элементов - ИСПРАВЛЕНО
+    // Анимация появления элементов
     const observerOptions = {
         threshold: 0.1,
         rootMargin: '0px 0px -50px 0px'
@@ -285,14 +286,12 @@
                 entry.target.style.opacity = '1';
                 entry.target.style.transform = 'translateY(0)';
                 
-                // Очищаем inline стили после завершения анимации
                 setTimeout(() => {
                     entry.target.style.opacity = '';
                     entry.target.style.transform = '';
                     entry.target.style.transition = '';
-                }, 600); // Совпадает с длительностью transition
+                }, 600);
                 
-                // Отключаем наблюдение за элементом
                 observer.unobserve(entry.target);
             }
         });
