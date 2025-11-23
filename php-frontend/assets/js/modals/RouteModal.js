@@ -16,7 +16,7 @@ export class RouteModal {
         this.currentRouteType = 'smart';
         this.waypoints = [];
         this.map = null;
-        this.onReady = null;
+        
         // Initialize modules
         this.activityManager = new ActivityManager();
         this.routeBuilder = null; // Will be set when map is ready
@@ -26,20 +26,7 @@ export class RouteModal {
         window.activityManager = this.activityManager;
         window.routeModal = this;
         
-        if (typeof ymaps !== 'undefined' && ymaps.ready) {
-            ymaps.ready(() => this.init());
-        } else {
-            window.addEventListener('load', () => {
-                if (typeof ymaps !== 'undefined') {
-                    ymaps.ready(() => this.init());
-                } else {
-                    this.init();
-                }
-            });
-        }
-    }
-    
-    init() {
+        // КРИТИЧНО: создаём модалку СРАЗУ
         this.createModal();
         this.attachEventListeners();
         this.setupModules();
@@ -230,14 +217,6 @@ export class RouteModal {
         // Create walk and place modals (simplified versions)
         this.createWalkModal();
         this.createPlaceModal();
-        // В конструкторе:
-         // или передавайте через параметры
-
-// В конце createModal():
-if (typeof this.onReady === "function") {
-    this.onReady();
-}
-
     }
     
     createWalkModal() {
@@ -315,8 +294,16 @@ if (typeof this.onReady === "function") {
         // Waypoint button
         document.getElementById('addWaypointBtn').addEventListener('click', () => this.addWaypoint());
         
-        // Setup Yandex suggest
-        this.setupSuggests();
+        // Setup Yandex suggest when ymaps is ready
+        if (typeof ymaps !== 'undefined') {
+            this.setupSuggests();
+        } else {
+            window.addEventListener('load', () => {
+                if (typeof ymaps !== 'undefined') {
+                    ymaps.ready(() => this.setupSuggests());
+                }
+            });
+        }
     }
     
     setupSuggests() {
@@ -428,9 +415,13 @@ if (typeof this.onReady === "function") {
     }
     
     open() {
+        console.log('RouteModal.open() called, modal element:', this.modal);
         if (this.modal) {
             this.modal.style.display = 'flex';
             setTimeout(() => this.modal.classList.add('active'), 10);
+            console.log('Modal should be visible now');
+        } else {
+            console.error('Modal element not found!');
         }
     }
     
