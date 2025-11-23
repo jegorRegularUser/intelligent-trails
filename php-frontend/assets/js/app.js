@@ -20,7 +20,13 @@ function initApp() {
     
     // Make it globally accessible for legacy code compatibility
     window.routeModal = routeModal;
-    
+
+    // === ДОБАВЛЕНО: обработчик кнопки открытия модалки ===
+    const btn = document.getElementById('openRouteModal');
+    if (btn) {
+        btn.addEventListener('click', () => window.routeModal.open());
+    }
+
     console.log('✅ Application initialized successfully');
 }
 
