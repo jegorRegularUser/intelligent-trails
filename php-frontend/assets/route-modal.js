@@ -868,6 +868,10 @@ class RouteModal {
     } else {
       overlay.classList.remove('active');
     }
+     
+  }
+   setMap(mapInstance) {
+    this.map = mapInstance;
   }
 }
     
