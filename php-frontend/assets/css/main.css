@@ -1,17 +1,297 @@
-/* Import All CSS Modules */
+/* ==============================================
+   MAIN CSS - Import All Modules
+   ============================================== */
+
+/* Base Styles */
 @import 'base/variables.css';
 @import 'base/reset.css';
 @import 'base/typography.css';
 
+/* Layout */
 @import 'layout/navigation.css';
 @import 'layout/sidebar.css';
 @import 'layout/map-container.css';
 
+/* Components */
 @import 'components/buttons.css';
 @import 'components/inputs.css';
 @import 'components/cards.css';
+@import 'components/modals.css';
+@import 'components/timeline.css';
+@import 'components/slider.css';
+@import 'components/route-panel.css';
 
+/* Pages */
 @import 'pages/auth.css';
+@import 'pages/landing.css';
 
+/* Utilities */
 @import 'utilities/animations.css';
 @import 'utilities/helpers.css';
+
+/* ==============================================
+   Additional Global Styles
+   ============================================== */
+
+/* Notifications */
+.notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 16px 24px;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-weight: 600;
+    transform: translateX(400px);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.notification.show {
+    transform: translateX(0);
+}
+
+.notification-success {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+}
+
+.notification-error {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    color: white;
+}
+
+.notification-warning {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    color: white;
+}
+
+.notification-info {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    color: white;
+}
+
+/* Validation Modal */
+.validation-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10001;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.validation-modal.show {
+    opacity: 1;
+}
+
+.validation-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+}
+
+.validation-content {
+    position: relative;
+    background: white;
+    border-radius: 20px;
+    max-width: 500px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.validation-header {
+    padding: 24px;
+    border-bottom: 2px solid #e5e7eb;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.validation-header h3 {
+    font-size: 22px;
+    font-weight: 700;
+    margin: 0;
+}
+
+.validation-close {
+    background: none;
+    border: none;
+    font-size: 32px;
+    cursor: pointer;
+    color: #9ca3af;
+    transition: color 0.2s;
+}
+
+.validation-close:hover {
+    color: #ef4444;
+}
+
+.validation-body {
+    padding: 24px;
+}
+
+.validation-list {
+    list-style: none;
+    padding: 0;
+    margin: 20px 0;
+}
+
+.validation-list li {
+    padding: 12px;
+    background: #f9fafb;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.validation-icon {
+    font-size: 24px;
+}
+
+.validation-actions {
+    padding: 20px 24px;
+    border-top: 2px solid #e5e7eb;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.btn-validation {
+    padding: 14px 20px;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.btn-validation.primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.btn-validation.secondary {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+}
+
+.btn-validation.tertiary {
+    background: #f3f4f6;
+    color: #1f2937;
+    border: 2px solid #e5e7eb;
+}
+
+.btn-validation:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+}
+
+/* Loading Spinner */
+.global-loader {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+.global-loader.active {
+    opacity: 1;
+    pointer-events: all;
+}
+
+.loader-content {
+    text-align: center;
+    color: white;
+}
+
+.spinner {
+    width: 60px;
+    height: 60px;
+    border: 5px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 20px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Skeleton Loader */
+.skeleton-loader {
+    padding: 10px 0;
+}
+
+.skeleton-line {
+    height: 12px;
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s infinite;
+    border-radius: 4px;
+    margin-bottom: 8px;
+}
+
+.skeleton-line.short {
+    width: 60%;
+}
+
+@keyframes skeleton-loading {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .notification {
+        top: 10px;
+        right: 10px;
+        left: 10px;
+        transform: translateY(-200px);
+    }
+    
+    .notification.show {
+        transform: translateY(0);
+    }
+    
+    .validation-content {
+        width: 95%;
+        max-height: 90vh;
+    }
+    
+    .validation-actions {
+        padding: 16px;
+    }
+}
