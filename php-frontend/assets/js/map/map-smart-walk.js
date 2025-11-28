@@ -1,202 +1,325 @@
-window.MapSmartWalk = {
-  mapCore: null,
+/**
+ * Map Smart Walk - Complete rewrite
+ * Handles route building, visualization, and state synchronization
+ * Integrated with StateManager, EventBus, and new backend API
+ */
 
-  init(mapCore) {
-    this.mapCore = mapCore;
-    this.registerGlobalFunction();
-  },
-
-  registerGlobalFunction() {
-    window.displaySmartWalk = async (walkData, startPoint, endPoint, returnToStart) => {
-      await this.displaySmartWalk(walkData, startPoint, endPoint, returnToStart);
-    };
-
-    window.displaySmartRoute = (routeData) => {
-      this.displaySmartRoute(routeData);
-    };
-  },
-
-  async displaySmartWalk(walkData, startPoint, endPoint, returnToStart) {
-    this.mapCore.clearMap();
-    this.mapCore.currentWalkData = walkData;
-
-    if (!walkData.activities || walkData.activities.length === 0) {
-      alert('Не удалось построить прогулку');
-      return;
-    }
-
-    console.log('[SMART WALK] Displaying walk with', walkData.activities.length, 'activities');
-
-    const allMarkers = [];
-    const allBounds = []; // Сюда будем собирать все координаты для зума
-
-    // Функция для безопасного добавления координат в bounds
-    const addToBounds = (coords) => {
-        if (Array.isArray(coords) && coords.length === 2 && coords[0] !== 0 && coords[1] !== 0) {
-            allBounds.push(coords);
-        }
-    };
-
-    // Добавляем старт
-    if (startPoint && startPoint.coords) {
-        allMarkers.push({
-          coords: startPoint.coords,
-          name: startPoint.name,
-          type: 'start'
-        });
-        addToBounds(startPoint.coords);
-    }
-
-    for (let i = 0; i < walkData.activities.length; i++) {
-      const activity = walkData.activities[i];
-      console.log(`[ACTIVITY ${i}]`, activity.activity_type, 'transport:', activity.transport_mode);
-
-      if (activity.geometry && activity.geometry.length > 0) {
-        console.log(`[ACTIVITY ${i}] Drawing geometry with ${activity.geometry.length} points`);
-        this.drawGeometry(activity.geometry, activity.transport_mode);
+class MapSmartWalk {
+    constructor(map) {
+        this.map = map;
+        this.routeLines = [];
+        this.currentRouteData = null;
+        this.isBuilding = false;
         
-        // Добавляем точки геометрии в bounds (можно не все, а через шаг, чтобы не грузить)
-        activity.geometry.forEach((coord, idx) => {
-            if (idx % 5 === 0) addToBounds(coord); // Берем каждую 5-ю точку для скорости
-        });
-      } else {
-        console.warn(`[ACTIVITY ${i}] No geometry available`);
-      }
-
-      if (activity.activity_type === 'place' && activity.selected_place) {
-        allMarkers.push({
-          coords: activity.selected_place.coords,
-          name: activity.selected_place.name,
-          type: 'place',
-          category: activity.category,
-          alternatives: activity.alternatives
-        });
-        addToBounds(activity.selected_place.coords);
-      }
+        if (!this.map) {
+            console.error('[MapSmartWalk] Map instance is required');
+            return;
+        }
+        
+        this.init();
+        console.log('[MapSmartWalk] Initialized');
     }
-
-    if (endPoint) {
-      allMarkers.push({
-        coords: endPoint.coords,
-        name: endPoint.name,
-        type: 'end'
-      });
-      addToBounds(endPoint.coords);
-    }
-
-    this.addMarkers(allMarkers);
-
-    // Логика зума и границ
-    if (allBounds.length > 1) {
-      console.log('[MAP] Setting bounds for', allBounds.length, 'valid points');
-      
-      // Небольшая задержка, чтобы карта успела отрисоваться
-      setTimeout(() => {
-        try {
-            this.mapCore.map.setBounds(this.mapCore.map.geoObjects.getBounds(), {
-                checkZoomRange: true,
-                zoomMargin: [50, 50, 50, 50],
-                duration: 500
-            }).then(() => {
-                 // Если зум слишком мелкий (весь мир), принудительно приближаем
-                 if (this.mapCore.map.getZoom() < 9) {
-                     this.mapCore.map.setZoom(11);
-                 }
-            });
-        } catch (e) {
-            console.error("[MAP] Error setting bounds:", e);
-            // Fallback: центрируем на старте
-            if (startPoint && startPoint.coords) {
-                this.mapCore.map.setCenter(startPoint.coords, 13);
+    
+    init() {
+        // Subscribe to state changes
+        window.StateManager?.subscribe((newState, oldState) => {
+            // Rebuild route when places or mode changes
+            if (this.shouldRebuildRoute(newState, oldState)) {
+                this.buildRoute(newState.places, newState.mode);
             }
-        }
-      }, 200);
-    }
-
-    if (window.MapInfoPanel) {
-        window.MapInfoPanel.displayWalkInfo(walkData, allMarkers);
+        });
+        
+        // Subscribe to place changes
+        window.EventBus?.on('place:changed', (data) => {
+            console.log('[MapSmartWalk] Place changed, rebuilding route');
+            const places = window.StateManager?.get('places');
+            const mode = window.StateManager?.get('mode');
+            if (places && places.length >= 2) {
+                this.buildRoute(places, mode);
+            }
+        });
+        
+        // Subscribe to mode changes
+        window.EventBus?.on('mode:changed', (mode) => {
+            console.log('[MapSmartWalk] Mode changed to', mode);
+            const places = window.StateManager?.get('places');
+            if (places && places.length >= 2) {
+                this.buildRoute(places, mode);
+            }
+        });
     }
     
-    const panel = document.getElementById('routeInfoPanel');
-    if (panel) panel.style.display = 'block';
-  },
-
-  drawGeometry(geometry, transportMode) {
-    const routeColor = this.getRouteColor(transportMode);
-    
-    const polyline = new ymaps.Polyline(geometry, {}, {
-      strokeColor: routeColor,
-      strokeWidth: 5,
-      strokeOpacity: 0.8
-    });
-
-    this.mapCore.currentRouteLines.push(polyline);
-    this.mapCore.map.geoObjects.add(polyline);
-  },
-
-  getRouteColor(transportMode) {
-    const colorMap = {
-      'pedestrian': '#10b981', // Зеленый
-      'auto': '#3b82f6',       // Синий
-      'bicycle': '#f59e0b',    // Оранжевый
-      'masstransit': '#8b5cf6' // Фиолетовый
-    };
-    return colorMap[transportMode] || '#667eea';
-  },
-
-  addMarkers(markers) {
-    markers.forEach((marker) => {
-      let iconPreset, iconColor;
-
-      if (marker.type === 'start') {
-        iconPreset = 'islands#greenDotIcon';
-        iconColor = '#10b981';
-      } else if (marker.type === 'end') {
-        iconPreset = 'islands#redDotIcon';
-        iconColor = '#ef4444';
-      } else if (marker.type === 'place') {
-        iconPreset = 'islands#blueDotIcon';
-        iconColor = '#667eea';
-      } else {
-        return;
-      }
-
-      const placemark = new ymaps.Placemark(
-        marker.coords,
-        {
-          balloonContent: `<strong>${marker.name}</strong>${marker.category ? '<br>' + marker.category : ''}`,
-          iconCaption: marker.name
-        },
-        {
-          preset: iconPreset,
-          iconColor: iconColor
+    shouldRebuildRoute(newState, oldState) {
+        // Check if places array changed
+        if (JSON.stringify(newState.places) !== JSON.stringify(oldState.places)) {
+            return newState.places && newState.places.length >= 2;
         }
-      );
+        
+        // Check if mode changed
+        if (newState.mode !== oldState.mode) {
+            return newState.places && newState.places.length >= 2;
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Build route through multiple places
+     */
+    async buildRoute(places, mode = 'pedestrian') {
+        if (!places || places.length < 2) {
+            console.warn('[MapSmartWalk] Need at least 2 places to build route');
+            return;
+        }
+        
+        if (this.isBuilding) {
+            console.log('[MapSmartWalk] Already building route, skipping');
+            return;
+        }
+        
+        this.isBuilding = true;
+        window.StateManager?.setLoading(true);
+        window.EventBus?.emit('route:building');
+        
+        console.log(`[MapSmartWalk] Building route for ${places.length} places in ${mode} mode`);
+        
+        try {
+            // Call backend API
+            const response = await fetch('/api/route/build', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    places: places,
+                    mode: mode,
+                    optimize: true
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const routeData = await response.json();
+            
+            if (!routeData.success) {
+                throw new Error(routeData.error || 'Failed to build route');
+            }
+            
+            // Store route data
+            this.currentRouteData = routeData;
+            
+            // Update state
+            window.StateManager?.setRouteData(routeData);
+            
+            // Visualize route
+            this.visualizeRoute(routeData);
+            
+            console.log('[MapSmartWalk] Route built successfully');
+            
+        } catch (error) {
+            console.error('[MapSmartWalk] Error building route:', error);
+            window.StateManager?.setError(error.message);
+            window.EventBus?.emit('route:error', error);
+            alert(`Ошибка построения маршрута: ${error.message}`);
+        } finally {
+            this.isBuilding = false;
+            window.StateManager?.setLoading(false);
+        }
+    }
+    
+    /**
+     * Visualize route on map
+     */
+    visualizeRoute(routeData) {
+        // Clear existing route lines
+        this.clearRouteLines();
+        
+        if (!routeData || !routeData.segments) {
+            console.warn('[MapSmartWalk] No segments to visualize');
+            return;
+        }
+        
+        console.log(`[MapSmartWalk] Visualizing ${routeData.segments.length} segments`);
+        
+        // Draw each segment
+        routeData.segments.forEach((segment, idx) => {
+            this.drawSegment(segment, idx);
+        });
+        
+        // Fit map to show all route
+        this.fitMapToRoute();
+    }
+    
+    /**
+     * Draw a single segment
+     */
+    drawSegment(segment, index) {
+        if (!segment.geometry || segment.geometry.length === 0) {
+            console.warn(`[MapSmartWalk] Segment ${index} has no geometry`);
+            return;
+        }
+        
+        const style = segment.style || {};
+        const color = style.color || '#2E86DE';
+        const lineStyle = style.line_style || 'solid';
+        
+        // Create polyline
+        const polyline = new ymaps.Polyline(
+            segment.geometry,
+            {
+                hintContent: segment.instructions,
+                balloonContent: `
+                    <div class="segment-balloon">
+                        <strong>${segment.from.name}</strong> → <strong>${segment.to.name}</strong><br>
+                        <span>${style.icon} ${segment.mode_display}</span><br>
+                        <span>📏 ${this.formatDistance(segment.distance)}</span><br>
+                        <span>⏱️ ${this.formatDuration(segment.duration)}</span>
+                    </div>
+                `
+            },
+            {
+                strokeColor: color,
+                strokeWidth: 5,
+                strokeOpacity: 0.8,
+                strokeStyle: lineStyle === 'dashed' ? '5 5' : 'solid'
+            }
+        );
+        
+        // Add click handler
+        polyline.events.add('click', () => {
+            console.log(`[MapSmartWalk] Segment ${index} clicked`);
+            window.EventBus?.emit('segment:clicked', { index, segment });
+        });
+        
+        this.map.geoObjects.add(polyline);
+        this.routeLines.push(polyline);
+    }
+    
+    /**
+     * Clear all route lines
+     */
+    clearRouteLines() {
+        this.routeLines.forEach(line => {
+            this.map.geoObjects.remove(line);
+        });
+        this.routeLines = [];
+    }
+    
+    /**
+     * Fit map to show entire route
+     */
+    fitMapToRoute() {
+        if (this.routeLines.length === 0) return;
+        
+        try {
+            // Get bounds of all route lines
+            const bounds = this.map.geoObjects.getBounds();
+            
+            if (bounds) {
+                this.map.setBounds(bounds, {
+                    checkZoomRange: true,
+                    zoomMargin: 50,
+                    duration: 500
+                }).then(() => {
+                    // Ensure minimum zoom level
+                    const zoom = this.map.getZoom();
+                    if (zoom < 10) {
+                        this.map.setZoom(12);
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('[MapSmartWalk] Error fitting map:', error);
+        }
+    }
+    
+    /**
+     * Update a specific place in route
+     */
+    async updatePlace(placeIndex, newPlace) {
+        console.log(`[MapSmartWalk] Updating place ${placeIndex}`);
+        
+        try {
+            window.StateManager?.setLoading(true);
+            
+            const response = await fetch('/api/route/update-place', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    route_data: this.currentRouteData,
+                    place_index: placeIndex,
+                    new_place: newPlace
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const updatedRoute = await response.json();
+            
+            if (!updatedRoute.success) {
+                throw new Error(updatedRoute.error || 'Failed to update place');
+            }
+            
+            // Update state and visualize
+            this.currentRouteData = updatedRoute;
+            window.StateManager?.setRouteData(updatedRoute);
+            this.visualizeRoute(updatedRoute);
+            
+            console.log('[MapSmartWalk] Place updated successfully');
+            
+        } catch (error) {
+            console.error('[MapSmartWalk] Error updating place:', error);
+            window.StateManager?.setError(error.message);
+            alert(`Ошибка обновления места: ${error.message}`);
+        } finally {
+            window.StateManager?.setLoading(false);
+        }
+    }
+    
+    /**
+     * Clear map
+     */
+    clearMap() {
+        this.clearRouteLines();
+        this.currentRouteData = null;
+        console.log('[MapSmartWalk] Map cleared');
+    }
+    
+    /**
+     * Get current route data
+     */
+    getRouteData() {
+        return this.currentRouteData;
+    }
+    
+    // Utility methods
+    formatDistance(meters) {
+        if (meters >= 1000) {
+            return `${(meters / 1000).toFixed(1)} км`;
+        }
+        return `${Math.round(meters)} м`;
+    }
+    
+    formatDuration(seconds) {
+        if (seconds < 60) {
+            return `${Math.round(seconds)} сек`;
+        }
+        if (seconds < 3600) {
+            return `${Math.round(seconds / 60)} мин`;
+        }
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.round((seconds % 3600) / 60);
+        return `${hours} ч ${minutes} мин`;
+    }
+}
 
-      this.mapCore.routeMarkers.push(placemark);
-      this.mapCore.map.geoObjects.add(placemark);
-    });
-  },
+// Will be initialized after map is ready
+window.MapSmartWalk = MapSmartWalk;
 
-  displaySmartRoute(routeData) {
-    const walkData = {
-      activities: routeData.ordered_route.map((point, idx) => ({
-        activity_type: 'place',
-        selected_place: point,
-        category: 'место',
-        duration_minutes: idx < routeData.ordered_route.length - 1 ? 10 : 0,
-        transport_mode: 'pedestrian',
-        geometry: null
-      })),
-      total_duration_minutes: routeData.total_time_minutes,
-      warnings: routeData.warnings || []
-    };
-
-    const startPoint = {
-      name: routeData.ordered_route[0].name,
-      coords: routeData.ordered_route[0].coords
-    };
-
-    this.displaySmartWalk(walkData, startPoint, null, false);
-  }
-};
+console.log('[MapSmartWalk] Class loaded');
