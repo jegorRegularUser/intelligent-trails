@@ -350,16 +350,6 @@ window.RouteModalTemplate = {
                 <span>минут</span>
               </div>
             </div>
-
-            <div class="input-group">
-              <label>🚶 Способ передвижения</label>
-              <select id="placeTransport" class="transport-select">
-                <option value="pedestrian">🚶 Пешком</option>
-                <option value="bicycle">🚴 Велосипед</option>
-                <option value="auto">🚗 Авто</option>
-                <option value="masstransit">🚌 Транспорт</option>
-              </select>
-            </div>
           </div>
           <div class="activity-modal-footer">
             <button class="btn-secondary" id="cancelPlace">Отмена</button>

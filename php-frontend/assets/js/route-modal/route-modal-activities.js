@@ -86,7 +86,6 @@ window.RouteModalActivities = {
       }
       
       document.getElementById('placeStayTime').value = activity.time_at_place || 20;
-      document.getElementById('placeTransport').value = activity.transport_mode;
     } else {
       document.getElementById('placeModalTitle').textContent = 'Добавить место';
       document.getElementById('placeConfirmText').textContent = 'Добавить';
@@ -100,7 +99,6 @@ window.RouteModalActivities = {
         specificInput.value = '';
       }
       document.getElementById('placeStayTime').value = 20;
-      document.getElementById('placeTransport').value = 'pedestrian';
     }
     
     document.getElementById('addPlaceModal').classList.add('active');
@@ -136,13 +134,11 @@ window.RouteModalActivities = {
   savePlaceActivity() {
     const activeTab = document.querySelector('.place-tab.active').dataset.tab;
     const stayTime = parseInt(document.getElementById('placeStayTime').value);
-    const transport = document.getElementById('placeTransport').value;
 
     let activity = {
       type: 'place',
       duration_minutes: stayTime,
-      time_at_place: stayTime,
-      transport_mode: transport
+      time_at_place: stayTime
     };
 
     if (activeTab === 'category') {
@@ -166,18 +162,6 @@ window.RouteModalActivities = {
       this.modalInstance.activities[this.modalInstance.editingActivityIndex] = activity;
     } else {
       this.modalInstance.activities.push(activity);
-    }
-
-    if (this.modalInstance.activities.length > 1) {
-      const last = this.modalInstance.activities[this.modalInstance.activities.length - 2];
-      if (last.type === 'place') {
-        this.modalInstance.activities.splice(this.modalInstance.activities.length - 1, 0, {
-          type: 'walk',
-          duration_minutes: 10,
-          walking_style: 'direct',
-          transport_mode: transport
-        });
-      }
     }
 
     this.updateTimeline(this.modalInstance);
@@ -207,7 +191,8 @@ window.RouteModalActivities = {
           
           details = `
             <div style="display: flex; align-items: center; gap: 10px; width: 100%;">
-              <span>${activity.duration_minutes} мин</span>
+              <input type="number" class="quick-time-input" data-index="${index}" value="${activity.duration_minutes}" min="5" max="180" step="5" onclick="event.stopPropagation()" />
+              <span>мин</span>
               <select class="quick-transport-select" data-index="${index}" onclick="event.stopPropagation()">
                 <option value="pedestrian" ${activity.transport_mode === 'pedestrian' ? 'selected' : ''}>🚶 Пешком</option>
                 <option value="bicycle" ${activity.transport_mode === 'bicycle' ? 'selected' : ''}>🚴 Велосипед</option>
@@ -225,7 +210,12 @@ window.RouteModalActivities = {
                  activity.category === 'бар' ? '🍺' :
                  activity.category === 'магазин' ? '🛍️' : '📍';
           title = activity.specificPlaceAddress || activity.category;
-          details = `${activity.duration_minutes} мин`;
+          details = `
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <input type="number" class="quick-time-input" data-index="${index}" value="${activity.duration_minutes}" min="5" max="120" step="5" onclick="event.stopPropagation()" />
+              <span>мин</span>
+            </div>
+          `;
         }
 
         html += `
@@ -246,12 +236,24 @@ window.RouteModalActivities = {
 
       timeline.innerHTML = html;
 
+      timeline.querySelectorAll('.quick-time-input').forEach(input => {
+        input.addEventListener('change', (e) => {
+          e.stopPropagation();
+          const index = parseInt(e.target.dataset.index);
+          const newValue = parseInt(e.target.value);
+          modal.activities[index].duration_minutes = newValue;
+          if (modal.activities[index].type === 'place') {
+            modal.activities[index].time_at_place = newValue;
+          }
+          this.updateTimeline(modal);
+        });
+      });
+
       timeline.querySelectorAll('.quick-transport-select').forEach(select => {
         select.addEventListener('change', (e) => {
           e.stopPropagation();
           const index = parseInt(e.target.dataset.index);
           modal.activities[index].transport_mode = e.target.value;
-          this.updateTimeline(modal);
         });
       });
 

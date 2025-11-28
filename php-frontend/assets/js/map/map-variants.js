@@ -88,14 +88,14 @@ window.MapVariants = {
     console.log(`[VARIANTS] Rebuilding route: stage ${stageIndex}, variant ${variantIndex}`);
 
     const activity = this.mapCore.currentWalkData.activities[stageIndex];
-    if (!activity) {
-      console.warn('[VARIANTS] Activity not found');
+    if (!activity || activity.activity_type !== 'place') {
+      console.warn('[VARIANTS] Activity not a place');
       return;
     }
 
     if (variantIndex === 0) {
-      console.log('[VARIANTS] Variant 0 is current, no rebuild needed');
-      this.showQuickNotification(`Выбрано место: ${activity.selected_place.name}`);
+      console.log('[VARIANTS] Variant 0 is original, no rebuild needed');
+      this.showQuickNotification(`Выбрано: ${activity.selected_place.name}`);
       return;
     }
 
@@ -108,30 +108,92 @@ window.MapVariants = {
     console.log(`[VARIANTS] New place: ${newPlace.name}`);
 
     const oldPlace = activity.selected_place;
-    activity.selected_place = newPlace;
-
-    activity.alternatives[variantIndex - 1].place = oldPlace;
-
-    this.mapCore.clearMap();
-
-    const startActivity = this.mapCore.currentWalkData.activities[0];
-    let startPoint;
     
-    if (startActivity.activity_type === 'place' && startActivity.selected_place) {
-      startPoint = {
-        name: startActivity.selected_place.name,
-        coords: startActivity.selected_place.coords
-      };
-    } else {
-      startPoint = {
+    activity.selected_place = newPlace;
+    
+    const tempAlternatives = [...activity.alternatives];
+    tempAlternatives[variantIndex - 1].place = oldPlace;
+    activity.alternatives = tempAlternatives;
+
+    this.showQuickNotification(`🔄 Перестраиваем маршрут...`);
+
+    try {
+      const response = await fetch('api.php?action=rebuild_route_segment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          activity_index: stageIndex,
+          new_place: newPlace,
+          prev_place_coords: stageIndex > 0 ? 
+            (this.mapCore.currentWalkData.activities[stageIndex - 1].selected_place?.coords || this.mapCore.currentWalkData.start_point?.coords) : 
+            this.mapCore.currentWalkData.start_point?.coords,
+          next_place_coords: stageIndex < this.mapCore.currentWalkData.activities.length - 1 ?
+            (this.mapCore.currentWalkData.activities[stageIndex + 1].selected_place?.coords || null) :
+            null,
+          transport_mode: activity.transport_mode
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success && result.data.geometry) {
+        activity.geometry = result.data.geometry;
+        activity.distance_meters = result.data.distance_meters;
+        activity.duration_seconds = result.data.duration_seconds;
+
+        this.mapCore.clearMap();
+
+        const startPoint = this.mapCore.currentWalkData.start_point || {
+          name: "Начало",
+          coords: this.mapCore.currentWalkData.activities[0].selected_place?.coords || [55.751574, 37.573856]
+        };
+
+        await window.displaySmartWalk(
+          this.mapCore.currentWalkData, 
+          startPoint, 
+          this.mapCore.currentWalkData.end_point || null, 
+          this.mapCore.currentWalkData.return_to_start || false
+        );
+
+        this.showQuickNotification(`✅ Место изменено: ${newPlace.name}`);
+      } else {
+        console.warn('[VARIANTS] Failed to rebuild route, using old geometry');
+        
+        this.mapCore.clearMap();
+
+        const startPoint = this.mapCore.currentWalkData.start_point || {
+          name: "Начало",
+          coords: this.mapCore.currentWalkData.activities[0].selected_place?.coords || [55.751574, 37.573856]
+        };
+
+        await window.displaySmartWalk(
+          this.mapCore.currentWalkData, 
+          startPoint, 
+          this.mapCore.currentWalkData.end_point || null, 
+          this.mapCore.currentWalkData.return_to_start || false
+        );
+
+        this.showQuickNotification(`✅ Место изменено: ${newPlace.name}`);
+      }
+    } catch (error) {
+      console.error('[VARIANTS] Error rebuilding:', error);
+      
+      this.mapCore.clearMap();
+
+      const startPoint = this.mapCore.currentWalkData.start_point || {
         name: "Начало",
-        coords: [55.751574, 37.573856]
+        coords: this.mapCore.currentWalkData.activities[0].selected_place?.coords || [55.751574, 37.573856]
       };
+
+      await window.displaySmartWalk(
+        this.mapCore.currentWalkData, 
+        startPoint, 
+        this.mapCore.currentWalkData.end_point || null, 
+        this.mapCore.currentWalkData.return_to_start || false
+      );
+
+      this.showQuickNotification(`✅ Место изменено: ${newPlace.name}`);
     }
-
-    await window.displaySmartWalk(this.mapCore.currentWalkData, startPoint, null, false);
-
-    this.showQuickNotification(`✅ Место изменено на: ${newPlace.name}`);
   },
 
   showQuickNotification(message) {

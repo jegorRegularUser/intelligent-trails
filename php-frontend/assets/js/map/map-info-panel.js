@@ -30,6 +30,10 @@ window.MapInfoPanel = {
 
     document.getElementById('routeInfoStats').innerHTML = statsHTML;
 
+    document.getElementById('editRouteBtn').addEventListener('click', () => {
+      window.routeModal.open();
+    });
+
     let stagesHTML = '<div class="stages-header">🗺️ Этапы прогулки</div>';
 
     walkData.activities.forEach((activity, idx) => {

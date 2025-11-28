@@ -56,6 +56,27 @@ function callBackendAPI($endpoint, $method = 'GET', $data = null) {
 $action = $_GET['action'] ?? $_POST['action'] ?? '';
 
 switch ($action) {
+        case 'rebuild_route_segment':
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            echo json_encode(['success' => false, 'error' => 'Method not allowed']);
+            exit;
+        }
+        
+        $input = json_decode(file_get_contents('php://input'), true);
+        
+        $result = callBackendAPI('/rebuild_route_segment', 'POST', $input);
+        
+        if ($result['code'] === 200 && $result['data']) {
+            echo json_encode(['success' => true, 'data' => $result['data']]);
+        } else {
+            echo json_encode([
+                'success' => false,
+                'error' => 'Backend error',
+                'details' => $result['data'] ?? $result['error'] ?? 'Unknown error'
+            ]);
+        }
+        break;
+
     case 'build_smart_walk':
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             echo json_encode(['success' => false, 'error' => 'Method not allowed']);
