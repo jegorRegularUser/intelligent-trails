@@ -1,146 +1,159 @@
 /**
- * Построение умных прогулок и простых маршрутов
- * Взаимодействие с API
+ * Route Builder Module
+ * Handles route creation logic via API
  */
-window.RouteModalBuilder = {
-  modalInstance: null,
 
-  init(modal) {
-    this.modalInstance = modal;
-    this.attachEventListeners();
-  },
-
-  attachEventListeners() {
-    document.getElementById("buildRoute").addEventListener("click", () => this.buildRoute());
-  },
-
-  async buildRoute() {
-    if (this.modalInstance.currentRouteType === "smart") {
-      await this.buildSmartWalk();
-    } else {
-      await this.buildSimpleRoute();
-    }
-  },
-
-  async buildSmartWalk(places, mode = 'pedestrian') {
-    try {
-        console.log('[RouteBuilder] Building smart walk:', places.length, 'places');
+window.RouteBuilder = {
+    init() {
+        console.log('[RouteBuilder] Initialized');
         
-        // Преобразовать places в нужный формат
-        const formattedPlaces = places.map(p => ({
-            name: p.name,
-            coordinates: p.coords || p.coordinates,
-            type: 'must_visit'
-        }));
+        // Привязать кнопку "Построить"
+        const buildBtn = document.getElementById('buildRouteBtn');
+        if (buildBtn) {
+            buildBtn.addEventListener('click', () => this.handleBuildClick());
+        }
+    },
+
+    async handleBuildClick() {
+        try {
+            // 1. Получить места из UI
+            const places = this.getPlacesFromUI();
+            
+            if (!places || places.length < 2) {
+                alert('Выберите минимум 2 места для маршрута');
+                return;
+            }
+
+            // 2. Получить режим
+            const mode = document.getElementById('transportMode')?.value || 'pedestrian';
+            
+            // 3. Закрыть модальное окно и показать загрузку
+            if (window.routeModal) window.routeModal.close();
+            
+            // 4. Построить маршрут
+            await this.buildSmartWalk(places, mode);
+
+        } catch (error) {
+            console.error('[RouteBuilder] Error in handleBuildClick:', error);
+            alert('Ошибка: ' + error.message);
+        }
+    },
+
+    getPlacesFromUI() {
+        // Логика сбора мест из модального окна
+        // Пытаемся получить из глобального стейта или из DOM
         
-        // Вызвать новый API
-        const response = await fetch('https://intelligent-trails.onrender.com/api/route/build', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                places: formattedPlaces,
-                mode: mode,
-                optimize: true
-            })
+        // Вариант 1: Если используется StateManager для формы
+        const statePlaces = window.StateManager?.get('modalPlaces');
+        if (statePlaces && statePlaces.length > 0) {
+            return statePlaces;
+        }
+
+        // Вариант 2: Сбор из DOM (fallback)
+        const placeInputs = document.querySelectorAll('.waypoint-input');
+        const places = [];
+        
+        placeInputs.forEach(input => {
+            const name = input.value.trim();
+            const coords = input.dataset.coords; // Предполагаем, что координаты сохранены в data-атрибуте
+            
+            if (name && coords) {
+                places.push({
+                    name: name,
+                    coords: coords.split(',').map(Number)
+                });
+            }
         });
         
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
+        // Если ничего не нашли, попробуем взять из глобальной переменной (если старый код так делал)
+        if (places.length === 0 && window.routeModal && window.routeModal.waypoints) {
+             return window.routeModal.waypoints.filter(p => p.coords);
         }
-        
-        const routeData = await response.json();
-        
-        if (!routeData.success) {
-            throw new Error(routeData.error || 'Failed to build route');
+
+        return places;
+    },
+
+    async buildSmartWalk(places, mode = 'pedestrian') {
+        try {
+            // ЗАЩИТА ОТ UNDEFINED
+            if (!places || !Array.isArray(places)) {
+                console.error('[RouteBuilder] Invalid places:', places);
+                throw new Error('Некорректные данные мест');
+            }
+
+            console.log('[RouteBuilder] Building smart walk:', places.length, 'places');
+            
+            // Преобразовать places в нужный формат для API
+            const formattedPlaces = places.map(p => ({
+                name: p.name || 'Точка маршрута',
+                coordinates: p.coords || p.coordinates, // Поддержка разных форматов
+                type: 'must_visit'
+            }));
+            
+            // Вызвать новый API
+            const response = await fetch('https://intelligent-trails.onrender.com/api/route/build', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    places: formattedPlaces,
+                    mode: mode,
+                    optimize: true
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            
+            const routeData = await response.json();
+            
+            if (!routeData.success) {
+                throw new Error(routeData.error || 'Failed to build route');
+            }
+            
+            console.log('[RouteBuilder] ✅ Route built successfully:', routeData);
+            
+            // Обновить состояние
+            if (window.StateManager) {
+                window.StateManager.setRouteData(routeData);
+            }
+            
+            // Визуализировать через НОВЫЙ API
+            if (window.MapSmartWalkInstance) {
+                window.MapSmartWalkInstance.visualizeRoute(routeData);
+                console.log('[RouteBuilder] ✅ Route visualized');
+            } else {
+                console.error('[RouteBuilder] ❌ MapSmartWalkInstance not found! Waiting for init...');
+                // Попытка найти через глобальный объект
+                if (window.MapCore && window.MapCore.mapSmartWalk) {
+                     window.MapCore.mapSmartWalk.visualizeRoute(routeData);
+                }
+            }
+            
+            // Установить маркеры
+            if (window.MapPlaceMarkersInstance) {
+                window.MapPlaceMarkersInstance.setPlaces(routeData.places);
+                console.log('[RouteBuilder] ✅ Markers set');
+            }
+            
+            return routeData;
+            
+        } catch (error) {
+            console.error('[RouteBuilder] ❌ Error building smart walk:', error);
+            alert('Ошибка построения маршрута: ' + error.message);
+            throw error;
         }
-        
-        console.log('[RouteBuilder] ✅ Route built successfully:', routeData);
-        
-        // Обновить состояние
-        if (window.StateManager) {
-            window.StateManager.setRouteData(routeData);
-        }
-        
-        // Визуализировать через НОВЫЙ API
-        if (window.MapSmartWalkInstance) {
-            window.MapSmartWalkInstance.visualizeRoute(routeData);
-            console.log('[RouteBuilder] ✅ Route visualized');
-        } else {
-            console.error('[RouteBuilder] ❌ MapSmartWalkInstance not found!');
-        }
-        
-        // Установить маркеры
-        if (window.MapPlaceMarkersInstance) {
-            window.MapPlaceMarkersInstance.setPlaces(routeData.places);
-            console.log('[RouteBuilder] ✅ Markers set');
-        }
-        
-        return routeData;
-        
-    } catch (error) {
-        console.error('[RouteBuilder] ❌ Error building smart walk:', error);
-        alert('Ошибка построения маршрута: ' + error.message);
-        throw error;
+    },
+    
+    // Legacy method for compatibility
+    async buildRoute() {
+        return this.handleBuildClick();
     }
-}
-,
-
-  async buildSimpleRoute() {
-    const startPoint = document.getElementById('simpleStartPoint').value.trim();
-    const endPoint = document.getElementById('simpleEndPoint').value.trim();
-    const mode = document.querySelector('input[name="simpleTransport"]:checked').value;
-
-    if (!startPoint || !endPoint) {
-      this.modalInstance.showNotification('⚠️ Укажите начальную и конечную точки', 'error');
-      return;
-    }
-
-    const waypoints = [];
-    document.querySelectorAll('.waypoint-input').forEach(input => {
-      const value = input.value.trim();
-      if (value) waypoints.push(value);
-    });
-
-    const routeData = {
-      start_point: startPoint,
-      end_point: endPoint,
-      waypoints: waypoints,
-      mode: mode
-    };
-
-    this.modalInstance.showLoading(true, 'Строим маршрут...');
-
-    try {
-      const response = await fetch('api.php?action=build_simple_route', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(routeData)
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        this.modalInstance.close();
-        window.displaySimpleRoute(result.data);
-        
-        setTimeout(() => {
-          this.modalInstance.showNotification('✅ Маршрут построен!', 'success');
-        }, 300);
-      } else {
-        let errorMessage = '❌ Не удалось построить маршрут';
-        if (result.error) {
-          errorMessage = `❌ ${result.error}`;
-        }
-        this.modalInstance.showNotification(errorMessage, 'error');
-        console.error('Backend error:', result);
-      }
-    } catch (error) {
-      console.error('Error building simple route:', error);
-      this.modalInstance.showNotification('❌ Ошибка соединения с сервером', 'error');
-    } finally {
-      this.modalInstance.showLoading(false);
-    }
-  }
 };
+
+// Инициализация при загрузке
+document.addEventListener('DOMContentLoaded', () => {
+    window.RouteBuilder.init();
+});
