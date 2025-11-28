@@ -1,3 +1,4 @@
+ fetch('https://intelligent-trails.onrender.com/status').catch(()=>{}) // // Запуск бэкенда при инициализации карты
 /**
  * Основная инициализация карты Yandex Maps
  * Хранение глобальных переменных карты

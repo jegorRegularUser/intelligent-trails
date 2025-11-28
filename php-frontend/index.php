@@ -259,7 +259,9 @@
         </div>
     </footer>
 
-<script>
+<script defer>
+    fetch('https://intelligent-trails.onrender.com/status').catch(()=>{});
+
     // Плавная прокрутка к якорям
     document.querySelectorAll('a[href^="#"]').forEach(anchor => {
         anchor.addEventListener('click', function (e) {

@@ -133,15 +133,14 @@ window.RouteModalActivities = {
     this.closeWalkModal();
   },
 
-  savePlaceActivity() {
+   savePlaceActivity() {
     const activeTab = document.querySelector('.place-tab.active').dataset.tab;
-    const routeTime = parseInt(document.getElementById('placeRouteTime').value);
     const stayTime = parseInt(document.getElementById('placeStayTime').value);
     const transport = document.getElementById('placeTransport').value;
 
     let activity = {
       type: 'place',
-      duration_minutes: routeTime + stayTime,
+      duration_minutes: stayTime,
       time_at_place: stayTime,
       transport_mode: transport
     };
@@ -162,7 +161,20 @@ window.RouteModalActivities = {
     } else {
       this.modalInstance.activities.push(activity);
     }
-    
+
+    // Генерация прогулок между местами
+    if (this.modalInstance.activities.length > 1) {
+      const last = this.modalInstance.activities[this.modalInstance.activities.length - 2];
+      if (last.type === 'place') {
+        this.modalInstance.activities.splice(this.modalInstance.activities.length - 1, 0, {
+          type: 'walk',
+          duration_minutes: 10,
+          walking_style: 'scenic',
+          transport_mode: transport
+        });
+      }
+    }
+
     this.updateTimeline(this.modalInstance);
     this.closePlaceModal();
   },
