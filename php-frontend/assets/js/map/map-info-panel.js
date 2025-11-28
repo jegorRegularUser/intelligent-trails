@@ -19,20 +19,27 @@ window.MapInfoPanel = {
           <div class="stat-value">${distance}</div>
         </div>
       </div>
-      <div class="stat-card">
-        <span class="stat-icon">📍</span>
+      <div class="stat-card action-card" id="editRouteBtn">
+        <span class="stat-icon">✏️</span>
         <div>
-          <div class="stat-label">Активностей</div>
-          <div class="stat-value">${walkData.activities.length}</div>
+          <div class="stat-label">Изменить</div>
+          <div class="stat-value">Маршрут</div>
         </div>
       </div>
     `;
 
+    // 1. Вставляем HTML
     document.getElementById('routeInfoStats').innerHTML = statsHTML;
 
-    document.getElementById('editRouteBtn').addEventListener('click', () => {
-      window.routeModal.open();
-    });
+    // 2. Вешаем обработчик ТОЛЬКО ПОСЛЕ вставки
+    const editBtn = document.getElementById('editRouteBtn');
+    if (editBtn) {
+        editBtn.addEventListener('click', () => {
+            if (window.routeModal) {
+                window.routeModal.open();
+            }
+        });
+    }
 
     let stagesHTML = '<div class="stages-header">🗺️ Этапы прогулки</div>';
 
@@ -108,7 +115,9 @@ window.MapInfoPanel = {
 
     document.getElementById('routeStagesList').innerHTML = stagesHTML;
 
-    window.MapVariants.attachSliderHandlers();
+    if (window.MapVariants) {
+        window.MapVariants.attachSliderHandlers();
+    }
 
     document.getElementById('routeInfoPanel').style.display = 'block';
   },

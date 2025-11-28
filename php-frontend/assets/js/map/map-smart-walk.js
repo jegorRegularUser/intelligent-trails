@@ -28,14 +28,24 @@ window.MapSmartWalk = {
     console.log('[SMART WALK] Displaying walk with', walkData.activities.length, 'activities');
 
     const allMarkers = [];
-    const allBounds = [];
+    const allBounds = []; // Сюда будем собирать все координаты для зума
 
-    allMarkers.push({
-      coords: startPoint.coords,
-      name: startPoint.name,
-      type: 'start'
-    });
-    allBounds.push(startPoint.coords);
+    // Функция для безопасного добавления координат в bounds
+    const addToBounds = (coords) => {
+        if (Array.isArray(coords) && coords.length === 2 && coords[0] !== 0 && coords[1] !== 0) {
+            allBounds.push(coords);
+        }
+    };
+
+    // Добавляем старт
+    if (startPoint && startPoint.coords) {
+        allMarkers.push({
+          coords: startPoint.coords,
+          name: startPoint.name,
+          type: 'start'
+        });
+        addToBounds(startPoint.coords);
+    }
 
     for (let i = 0; i < walkData.activities.length; i++) {
       const activity = walkData.activities[i];
@@ -45,7 +55,10 @@ window.MapSmartWalk = {
         console.log(`[ACTIVITY ${i}] Drawing geometry with ${activity.geometry.length} points`);
         this.drawGeometry(activity.geometry, activity.transport_mode);
         
-        activity.geometry.forEach(coord => allBounds.push(coord));
+        // Добавляем точки геометрии в bounds (можно не все, а через шаг, чтобы не грузить)
+        activity.geometry.forEach((coord, idx) => {
+            if (idx % 5 === 0) addToBounds(coord); // Берем каждую 5-ю точку для скорости
+        });
       } else {
         console.warn(`[ACTIVITY ${i}] No geometry available`);
       }
@@ -58,7 +71,7 @@ window.MapSmartWalk = {
           category: activity.category,
           alternatives: activity.alternatives
         });
-        allBounds.push(activity.selected_place.coords);
+        addToBounds(activity.selected_place.coords);
       }
     }
 
@@ -68,36 +81,44 @@ window.MapSmartWalk = {
         name: endPoint.name,
         type: 'end'
       });
-      allBounds.push(endPoint.coords);
+      addToBounds(endPoint.coords);
     }
 
     this.addMarkers(allMarkers);
 
+    // Логика зума и границ
     if (allBounds.length > 1) {
-      console.log('[MAP] Setting bounds for', allBounds.length, 'points');
+      console.log('[MAP] Setting bounds for', allBounds.length, 'valid points');
       
+      // Небольшая задержка, чтобы карта успела отрисоваться
       setTimeout(() => {
-        this.mapCore.map.setBounds(allBounds, {
-          checkZoomRange: true,
-          zoomMargin: [50, 50, 50, 50],
-          duration: 500
-        }).then(() => {
-          const currentZoom = this.mapCore.map.getZoom();
-          console.log('[MAP] Current zoom after setBounds:', currentZoom);
-          
-          if (currentZoom < 10) {
-            console.log('[MAP] Zoom too low, setting to 12');
-            this.mapCore.map.setZoom(12, { duration: 300 });
-          } else if (currentZoom > 16) {
-            console.log('[MAP] Zoom too high, setting to 15');
-            this.mapCore.map.setZoom(15, { duration: 300 });
-          }
-        });
-      }, 100);
+        try {
+            this.mapCore.map.setBounds(this.mapCore.map.geoObjects.getBounds(), {
+                checkZoomRange: true,
+                zoomMargin: [50, 50, 50, 50],
+                duration: 500
+            }).then(() => {
+                 // Если зум слишком мелкий (весь мир), принудительно приближаем
+                 if (this.mapCore.map.getZoom() < 9) {
+                     this.mapCore.map.setZoom(11);
+                 }
+            });
+        } catch (e) {
+            console.error("[MAP] Error setting bounds:", e);
+            // Fallback: центрируем на старте
+            if (startPoint && startPoint.coords) {
+                this.mapCore.map.setCenter(startPoint.coords, 13);
+            }
+        }
+      }, 200);
     }
 
-    window.MapInfoPanel.displayWalkInfo(walkData, allMarkers);
-    document.getElementById('routeInfoPanel').style.display = 'block';
+    if (window.MapInfoPanel) {
+        window.MapInfoPanel.displayWalkInfo(walkData, allMarkers);
+    }
+    
+    const panel = document.getElementById('routeInfoPanel');
+    if (panel) panel.style.display = 'block';
   },
 
   drawGeometry(geometry, transportMode) {
@@ -111,16 +132,14 @@ window.MapSmartWalk = {
 
     this.mapCore.currentRouteLines.push(polyline);
     this.mapCore.map.geoObjects.add(polyline);
-    
-    console.log('[GEOMETRY] Drew polyline with color', routeColor);
   },
 
   getRouteColor(transportMode) {
     const colorMap = {
-      'pedestrian': '#10b981',
-      'auto': '#3b82f6',
-      'bicycle': '#f59e0b',
-      'masstransit': '#8b5cf6'
+      'pedestrian': '#10b981', // Зеленый
+      'auto': '#3b82f6',       // Синий
+      'bicycle': '#f59e0b',    // Оранжевый
+      'masstransit': '#8b5cf6' // Фиолетовый
     };
     return colorMap[transportMode] || '#667eea';
   },
