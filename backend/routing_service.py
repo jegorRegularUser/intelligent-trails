@@ -6,7 +6,7 @@ Handles pedestrian, driving, and masstransit routing modes correctly
 import logging
 from typing import List, Dict, Tuple, Optional
 from yandex_api import YandexMapsAPI
-from solver import RouteSolver
+from solver import solve_vrp_dynamic
 import time
 
 logger = logging.getLogger(__name__)
@@ -102,7 +102,6 @@ class RoutingService:
     
     def __init__(self, api_key: str):
         self.yandex_api = YandexMapsAPI(api_key)
-        self.solver = RouteSolver()
         
     async def build_route(self, places: List[Dict], mode: str = 'pedestrian', 
                          optimize: bool = True) -> Dict:
@@ -185,7 +184,7 @@ class RoutingService:
             
             # Build distance matrix
             n = len(places)
-            distance_matrix = [[0.0] * n for _ in range(n)]
+            distance_matrix = [[0] * n for _ in range(n)]
             
             for i in range(n):
                 for j in range(n):
@@ -196,13 +195,20 @@ class RoutingService:
                             places[j]['coordinates'],
                             mode
                         )
-                        distance_matrix[i][j] = route_info.get('distance', float('inf'))
+                        distance_matrix[i][j] = int(route_info.get('duration', 999999))
             
-            # Solve TSP
-            optimal_order = self.solver.solve_tsp(distance_matrix)
+            # Solve TSP using solver function
+            optimal_order = solve_vrp_dynamic(
+                matrix=distance_matrix,
+                time_limit_minutes=999,
+                return_to_start=False,
+                end_point_index=None,
+                pace='balanced',
+                strictness=5
+            )
             
             # Reorder places according to optimal solution
-            ordered_places = [places[i] for i in optimal_order]
+            ordered_places = [places[i] for i in optimal_order if i < len(places)]
             
             logger.info(f"Optimization complete. Order: {[p['name'] for p in ordered_places]}")
             return ordered_places
