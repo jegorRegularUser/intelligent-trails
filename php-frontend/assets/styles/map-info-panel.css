@@ -1,62 +1,58 @@
-/* ============================================
-   ЛЕВОЕ МЕНЮ С ИНФОРМАЦИЕЙ О МАРШРУТЕ
-   ============================================ */
-
 .route-info-panel {
     position: fixed;
-    left: 20px;
-    top: 80px;
-    width: 380px;
-    max-height: calc(100vh - 100px);
+    left: 0;
+    top: 60px;
+    width: 350px;
+    height: calc(100vh - 60px);
     background: white;
-    border-radius: 20px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
     z-index: 1000;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
+    overflow-y: auto;
+    transition: transform 0.3s ease;
+}
+
+.route-info-panel.hidden {
+    transform: translateX(-100%);
 }
 
 .route-info-header {
+    padding: 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 20px 25px;
-    border-bottom: 2px solid #f1f3f5;
-    flex-shrink: 0;
 }
 
 .route-info-header h3 {
     margin: 0;
-    font-size: 20px;
-    color: #2d3748;
+    font-size: 18px;
+    font-weight: 600;
 }
 
 .close-panel-btn {
-    background: #f1f3f5;
+    background: rgba(255, 255, 255, 0.2);
     border: none;
+    color: white;
+    font-size: 24px;
     width: 32px;
     height: 32px;
-    border-radius: 50%;
-    font-size: 20px;
+    border-radius: 6px;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     transition: all 0.2s ease;
-    color: #718096;
 }
 
 .close-panel-btn:hover {
-    background: #e2e8f0;
-    transform: scale(1.1);
+    background: rgba(255, 255, 255, 0.3);
 }
 
 .route-info-stats {
-    padding: 20px 25px;
-    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-    border-bottom: 2px solid #f1f3f5;
-    display: flex;
-    flex-direction: column;
+    padding: 20px;
+    display: grid;
     gap: 12px;
-    flex-shrink: 0;
 }
 
 .stat-card {
@@ -64,51 +60,28 @@
     align-items: center;
     gap: 12px;
     padding: 12px;
-    background: white;
+    background: #f8f9fa;
     border-radius: 10px;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
 }
 
 .stat-icon {
-    font-size: 24px;
+    font-size: 28px;
 }
 
 .stat-label {
     font-size: 12px;
-    color: #718096;
-    font-weight: 500;
+    color: #6c757d;
+    margin-bottom: 2px;
 }
 
 .stat-value {
     font-size: 18px;
-    font-weight: 700;
+    font-weight: 600;
     color: #2d3748;
 }
 
-/* СКРОЛЛЯЩАЯСЯ ОБЛАСТЬ С ЭТАПАМИ */
 .route-stages-list {
-    flex: 1;
-    overflow-y: auto;
-    padding: 20px 25px;
-    min-height: 0;
-}
-
-.route-stages-list::-webkit-scrollbar {
-    width: 8px;
-}
-
-.route-stages-list::-webkit-scrollbar-track {
-    background: #f1f3f5;
-    border-radius: 10px;
-}
-
-.route-stages-list::-webkit-scrollbar-thumb {
-    background: #cbd5e0;
-    border-radius: 10px;
-}
-
-.route-stages-list::-webkit-scrollbar-thumb:hover {
-    background: #a0aec0;
+    padding: 0 20px 20px;
 }
 
 .stages-header {
@@ -117,39 +90,31 @@
     color: #2d3748;
     margin-bottom: 15px;
     padding-bottom: 10px;
-    border-bottom: 2px solid #e2e8f0;
+    border-bottom: 2px solid #e9ecef;
 }
 
-/* ============================================
-   КАРТОЧКИ ЭТАПОВ С ВАРИАНТАМИ
-   ============================================ */
-
 .stage-card {
-    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
-    border: 2px solid #e2e8f0;
-    border-radius: 14px;
-    padding: 16px;
-    margin-bottom: 15px;
-    transition: all 0.3s ease;
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 10px;
+    padding: 15px;
+    margin-bottom: 12px;
+    transition: all 0.2s ease;
 }
 
 .stage-card:hover {
-    border-color: #667eea;
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
-    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 .stage-header {
     display: flex;
-    align-items: center;
     gap: 12px;
-    margin-bottom: 12px;
+    align-items: flex-start;
 }
 
 .stage-icon {
     font-size: 28px;
-    min-width: 36px;
-    text-align: center;
+    flex-shrink: 0;
 }
 
 .stage-info {
@@ -157,9 +122,9 @@
 }
 
 .stage-title {
+    font-size: 15px;
     font-weight: 600;
     color: #2d3748;
-    font-size: 15px;
     margin-bottom: 4px;
 }
 
@@ -168,43 +133,33 @@
     color: #718096;
 }
 
-/* ВАРИАНТЫ С ИНТЕРАКТИВНЫМ СЛАЙДЕРОМ */
 .stage-variants {
     margin-top: 12px;
     padding-top: 12px;
-    border-top: 2px solid #e2e8f0;
+    border-top: 1px solid #e9ecef;
 }
 
 .variants-slider {
     position: relative;
     overflow: hidden;
-    border-radius: 10px;
-    background: #f8f9fa;
-    padding: 10px;
     margin-bottom: 10px;
 }
 
 .variant-option {
-    padding: 12px;
-    background: white;
-    border: 2px solid #e2e8f0;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.3s ease;
     display: none;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 8px;
 }
 
 .variant-option.active {
     display: block;
-    border-color: #667eea;
-    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
-    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
 }
 
 .variant-name {
+    font-size: 14px;
     font-weight: 600;
     color: #2d3748;
-    font-size: 14px;
     margin-bottom: 4px;
 }
 
@@ -213,181 +168,72 @@
     color: #718096;
 }
 
+.variant-time {
+    font-size: 12px;
+    color: #667eea;
+    margin-top: 4px;
+}
+
 .slider-controls {
     display: flex;
-    align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    align-items: center;
 }
 
 .slider-btn {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #667eea;
     color: white;
     border: none;
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    font-size: 20px;
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
     cursor: pointer;
-    transition: all 0.3s ease;
+    font-size: 18px;
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: all 0.2s ease;
 }
 
 .slider-btn:hover {
-    transform: scale(1.1);
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    background: #5568d3;
 }
 
 .slider-btn:disabled {
     background: #cbd5e0;
     cursor: not-allowed;
-    transform: none;
-    box-shadow: none;
 }
 
 .slider-counter {
+    font-size: 13px;
+    color: #718096;
+}
+
+.warnings-section {
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 2px solid #e9ecef;
+}
+
+.warnings-header {
+    font-size: 14px;
     font-weight: 600;
-    color: #667eea;
-    font-size: 14px;
-}
-
-.route-info-panel {
-    animation: slideInLeft 0.4s ease;
-}
-
-@keyframes slideInLeft {
-    from {
-        transform: translateX(-100%);
-        opacity: 0;
-    }
-    to {
-        transform: translateX(0);
-        opacity: 1;
-    }
-}
-
-.route-info-body {
-    padding: 25px;
-    flex-shrink: 0;
-    border-bottom: 2px solid #f0f2f5;
-}
-
-.route-stat {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-    padding: 15px;
-    background: #f9fafb;
-    border-radius: 12px;
-    margin-bottom: 12px;
-}
-
-.route-stat:last-child {
-    margin-bottom: 0;
-}
-
-.route-warnings {
-    margin-top: 15px;
-    padding: 15px;
-    background: #fef3c7;
-    border-left: 4px solid #f59e0b;
-    border-radius: 8px;
-    font-size: 14px;
-    color: #92400e;
+    color: #f59e0b;
+    margin-bottom: 10px;
 }
 
 .warning-item {
-    margin-top: 8px;
+    background: #fef3c7;
+    border-left: 3px solid #f59e0b;
+    padding: 10px;
+    margin-bottom: 8px;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #92400e;
 }
 
-.warning-item:first-child {
-    margin-top: 0;
-}
-
-.route-places-list {
-    padding: 20px 25px;
-    overflow-y: auto;
-    flex: 1;
-}
-
-.route-places-list::-webkit-scrollbar {
-    width: 6px;
-}
-
-.route-places-list::-webkit-scrollbar-track {
-    background: #f1f1f1;
-}
-
-.route-places-list::-webkit-scrollbar-thumb {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-radius: 10px;
-}
-
-.places-header {
-    font-size: 16px;
-    font-weight: 700;
-    color: #1f2937;
-    margin-bottom: 15px;
-    padding-bottom: 10px;
-    border-bottom: 2px solid #f0f2f5;
-}
-
-.place-item {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-    padding: 12px 15px;
-    background: #f9fafb;
-    border-radius: 10px;
-    margin-bottom: 10px;
-    transition: all 0.3s ease;
-    border: 2px solid transparent;
-}
-
-.place-item:hover {
-    background: #f0f4ff;
-    border-color: #667eea;
-    transform: translateX(5px);
-}
-
-.place-item.start {
-    background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.1));
-    border-color: #10b981;
-}
-
-.place-item.end {
-    background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(220, 38, 38, 0.1));
-    border-color: #ef4444;
-}
-
-.place-number {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border-radius: 50%;
-    font-weight: 700;
-    font-size: 14px;
-    flex-shrink: 0;
-}
-
-.place-item.start .place-number {
-    background: linear-gradient(135deg, #10b981, #059669);
-}
-
-.place-item.end .place-number {
-    background: linear-gradient(135deg, #ef4444, #dc2626);
-}
-
-.place-name {
-    font-size: 14px;
-    font-weight: 600;
-    color: #374151;
-    flex: 1;
-    line-height: 1.4;
+@media (max-width: 768px) {
+    .route-info-panel {
+        width: 100%;
+    }
 }

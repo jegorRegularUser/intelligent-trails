@@ -42,6 +42,10 @@ class ActivityResult(BaseModel):
     duration_minutes: int
     transport_mode: str
     
+    geometry: Optional[List[List[float]]] = None
+    duration_seconds: Optional[int] = None
+    distance_meters: Optional[int] = None
+    
     route_segment: Optional[List[Point]] = None
     
     selected_place: Optional[Point] = None
@@ -53,6 +57,7 @@ class ActivityResult(BaseModel):
 class SmartWalkResponse(BaseModel):
     activities: List[ActivityResult]
     total_duration_minutes: int
+    total_distance_meters: Optional[int] = None
     warnings: List[str] = []
 
 
@@ -90,32 +95,42 @@ async def status():
 
 @app.post("/calculate_smart_walk", response_model=SmartWalkResponse)
 async def calculate_smart_walk(request: SmartWalkRequest):
+    """
+    ОСНОВНОЙ ЭНДПОИНТ: обработка умной прогулки
+    """
     if not yandex_api.YANDEX_API_KEY:
         raise HTTPException(status_code=500, detail="Yandex API key is not configured.")
 
-    print(f"[SMART WALK] Received {len(request.activities)} activities")
-    for idx, act in enumerate(request.activities):
-        print(f"[ACTIVITY {idx}] type={act.type}, transport={act.transport_mode}, duration={act.duration_minutes}")
+    print(f"\n{'='*60}")
+    print(f"[SMART WALK] NEW REQUEST")
+    print(f"[SMART WALK] Start: {request.start_point.name}")
+    print(f"[SMART WALK] Activities: {len(request.activities)}")
+    print(f"[SMART WALK] Return to start: {request.return_to_start}")
+    print(f"{'='*60}\n")
 
     warnings = []
     activity_results = []
     current_point = request.start_point
     total_duration = 0
+    total_distance = 0
 
     for act_idx, activity in enumerate(request.activities):
-        print(f"\n[PROCESSING ACTIVITY {act_idx + 1}] Type: {activity.type}, Transport: {activity.transport_mode}")
+        print(f"\n[ACTIVITY {act_idx + 1}/{len(request.activities)}]")
+        print(f"  Type: {activity.type}")
+        print(f"  Transport: {activity.transport_mode}")
+        print(f"  Duration: {activity.duration_minutes} min")
+        print(f"  Current position: {current_point.name}")
         
         if activity.type == "walk":
-            walk_duration = activity.duration_minutes
             waypoints = []
             
             if activity.walking_style == "scenic":
+                print(f"  Style: scenic (searching parks)")
                 try:
-                    print(f"[WALK] Searching scenic places near {current_point.coords}")
                     scenic_places = await yandex_api.search_places(
                         center_coords=current_point.coords,
                         categories=["парк", "сквер"],
-                        radius_m=int(walk_duration * 75)
+                        radius_m=int(activity.duration_minutes * 75)
                     )
                     
                     if scenic_places:
@@ -124,76 +139,105 @@ async def calculate_smart_walk(request: SmartWalkRequest):
                         )
                         
                         waypoints = [Point(name=scenic_places[0]['name'], coords=scenic_places[0]['coords'])]
-                        if len(scenic_places) > 1 and walk_duration > 30:
+                        if len(scenic_places) > 1 and activity.duration_minutes > 30:
                             waypoints.append(Point(name=scenic_places[1]['name'], coords=scenic_places[1]['coords']))
                         
-                        print(f"[WALK] Found {len(waypoints)} scenic waypoints")
+                        print(f"  Found {len(waypoints)} scenic waypoints")
                     else:
-                        print(f"[WALK] No scenic places found, generating point")
+                        print(f"  No scenic places, generating point")
                         angle = act_idx * 60
                         walk_end_coords = yandex_api.point_at_distance(
                             current_point.coords, 
-                            walk_duration * 75, 
+                            activity.duration_minutes * 75, 
                             angle
                         )
                         waypoints = [Point(name="Точка прогулки", coords=walk_end_coords)]
                         
                 except Exception as e:
-                    print(f"[WALK] Error finding scenic route: {e}")
+                    print(f"  Error finding scenic route: {e}")
                     angle = act_idx * 60
-                    walk_end_coords = yandex_api.point_at_distance(current_point.coords, walk_duration * 75, 0)
+                    walk_end_coords = yandex_api.point_at_distance(
+                        current_point.coords, 
+                        activity.duration_minutes * 75, 
+                        angle
+                    )
                     waypoints = [Point(name="Точка прогулки", coords=walk_end_coords)]
             else:
-                print(f"[WALK] Direct walk, looking for next destination")
+                print(f"  Style: direct (looking for next destination)")
                 next_destination = None
                 
                 for next_idx in range(act_idx + 1, len(request.activities)):
                     next_act = request.activities[next_idx]
                     if next_act.type == "place" and next_act.specific_place:
                         next_destination = next_act.specific_place
-                        print(f"[WALK] Found next specific place: {next_destination.name}")
+                        print(f"  Next destination: {next_destination.name}")
                         break
                 
                 if not next_destination:
                     if request.return_to_start:
                         next_destination = request.start_point
-                        print(f"[WALK] Next destination: return to start")
+                        print(f"  Next destination: return to start")
                     elif request.end_point:
                         next_destination = request.end_point
-                        print(f"[WALK] Next destination: end point")
+                        print(f"  Next destination: end point")
                     else:
                         angle = act_idx * 60
                         walk_end_coords = yandex_api.point_at_distance(
                             current_point.coords, 
-                            walk_duration * 75, 
+                            activity.duration_minutes * 75, 
                             angle
                         )
                         next_destination = Point(name="Конец прогулки", coords=walk_end_coords)
-                        print(f"[WALK] Next destination: generated point")
+                        print(f"  Next destination: generated point")
                 
                 waypoints = [next_destination]
             
-            activity_results.append(ActivityResult(
-                activity_index=act_idx,
-                activity_type="walk",
-                duration_minutes=walk_duration,
-                transport_mode=activity.transport_mode,
-                route_segment=[current_point] + waypoints
-            ))
+            route_waypoints = [current_point.coords] + [w.coords for w in waypoints]
+            print(f"  Building route: {len(route_waypoints)} waypoints")
+            
+            route_data = await yandex_api.build_route(route_waypoints, activity.transport_mode)
+            
+            if route_data:
+                print(f"  ✓ Route built: {route_data['distance_meters']}m, {route_data['duration_seconds']}s, {len(route_data['geometry'])} points")
+                
+                activity_results.append(ActivityResult(
+                    activity_index=act_idx,
+                    activity_type="walk",
+                    duration_minutes=activity.duration_minutes,
+                    transport_mode=activity.transport_mode,
+                    geometry=route_data['geometry'],
+                    duration_seconds=route_data['duration_seconds'],
+                    distance_meters=route_data['distance_meters'],
+                    route_segment=[current_point] + waypoints
+                ))
+                
+                total_distance += route_data['distance_meters']
+            else:
+                print(f"  ✗ Route failed, using fallback")
+                warnings.append(f"Прогулка {act_idx + 1}: не удалось построить маршрут через Яндекс")
+                
+                activity_results.append(ActivityResult(
+                    activity_index=act_idx,
+                    activity_type="walk",
+                    duration_minutes=activity.duration_minutes,
+                    transport_mode=activity.transport_mode,
+                    geometry=None,
+                    route_segment=[current_point] + waypoints
+                ))
             
             current_point = waypoints[-1]
-            total_duration += walk_duration
-            print(f"[WALK] Complete. Now at {current_point.coords}")
+            total_duration += activity.duration_minutes
+            print(f"  New position: {current_point.name}")
             
         else:
-            print(f"[PLACE] Processing place activity")
+            print(f"  Processing place activity")
             
             if activity.specific_place:
-                print(f"[PLACE] Using specific place: {activity.specific_place.name}")
+                print(f"  Using specific place: {activity.specific_place.name}")
                 selected_place = activity.specific_place
                 alternatives = []
             else:
-                print(f"[PLACE] Searching category: {activity.category}")
+                print(f"  Searching category: {activity.category}")
                 try:
                     search_radius = 3000
                     places = await yandex_api.search_places(
@@ -201,60 +245,115 @@ async def calculate_smart_walk(request: SmartWalkRequest):
                         categories=[activity.category] if activity.category else [],
                         radius_m=search_radius
                     )
-                    print(f"[PLACE] Found {len(places)} places")
+                    print(f"  Found {len(places)} places")
                 except Exception as e:
-                    print(f"[PLACE] Search error: {e}")
+                    print(f"  Search error: {e}")
                     places = []
                 
                 if not places:
                     warnings.append(f"Активность {act_idx + 1}: места категории '{activity.category}' не найдены")
-                    print(f"[PLACE] No places found, skipping")
+                    print(f"  ✗ No places found, skipping")
                     continue
                 
                 places.sort(key=lambda p: yandex_api.calculate_geo_distance(current_point.coords, p['coords']))
                 
                 selected_place = Point(name=places[0]['name'], coords=places[0]['coords'])
-                print(f"[PLACE] Selected: {selected_place.name}")
+                print(f"  Selected: {selected_place.name}")
                 
-                alternatives = [
-                    {
+                alternatives = []
+                for p in places[1:min(5, len(places))]:
+                    dist = yandex_api.calculate_geo_distance(current_point.coords, p['coords'])
+                    est_time = yandex_api.estimate_time_by_mode(dist, activity.transport_mode) // 60
+                    alternatives.append({
                         'place': Point(name=p['name'], coords=p['coords']),
                         'category': p.get('category', activity.category or 'место'),
-                        'estimated_time_minutes': yandex_api.estimate_time_by_mode(
-                            yandex_api.calculate_geo_distance(current_point.coords, p['coords']),
-                            activity.transport_mode
-                        ) // 60
-                    }
-                    for p in places[1:min(5, len(places))]
-                ]
-                print(f"[PLACE] Added {len(alternatives)} alternatives")
+                        'estimated_time_minutes': est_time
+                    })
+                
+                print(f"  Added {len(alternatives)} alternatives")
             
-            activity_results.append(ActivityResult(
-                activity_index=act_idx,
-                activity_type="place",
-                duration_minutes=activity.duration_minutes,
-                transport_mode=activity.transport_mode,
-                selected_place=selected_place,
-                alternatives=alternatives,
-                category=activity.category or "конкретное место",
-                time_at_place=activity.time_at_place
-            ))
+            print(f"  Building route to place")
+            route_waypoints = [current_point.coords, selected_place.coords]
+            route_data = await yandex_api.build_route(route_waypoints, activity.transport_mode)
+            
+            if route_data:
+                print(f"  ✓ Route to place: {route_data['distance_meters']}m, {route_data['duration_seconds']}s")
+                
+                activity_results.append(ActivityResult(
+                    activity_index=act_idx,
+                    activity_type="place",
+                    duration_minutes=activity.duration_minutes,
+                    transport_mode=activity.transport_mode,
+                    geometry=route_data['geometry'],
+                    duration_seconds=route_data['duration_seconds'],
+                    distance_meters=route_data['distance_meters'],
+                    selected_place=selected_place,
+                    alternatives=alternatives,
+                    category=activity.category or "конкретное место",
+                    time_at_place=activity.time_at_place
+                ))
+                
+                total_distance += route_data['distance_meters']
+            else:
+                print(f"  ✗ Route to place failed, using fallback")
+                warnings.append(f"Место {act_idx + 1}: не удалось построить маршрут через Яндекс")
+                
+                activity_results.append(ActivityResult(
+                    activity_index=act_idx,
+                    activity_type="place",
+                    duration_minutes=activity.duration_minutes,
+                    transport_mode=activity.transport_mode,
+                    geometry=None,
+                    selected_place=selected_place,
+                    alternatives=alternatives,
+                    category=activity.category or "конкретное место",
+                    time_at_place=activity.time_at_place
+                ))
             
             current_point = selected_place
             total_duration += activity.duration_minutes
-            print(f"[PLACE] Complete. Now at {current_point.coords}")
+            print(f"  New position: {current_point.name}")
 
-    print(f"\n[SMART WALK] Complete. Total activities: {len(activity_results)}, Total duration: {total_duration} min")
+    if request.return_to_start and len(request.activities) > 0:
+        print(f"\n[RETURN TO START]")
+        last_activity = request.activities[-1]
+        route_data = await yandex_api.build_route(
+            [current_point.coords, request.start_point.coords],
+            last_activity.transport_mode
+        )
+        if route_data:
+            print(f"  ✓ Return route: {route_data['distance_meters']}m")
+            total_distance += route_data['distance_meters']
+    elif request.end_point and len(request.activities) > 0:
+        print(f"\n[TO END POINT]")
+        last_activity = request.activities[-1]
+        route_data = await yandex_api.build_route(
+            [current_point.coords, request.end_point.coords],
+            last_activity.transport_mode
+        )
+        if route_data:
+            print(f"  ✓ End route: {route_data['distance_meters']}m")
+            total_distance += route_data['distance_meters']
+
+    print(f"\n{'='*60}")
+    print(f"[SMART WALK] COMPLETE")
+    print(f"  Total activities: {len(activity_results)}")
+    print(f"  Total duration: {total_duration} min")
+    print(f"  Total distance: {total_distance} m")
+    print(f"  Warnings: {len(warnings)}")
+    print(f"{'='*60}\n")
 
     return SmartWalkResponse(
         activities=activity_results,
         total_duration_minutes=total_duration,
+        total_distance_meters=total_distance if total_distance > 0 else None,
         warnings=warnings
     )
 
 
 @app.post("/calculate_route", response_model=RouteResponse)
 async def calculate_route_endpoint(request: RouteRequest):
+    """Старый эндпоинт для обратной совместимости"""
     if not yandex_api.YANDEX_API_KEY:
         raise HTTPException(status_code=500, detail="Yandex API key is not configured.")
 
