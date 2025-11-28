@@ -7,6 +7,7 @@ from typing import List, Dict, Any, Tuple, Optional
 YANDEX_API_KEY = os.getenv("YANDEX_API_KEY", "")
 MAX_POINTS_FOR_MATRIX = 20
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+# Публичный сервер OSRM
 OSRM_URL = "https://router.project-osrm.org/route/v1"
 
 
@@ -158,22 +159,27 @@ def smart_filter(start, points, limit, priority_categories=None):
 
 def convert_mode_to_osrm(mode: str) -> str:
     """
-    Конвертация режимов в профили OSRM
-    OSRM поддерживает: car, bike, foot
+    Конвертация режимов в профили OSRM.
+    OSRM Public API поддерживает профили: 'foot', 'car', 'bike'.
     """
     mode_map = {
         'pedestrian': 'foot',
         'walking': 'foot',
-        'auto': 'car',
-        'driving': 'car',
+        'auto': 'driving',  # Иногда driving, иногда car, проверим driving
+        'driving': 'driving',
         'bicycle': 'bike',
-        'bike': 'bike',
-        'masstransit': 'car'  # fallback
+        'masstransit': 'driving'  # Fallback
     }
-
+    
+    # Примечание: публичный сервер OSRM обычно использует 'driving', 'foot', 'bike' как часть URL
+    # Например: /route/v1/foot/lon,lat;lon,lat
     
     osrm_profile = mode_map.get(mode, 'foot')
-    print(f"[MODE CONVERT] {mode} -> {osrm_profile}")
+    
+    # Корректировка для публичного API, если нужно
+    if osrm_profile == 'car': osrm_profile = 'driving'
+    
+    print(f"[MODE CONVERT] '{mode}' -> '{osrm_profile}'")
     return osrm_profile
 
 
@@ -190,7 +196,8 @@ async def build_route(waypoints: List[List[float]], mode: str) -> Optional[Dict[
         osrm_profile = convert_mode_to_osrm(mode)
         
         async with httpx.AsyncClient(timeout=30, verify=False) as client:
-            # OSRM формат: lon,lat (как у Yandex)
+            # OSRM требует координаты в формате: lon,lat
+            # waypoints у нас приходят как [lat, lon]
             coordinates = ';'.join([f"{wp[1]},{wp[0]}" for wp in waypoints])
             
             url = f"{OSRM_URL}/{osrm_profile}/{coordinates}"
@@ -203,10 +210,9 @@ async def build_route(waypoints: List[List[float]], mode: str) -> Optional[Dict[
             
             print(f"\n{'='*60}")
             print(f"[OSRM ROUTE] REQUEST")
-            print(f"  URL: {url[:100]}...")
-            print(f"  Waypoints: {len(waypoints)}")
-            print(f"  Mode (original): {mode}")
-            print(f"  Profile (OSRM): {osrm_profile}")
+            print(f"  URL: {url}")
+            print(f"  Points: {len(waypoints)}")
+            print(f"  Profile: {osrm_profile}")
             print(f"{'='*60}\n")
             
             response = await client.get(url, params=params)
@@ -222,7 +228,7 @@ async def build_route(waypoints: List[List[float]], mode: str) -> Optional[Dict[
                     # Получаем geometry из GeoJSON
                     if 'geometry' in route and 'coordinates' in route['geometry']:
                         coords = route['geometry']['coordinates']
-                        # OSRM возвращает [lon, lat], конвертируем в [lat, lon]
+                        # OSRM возвращает [lon, lat], конвертируем обратно в [lat, lon] для Yandex Maps
                         geometry = [[c[1], c[0]] for c in coords]
                         
                         duration = route.get('duration', 0)
@@ -245,7 +251,7 @@ async def build_route(waypoints: List[List[float]], mode: str) -> Optional[Dict[
                         return None
                 else:
                     print(f"[OSRM ROUTE] ERROR: No routes in response")
-                    print(f"[OSRM ROUTE] Response: {data}")
+                    # print(f"[OSRM ROUTE] Response: {data}") 
                     return None
             else:
                 error_text = response.text[:1000]
@@ -266,7 +272,7 @@ async def build_route(waypoints: List[List[float]], mode: str) -> Optional[Dict[
 
 
 def estimate_time_by_mode(distance_m: int, mode: str) -> int:
-    """Оценка времени по расстоянию и режиму"""
+    """Оценка времени по расстоянию и режиму (для fallback матрицы)"""
     speeds = {
         'pedestrian': 1.25,
         'auto': 10.0,
