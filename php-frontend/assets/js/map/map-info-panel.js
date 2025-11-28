@@ -1,246 +1,336 @@
-window.MapInfoPanel = {
-  displayWalkInfo(walkData, pointsInfo) {
-    const distance = walkData.total_distance_meters 
-      ? `${(walkData.total_distance_meters / 1000).toFixed(2)} км`
-      : 'не указано';
+/**
+ * Map Info Panel - Complete rewrite
+ * Shows detailed route information with segments, places, and interactive controls
+ * Integrated with StateManager and EventBus
+ */
 
-    const statsHTML = `
-      <div class="stat-card">
-        <span class="stat-icon">⏱️</span>
-        <div>
-          <div class="stat-label">Общее время</div>
-          <div class="stat-value">${walkData.total_duration_minutes} мин</div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <span class="stat-icon">📏</span>
-        <div>
-          <div class="stat-label">Расстояние</div>
-          <div class="stat-value">${distance}</div>
-        </div>
-      </div>
-      <div class="stat-card action-card" id="editRouteBtn">
-        <span class="stat-icon">✏️</span>
-        <div>
-          <div class="stat-label">Изменить</div>
-          <div class="stat-value">Маршрут</div>
-        </div>
-      </div>
-    `;
-
-    // 1. Вставляем HTML
-    const statsContainer = document.getElementById('routeInfoStats');
-    if (statsContainer) {
-        statsContainer.innerHTML = statsHTML;
+class MapInfoPanel {
+    constructor(containerId = 'map-info-panel') {
+        this.container = document.getElementById(containerId);
         
-        // 2. Сразу после вставки ищем кнопку внутри контейнера
-        // Используем setTimeout(0) чтобы гарантировать, что DOM обновился
-        setTimeout(() => {
-            const editBtn = document.getElementById('editRouteBtn');
-            if (editBtn) {
-                // Удаляем старые слушатели (через клонирование), чтобы не дублировать
-                const newBtn = editBtn.cloneNode(true);
-                editBtn.parentNode.replaceChild(newBtn, editBtn);
-                
-                newBtn.addEventListener('click', () => {
-                    if (window.routeModal) {
-                        window.routeModal.open();
-                    }
-                });
-            } else {
-                console.warn('[MapInfoPanel] Edit button not found after render');
+        if (!this.container) {
+            console.warn(`[MapInfoPanel] Container #${containerId} not found`);
+            return;
+        }
+        
+        this.routeData = null;
+        this.activePlaceIndex = null;
+        
+        this.init();
+        console.log('[MapInfoPanel] Initialized');
+    }
+    
+    init() {
+        // Subscribe to route updates
+        window.EventBus?.on('route:updated', (routeData) => {
+            this.routeData = routeData;
+            this.render();
+        });
+        
+        // Subscribe to place selection
+        window.EventBus?.on('place:selected', (data) => {
+            if (data) {
+                this.activePlaceIndex = data.index;
+                this.highlightPlace(data.index);
             }
-        }, 0);
+        });
+        
+        // Subscribe to place changes
+        window.EventBus?.on('place:changed', () => {
+            this.render();
+        });
+        
+        // Initial render
+        this.render();
     }
-
-    let stagesHTML = '<div class="stages-header">🗺️ Этапы прогулки</div>';
-
-    walkData.activities.forEach((activity, idx) => {
-      const activityIcon = this.getActivityIcon(activity);
-      const activityName = this.getActivityName(activity);
-      const transportIcon = this.getTransportIcon(activity.transport_mode);
-      
-      let activityDetails = `${activity.duration_minutes} мин · ${transportIcon}`;
-      
-      if (activity.distance_meters) {
-        activityDetails += ` · ${(activity.distance_meters / 1000).toFixed(2)} км`;
-      }
-
-      if (activity.activity_type === 'place' && activity.alternatives && activity.alternatives.length > 0) {
-        const allVariants = [{
-          place: activity.selected_place,
-          category: activity.category,
-          estimated_time_minutes: 0
-        }, ...activity.alternatives];
-
-        stagesHTML += `
-          <div class="stage-card" data-stage="${idx}">
-            <div class="stage-header">
-              <span class="stage-icon">${activityIcon}</span>
-              <div class="stage-info">
-                <div class="stage-title">${activityName}</div>
-                <div class="stage-details">${activityDetails}</div>
-              </div>
+    
+    render() {
+        if (!this.container) return;
+        
+        const data = this.routeData || window.StateManager?.get('routeData');
+        
+        if (!data || !data.success) {
+            this.renderEmpty();
+            return;
+        }
+        
+        let html = `
+            <div class="info-panel-container">
+                ${this.renderHeader(data)}
+                ${this.renderSummary(data)}
+                ${this.renderSegments(data)}
+                ${this.renderPlacesList(data)}
             </div>
-            <div class="stage-variants">
-              <div class="variants-slider">
-                ${allVariants.map((variant, vIdx) => `
-                  <div class="variant-option ${vIdx === 0 ? 'active' : ''}" 
-                       data-stage="${idx}" data-variant="${vIdx}">
-                    <div class="variant-name">${variant.place.name}</div>
-                    <div class="variant-category">${variant.category}</div>
-                    ${variant.estimated_time_minutes > 0 ? `<div class="variant-time">~${variant.estimated_time_minutes} мин</div>` : ''}
-                  </div>
-                `).join('')}
-              </div>
-              <div class="slider-controls">
-                <button class="slider-btn prev" data-stage="${idx}">‹</button>
-                <span class="slider-counter">1 / ${allVariants.length}</span>
-                <button class="slider-btn next" data-stage="${idx}">›</button>
-              </div>
-            </div>
-          </div>
         `;
-      } else {
-        stagesHTML += `
-          <div class="stage-card" data-stage="${idx}">
-            <div class="stage-header">
-              <span class="stage-icon">${activityIcon}</span>
-              <div class="stage-info">
-                <div class="stage-title">${activityName}</div>
-                <div class="stage-details">${activityDetails}</div>
-              </div>
+        
+        this.container.innerHTML = html;
+        this.attachEventListeners();
+    }
+    
+    renderEmpty() {
+        this.container.innerHTML = `
+            <div class="info-panel-empty">
+                <div class="empty-icon">🗺️</div>
+                <div class="empty-text">Постройте маршрут</div>
+                <div class="empty-hint">Добавьте места и нажмите "Построить маршрут"</div>
             </div>
-          </div>
         `;
-      }
+    }
+    
+    renderHeader(data) {
+        const mode = data.mode || 'pedestrian';
+        const modeConfig = data.mode_config || {};
+        const icon = modeConfig.icon || '🚶';
+        const modeNames = {
+            pedestrian: 'Пешеходный',
+            driving: 'Автомобильный',
+            masstransit: 'Общественный транспорт'
+        };
+        
+        return `
+            <div class="info-panel-header">
+                <h3>📍 Ваш маршрут</h3>
+                <div class="info-panel-mode">
+                    <span class="mode-icon">${icon}</span>
+                    <span class="mode-name">${modeNames[mode] || mode}</span>
+                </div>
+            </div>
+        `;
+    }
+    
+    renderSummary(data) {
+        const summary = data.summary || {};
+        
+        return `
+            <div class="info-panel-summary">
+                <div class="summary-item">
+                    <div class="summary-icon">📍</div>
+                    <div class="summary-content">
+                        <div class="summary-label">Мест</div>
+                        <div class="summary-value">${summary.number_of_places || 0}</div>
+                    </div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-icon">📏</div>
+                    <div class="summary-content">
+                        <div class="summary-label">Дистанция</div>
+                        <div class="summary-value">${summary.total_distance_km || 0} км</div>
+                    </div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-icon">⏱️</div>
+                    <div class="summary-content">
+                        <div class="summary-label">Время</div>
+                        <div class="summary-value">${summary.total_duration_minutes || 0} мин</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    renderSegments(data) {
+        const segments = data.segments || [];
+        
+        if (segments.length === 0) {
+            return '<div class="info-panel-section"><p>Нет сегментов</p></div>';
+        }
+        
+        let html = `
+            <div class="info-panel-section">
+                <h4 class="section-title">📊 Сегменты маршрута</h4>
+                <div class="segments-list">
+        `;
+        
+        segments.forEach((segment, idx) => {
+            const style = segment.style || {};
+            const distance = this.formatDistance(segment.distance);
+            const duration = this.formatDuration(segment.duration);
+            
+            html += `
+                <div class="segment-item" data-segment="${idx}">
+                    <div class="segment-number" style="background: ${style.color || '#2E86DE'}">
+                        ${idx + 1}
+                    </div>
+                    <div class="segment-content">
+                        <div class="segment-route">
+                            <span class="segment-from">${this.truncate(segment.from.name, 20)}</span>
+                            <span class="segment-arrow">→</span>
+                            <span class="segment-to">${this.truncate(segment.to.name, 20)}</span>
+                        </div>
+                        <div class="segment-details">
+                            <span class="segment-icon">${style.icon || '🚶'}</span>
+                            <span class="segment-distance">${distance}</span>
+                            <span class="segment-duration">• ${duration}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += `
+                </div>
+            </div>
+        `;
+        
+        return html;
+    }
+    
+    renderPlacesList(data) {
+        const places = data.places || [];
+        
+        if (places.length === 0) {
+            return '';
+        }
+        
+        let html = `
+            <div class="info-panel-section">
+                <h4 class="section-title">📍 Список мест</h4>
+                <div class="places-list">
+        `;
+        
+        places.forEach((place, idx) => {
+            const isActive = idx === this.activePlaceIndex;
+            const marker = place.marker || {};
+            
+            html += `
+                <div class="place-item ${isActive ? 'active' : ''}" 
+                     data-place-index="${idx}"
+                     tabindex="0"
+                     role="button"
+                     aria-label="Перейти к ${place.name}">
+                    <div class="place-marker" style="background: ${marker.color || '#2E86DE'}">
+                        ${marker.number || (idx + 1)}
+                    </div>
+                    <div class="place-content">
+                        <div class="place-name">${place.name}</div>
+                        ${place.address ? `<div class="place-address">${this.truncate(place.address, 40)}</div>` : ''}
+                    </div>
+                    <div class="place-actions">
+                        <button class="btn-icon" title="Перейти к месту" data-action="focus" data-index="${idx}">
+                            🔍
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += `
+                </div>
+            </div>
+        `;
+        
+        return html;
+    }
+    
+    attachEventListeners() {
+        // Click on place item
+        this.container.querySelectorAll('.place-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                // Don't trigger if clicking on action buttons
+                if (e.target.closest('.place-actions')) return;
+                
+                const index = parseInt(item.dataset.placeIndex);
+                this.selectPlace(index);
+            });
+            
+            // Keyboard navigation
+            item.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    const index = parseInt(item.dataset.placeIndex);
+                    this.selectPlace(index);
+                }
+            });
+        });
+        
+        // Focus on place buttons
+        this.container.querySelectorAll('[data-action="focus"]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const index = parseInt(btn.dataset.index);
+                this.focusOnPlace(index);
+            });
+        });
+    }
+    
+    selectPlace(index) {
+        this.activePlaceIndex = index;
+        window.StateManager?.selectPlace(index);
+        this.highlightPlace(index);
+        console.log(`[MapInfoPanel] Selected place ${index}`);
+    }
+    
+    focusOnPlace(index) {
+        window.EventBus?.emit('place:focus', { index });
+        console.log(`[MapInfoPanel] Focus on place ${index}`);
+    }
+    
+    highlightPlace(index) {
+        // Remove active class from all
+        this.container.querySelectorAll('.place-item').forEach(item => {
+            item.classList.remove('active');
+        });
+        
+        // Add active class to selected
+        const selectedItem = this.container.querySelector(`[data-place-index="${index}"]`);
+        if (selectedItem) {
+            selectedItem.classList.add('active');
+            selectedItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
+    
+    // Utility methods
+    formatDistance(meters) {
+        if (meters >= 1000) {
+            return `${(meters / 1000).toFixed(1)} км`;
+        }
+        return `${Math.round(meters)} м`;
+    }
+    
+    formatDuration(seconds) {
+        if (seconds < 60) {
+            return `${Math.round(seconds)} сек`;
+        }
+        if (seconds < 3600) {
+            return `${Math.round(seconds / 60)} мин`;
+        }
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.round((seconds % 3600) / 60);
+        return `${hours} ч ${minutes} мин`;
+    }
+    
+    truncate(text, maxLength) {
+        if (!text) return '';
+        if (text.length <= maxLength) return text;
+        return text.substring(0, maxLength - 1) + '…';
+    }
+    
+    // Public API
+    show() {
+        if (this.container) {
+            this.container.style.display = 'block';
+        }
+    }
+    
+    hide() {
+        if (this.container) {
+            this.container.style.display = 'none';
+        }
+    }
+    
+    update(routeData) {
+        this.routeData = routeData;
+        this.render();
+    }
+}
+
+// Initialize when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        window.MapInfoPanelInstance = new MapInfoPanel();
     });
+} else {
+    window.MapInfoPanelInstance = new MapInfoPanel();
+}
 
-    if (walkData.warnings && walkData.warnings.length > 0) {
-      stagesHTML += '<div class="warnings-section">';
-      stagesHTML += '<div class="warnings-header">⚠️ Предупреждения</div>';
-      walkData.warnings.forEach(warning => {
-        stagesHTML += `<div class="warning-item">${warning}</div>`;
-      });
-      stagesHTML += '</div>';
-    }
-
-    const listContainer = document.getElementById('routeStagesList');
-    if (listContainer) {
-        listContainer.innerHTML = stagesHTML;
-    }
-
-    // Инициализируем слайдеры вариантов, если модуль загружен
-    if (window.MapVariants && typeof window.MapVariants.attachSliderHandlers === 'function') {
-        // Также даем DOM время на обновление
-        setTimeout(() => {
-            window.MapVariants.attachSliderHandlers();
-        }, 0);
-    }
-
-    const panel = document.getElementById('routeInfoPanel');
-    if (panel) {
-        panel.style.display = 'block';
-    }
-  },
-
-  displaySimpleRouteInfo(route, routeData) {
-    const routeInfo = route.getActiveRoute();
-    const distance = (routeInfo.properties.get("distance").value / 1000).toFixed(2);
-    const duration = this.formatDuration(routeInfo.properties.get("duration").value);
-
-    const statsHTML = `
-      <div class="stat-card">
-        <span class="stat-icon">📏</span>
-        <div>
-          <div class="stat-label">Расстояние</div>
-          <div class="stat-value">${distance} км</div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <span class="stat-icon">⏱️</span>
-        <div>
-          <div class="stat-label">Время в пути</div>
-          <div class="stat-value">${duration}</div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <span class="stat-icon">🚗</span>
-        <div>
-          <div class="stat-label">Способ</div>
-          <div class="stat-value">${this.getTransportLabel(routeData.mode)}</div>
-        </div>
-      </div>
-    `;
-
-    const statsContainer = document.getElementById('routeInfoStats');
-    if (statsContainer) {
-        statsContainer.innerHTML = statsHTML;
-    }
-    
-    const listContainer = document.getElementById('routeStagesList');
-    if (listContainer) {
-        listContainer.innerHTML = '';
-    }
-    
-    const panel = document.getElementById('routeInfoPanel');
-    if (panel) {
-        panel.style.display = 'block';
-    }
-  },
-
-  getActivityIcon(activity) {
-    if (activity.activity_type === 'walk') {
-      return activity.walking_style === 'scenic' ? '🌳' : '➡️';
-    } else {
-      const icons = {
-        'кафе': '☕',
-        'ресторан': '🍽️',
-        'парк': '🌳',
-        'музей': '🏛️',
-        'памятник': '🗿',
-        'бар': '🍺',
-        'магазин': '🛍️'
-      };
-      return icons[activity.category] || '📍';
-    }
-  },
-
-  getActivityName(activity) {
-    if (activity.activity_type === 'walk') {
-      return activity.walking_style === 'scenic' ? 'Живописная прогулка' : 'Прямая прогулка';
-    } else {
-      return activity.selected_place ? activity.selected_place.name : activity.category;
-    }
-  },
-
-  getTransportIcon(mode) {
-    const icons = {
-      'pedestrian': '🚶',
-      'auto': '🚗',
-      'bicycle': '🚴',
-      'masstransit': '🚌'
-    };
-    return icons[mode] || '🚶';
-  },
-
-  getTransportLabel(mode) {
-    const labels = {
-      'pedestrian': 'Пешком',
-      'auto': 'Авто',
-      'bicycle': 'Велосипед',
-      'masstransit': 'Транспорт'
-    };
-    return labels[mode] || mode;
-  },
-
-  formatDuration(seconds) {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-
-    if (hours > 0) {
-      return `${hours} ч ${minutes} мин`;
-    }
-    return `${minutes} мин`;
-  }
-};
+console.log('[MapInfoPanel] Module loaded');
