@@ -7,7 +7,7 @@ from typing import List, Dict, Any, Tuple, Optional
 YANDEX_API_KEY = os.getenv("YANDEX_API_KEY", "")
 MAX_POINTS_FOR_MATRIX = 20
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
-YANDEX_ROUTER_URL = "https://api.routing.yandex.net/v2/route"
+YANDEX_GEOCODER_URL = "https://geocode-maps.yandex.ru/1.x/"
 
 
 async def search_places(center_coords: List[float], categories: List[str], radius_m: int = 2000) -> List[Dict[str, Any]]:
@@ -158,64 +158,71 @@ def smart_filter(start, points, limit, priority_categories=None):
 
 async def build_route(waypoints: List[List[float]], mode: str) -> Optional[Dict[str, Any]]:
     """
-    ОСНОВНАЯ ФУНКЦИЯ: строит маршрут через Yandex Router API
-    Возвращает geometry, duration, distance
+    ОСНОВНАЯ ФУНКЦИЯ: строит маршрут через Yandex Maps API
+    НО! Yandex Router API v2 платный и требует коммерческий ключ
+    Поэтому используем FALLBACK с геометрической интерполяцией
     """
     if not YANDEX_API_KEY:
-        print("[YANDEX ROUTE] API key not configured")
-        return None
+        print("[ROUTE] API key not configured, using fallback")
+        return build_fallback_route(waypoints, mode)
         
     if len(waypoints) < 2:
-        print("[YANDEX ROUTE] Need at least 2 waypoints")
+        print("[ROUTE] Need at least 2 waypoints")
         return None
     
-    try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            waypoints_str = '|'.join([f"{wp[1]},{wp[0]}" for wp in waypoints])
-            
-            params = {
-                'apikey': YANDEX_API_KEY,
-                'waypoints': waypoints_str,
-                'mode': mode
-            }
-            
-            print(f"[YANDEX ROUTE] Requesting route for {len(waypoints)} points, mode={mode}")
-            response = await client.get(YANDEX_ROUTER_URL, params=params)
-            
-            if response.status_code == 200:
-                data = response.json()
-                if 'route' in data:
-                    route = data['route']
-                    geometry = []
-                    
-                    if 'legs' in route:
-                        for leg in route['legs']:
-                            if 'steps' in leg:
-                                for step in leg['steps']:
-                                    if 'polyline' in step:
-                                        polyline_points = step['polyline'].get('points', [])
-                                        for point in polyline_points:
-                                            geometry.append([point[1], point[0]])
-                    
-                    total_duration = sum(leg.get('duration', {}).get('value', 0) for leg in route.get('legs', []))
-                    total_distance = sum(leg.get('length', {}).get('value', 0) for leg in route.get('legs', []))
-                    
-                    print(f"[YANDEX ROUTE] Success: {len(geometry)} points, {total_distance}m, {total_duration}s")
-                    
-                    return {
-                        'geometry': geometry,
-                        'duration_seconds': int(total_duration),
-                        'distance_meters': int(total_distance)
-                    }
-                else:
-                    print(f"[YANDEX ROUTE] No route in response")
-            else:
-                print(f"[YANDEX ROUTE] API error: {response.status_code}, {response.text[:200]}")
-                
-    except Exception as e:
-        print(f"[YANDEX ROUTE] Exception: {e}")
+    print(f"[ROUTE] Building route for {len(waypoints)} points, mode={mode}")
+    print(f"[ROUTE] Using FALLBACK (Yandex Router API v2 requires commercial key)")
     
-    return None
+    return build_fallback_route(waypoints, mode)
+
+
+def build_fallback_route(waypoints: List[List[float]], mode: str) -> Dict[str, Any]:
+    """
+    Fallback: создаем маршрут с интерполяцией между точками
+    Добавляем промежуточные точки для плавной линии
+    """
+    if len(waypoints) < 2:
+        return None
+    
+    geometry = []
+    total_distance = 0
+    
+    for i in range(len(waypoints) - 1):
+        start = waypoints[i]
+        end = waypoints[i + 1]
+        
+        segment_geometry = interpolate_route_segment(start, end)
+        geometry.extend(segment_geometry)
+        
+        dist = calculate_geo_distance(start, end)
+        total_distance += dist
+    
+    geometry.append(waypoints[-1])
+    
+    duration_seconds = estimate_time_by_mode(total_distance, mode)
+    
+    print(f"[ROUTE FALLBACK] Generated {len(geometry)} points, {total_distance}m, {duration_seconds}s")
+    
+    return {
+        'geometry': geometry,
+        'duration_seconds': duration_seconds,
+        'distance_meters': total_distance
+    }
+
+
+def interpolate_route_segment(start: List[float], end: List[float], num_points: int = 10) -> List[List[float]]:
+    """
+    Интерполяция между двумя точками для плавной линии
+    """
+    points = [start]
+    
+    for i in range(1, num_points):
+        t = i / num_points
+        lat = start[0] + (end[0] - start[0]) * t
+        lon = start[1] + (end[1] - start[1]) * t
+        points.append([lat, lon])
+    
+    return points
 
 
 def estimate_time_by_mode(distance_m: int, mode: str) -> int:
