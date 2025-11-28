@@ -1,6 +1,3 @@
-/**
- * Генерация HTML-шаблонов для модальных окон
- */
 window.RouteModalTemplate = {
   getHTML() {
     return `
@@ -81,6 +78,7 @@ window.RouteModalTemplate = {
           <div class="timeline-total">
             <span class="timeline-icon">🕐</span>
             <span>Общее время: <strong id="totalTimeDisplay">0 мин</strong></span>
+            <div id="globalTransportSwitcher"></div>
           </div>
           
           <div id="activitiesTimeline" class="activities-timeline">
@@ -282,7 +280,6 @@ window.RouteModalTemplate = {
       </div>
     `;
   },
-
   getPlaceModal() {
     return `
       <div id="addPlaceModal" class="activity-modal">
@@ -343,14 +340,6 @@ window.RouteModalTemplate = {
                   placeholder="Введите адрес или название места"
                   autocomplete="off"
                 />
-              </div>
-            </div>
-
-            <div class="input-group">
-              <label>⏱️ Время на дорогу до места</label>
-              <div class="time-selector-compact">
-                <input type="number" id="placeRouteTime" value="15" min="5" max="60" step="5" />
-                <span>минут</span>
               </div>
             </div>
 
