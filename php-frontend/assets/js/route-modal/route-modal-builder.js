@@ -22,111 +22,70 @@ window.RouteModalBuilder = {
     }
   },
 
-  async buildSmartWalk() {
-    const startPoint = document.getElementById('smartStartPoint').value.trim();
-    
-    if (!startPoint) {
-      this.modalInstance.showNotification('⚠️ Укажите точку старта', 'error');
-      return;
-    }
-
-    if (this.modalInstance.activities.length === 0) {
-      this.modalInstance.showNotification('⚠️ Добавьте хотя бы одну активность', 'error');
-      return;
-    }
-
-    const returnToStart = document.querySelector('input[name="routeEnd"]:checked').value === 'return';
-    const endPoint = returnToStart ? null : document.getElementById('smartEndPoint').value.trim();
-
-    if (!returnToStart && !endPoint) {
-      this.modalInstance.showNotification('⚠️ Укажите точку финиша или выберите возврат к началу', 'error');
-      return;
-    }
-
-    this.modalInstance.showLoading(true, 'Определяем координаты...');
-    
+  async buildSmartWalk(places, mode = 'pedestrian') {
     try {
-      const startCoords = await window.RouteModalYandex.geocodeAddress(startPoint);
-      let endCoords = null;
-      
-      if (!returnToStart && endPoint) {
-        endCoords = await window.RouteModalYandex.geocodeAddress(endPoint);
-      }
-
-      const activitiesData = [];
-      for (const activity of this.modalInstance.activities) {
-        const actData = { ...activity };
+        console.log('[RouteBuilder] Building smart walk:', places.length, 'places');
         
-        if (activity.type === 'place' && activity.specificPlaceAddress) {
-          try {
-            const coords = await window.RouteModalYandex.geocodeAddress(activity.specificPlaceAddress);
-            actData.specific_place = {
-              name: activity.specificPlaceAddress,
-              coords: coords
-            };
-            delete actData.specificPlaceAddress;
-          } catch (e) {
-            this.modalInstance.showLoading(false);
-            this.modalInstance.showNotification(`⚠️ Не удалось найти место: ${activity.specificPlaceAddress}`, 'error');
-            return;
-          }
+        // Преобразовать places в нужный формат
+        const formattedPlaces = places.map(p => ({
+            name: p.name,
+            coordinates: p.coords || p.coordinates,
+            type: 'must_visit'
+        }));
+        
+        // Вызвать новый API
+        const response = await fetch('https://intelligent-trails.onrender.com/api/route/build', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                places: formattedPlaces,
+                mode: mode,
+                optimize: true
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
         }
         
-        activitiesData.push(actData);
-      }
-
-      const requestData = {
-        start_point: {
-          name: startPoint,
-          coords: startCoords
-        },
-        activities: activitiesData,
-        return_to_start: returnToStart,
-        end_point: endCoords ? {
-          name: endPoint,
-          coords: endCoords
-        } : null
-      };
-
-      this.modalInstance.showLoading(true, 'Строим прогулку с учетом ваших активностей...');
-
-      const response = await fetch('api.php?action=build_smart_walk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestData)
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        this.modalInstance.currentRoute = result.data;
-        this.modalInstance.close();
-        window.displaySmartWalk(result.data, requestData.start_point, requestData.end_point, returnToStart);
+        const routeData = await response.json();
         
-        let message = '✅ Прогулка построена!';
-        if (result.data.warnings && result.data.warnings.length > 0) {
-          message = '✅ Прогулка построена!\n\n⚠️ ' + result.data.warnings.join('\n⚠️ ');
+        if (!routeData.success) {
+            throw new Error(routeData.error || 'Failed to build route');
         }
         
-        setTimeout(() => {
-          this.modalInstance.showNotification(message, result.data.warnings && result.data.warnings.length > 0 ? 'warning' : 'success');
-        }, 300);
+        console.log('[RouteBuilder] ✅ Route built successfully:', routeData);
         
-      } else {
-        let errorMessage = '❌ Не удалось построить прогулку';
-        if (result.error) {
-          errorMessage = `❌ ${result.error}`;
+        // Обновить состояние
+        if (window.StateManager) {
+            window.StateManager.setRouteData(routeData);
         }
-        this.modalInstance.showNotification(errorMessage, 'error');
-        console.error('Backend error:', result);
-      }
+        
+        // Визуализировать через НОВЫЙ API
+        if (window.MapSmartWalkInstance) {
+            window.MapSmartWalkInstance.visualizeRoute(routeData);
+            console.log('[RouteBuilder] ✅ Route visualized');
+        } else {
+            console.error('[RouteBuilder] ❌ MapSmartWalkInstance not found!');
+        }
+        
+        // Установить маркеры
+        if (window.MapPlaceMarkersInstance) {
+            window.MapPlaceMarkersInstance.setPlaces(routeData.places);
+            console.log('[RouteBuilder] ✅ Markers set');
+        }
+        
+        return routeData;
+        
     } catch (error) {
-      console.error('Error building smart walk:', error);
-      this.modalInstance.showNotification('❌ Ошибка соединения с сервером', 'error');
-    } finally {
-      this.modalInstance.showLoading(false);
+        console.error('[RouteBuilder] ❌ Error building smart walk:', error);
+        alert('Ошибка построения маршрута: ' + error.message);
+        throw error;
     }
-  },
+}
+,
 
   async buildSimpleRoute() {
     const startPoint = document.getElementById('simpleStartPoint').value.trim();
