@@ -1,7 +1,3 @@
-/**
- * Управление переключением вариантов мест в маршруте
- * Слайдер альтернатив и перестроение маршрута
- */
 window.MapVariants = {
   mapCore: null,
   currentVariantIndices: {},
@@ -11,9 +7,14 @@ window.MapVariants = {
   },
 
   attachSliderHandlers() {
-    document.querySelectorAll('.stage-card').forEach(stageCard => {
+    const stageCards = document.querySelectorAll('.stage-card');
+    
+    stageCards.forEach(stageCard => {
       const stageIndex = parseInt(stageCard.dataset.stage);
-      this.currentVariantIndices[stageIndex] = 0;
+      
+      if (!this.currentVariantIndices[stageIndex]) {
+        this.currentVariantIndices[stageIndex] = 0;
+      }
 
       const prevBtn = stageCard.querySelector('.slider-btn.prev');
       const nextBtn = stageCard.querySelector('.slider-btn.next');
@@ -22,40 +23,49 @@ window.MapVariants = {
 
       if (!prevBtn || !nextBtn || variants.length <= 1) return;
 
+      console.log(`[VARIANTS] Attaching handlers for stage ${stageIndex}, ${variants.length} variants`);
+
       this.updateSliderState(stageIndex, stageCard, variants, prevBtn, nextBtn, counter);
 
-      prevBtn.addEventListener('click', () => {
+      prevBtn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log(`[VARIANTS] Prev clicked for stage ${stageIndex}`);
         if (this.currentVariantIndices[stageIndex] > 0) {
           this.currentVariantIndices[stageIndex]--;
           this.switchVariant(stageIndex, stageCard, variants, prevBtn, nextBtn, counter);
         }
-      });
+      };
 
-      nextBtn.addEventListener('click', () => {
+      nextBtn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log(`[VARIANTS] Next clicked for stage ${stageIndex}`);
         if (this.currentVariantIndices[stageIndex] < variants.length - 1) {
           this.currentVariantIndices[stageIndex]++;
           this.switchVariant(stageIndex, stageCard, variants, prevBtn, nextBtn, counter);
         }
-      });
+      };
     });
   },
 
   switchVariant(stageIndex, stageCard, variants, prevBtn, nextBtn, counter) {
     const currentIndex = this.currentVariantIndices[stageIndex];
 
-    // Скрываем все варианты с анимацией
+    console.log(`[VARIANTS] Switching stage ${stageIndex} to variant ${currentIndex}`);
+
     variants.forEach((v, idx) => {
-      if (idx !== currentIndex) {
+      if (idx === currentIndex) {
+        v.classList.add('active');
+        v.style.display = 'block';
+      } else {
         v.classList.remove('active');
+        v.style.display = 'none';
       }
     });
 
-    // Показываем выбранный вариант
-    variants[currentIndex].classList.add('active');
-
     this.updateSliderState(stageIndex, stageCard, variants, prevBtn, nextBtn, counter);
 
-    // ПЕРЕСТРАИВАЕМ МАРШРУТ С НОВЫМ МЕСТОМ
     this.rebuildRouteWithNewVariant(stageIndex, currentIndex);
   },
 
@@ -65,36 +75,62 @@ window.MapVariants = {
     prevBtn.disabled = currentIndex === 0;
     nextBtn.disabled = currentIndex === variants.length - 1;
     counter.textContent = `${currentIndex + 1} / ${variants.length}`;
+    
+    console.log(`[VARIANTS] Updated counter: ${currentIndex + 1} / ${variants.length}`);
   },
 
   async rebuildRouteWithNewVariant(stageIndex, variantIndex) {
-    if (!this.mapCore.currentWalkData) return;
+    if (!this.mapCore.currentWalkData) {
+      console.warn('[VARIANTS] No walk data');
+      return;
+    }
 
-    console.log(`Переключение этапа ${stageIndex} на вариант ${variantIndex}`);
+    console.log(`[VARIANTS] Rebuilding route: stage ${stageIndex}, variant ${variantIndex}`);
 
-    // Получаем новое место из варианта
     const activity = this.mapCore.currentWalkData.activities[stageIndex];
-    if (!activity || !activity.alternatives || !activity.alternatives[variantIndex - 1]) {
+    if (!activity) {
+      console.warn('[VARIANTS] Activity not found');
+      return;
+    }
+
+    if (variantIndex === 0) {
+      console.log('[VARIANTS] Variant 0 is current, no rebuild needed');
+      this.showQuickNotification(`Выбрано место: ${activity.selected_place.name}`);
+      return;
+    }
+
+    if (!activity.alternatives || !activity.alternatives[variantIndex - 1]) {
+      console.warn('[VARIANTS] Alternative not found');
       return;
     }
 
     const newPlace = activity.alternatives[variantIndex - 1].place;
+    console.log(`[VARIANTS] New place: ${newPlace.name}`);
 
-    // Обновляем выбранное место в данных
+    const oldPlace = activity.selected_place;
     activity.selected_place = newPlace;
 
-    // Очищаем карту
+    activity.alternatives[variantIndex - 1].place = oldPlace;
+
     this.mapCore.clearMap();
 
-    // Перестраиваем маршрут с обновленными данными
-    const startPoint = {
-      name: this.mapCore.currentWalkData.activities[0]?.selected_place?.name || "Старт",
-      coords: this.mapCore.currentWalkData.activities[0]?.selected_place?.coords || [55.751574, 37.573856]
-    };
+    const startActivity = this.mapCore.currentWalkData.activities[0];
+    let startPoint;
+    
+    if (startActivity.activity_type === 'place' && startActivity.selected_place) {
+      startPoint = {
+        name: startActivity.selected_place.name,
+        coords: startActivity.selected_place.coords
+      };
+    } else {
+      startPoint = {
+        name: "Начало",
+        coords: [55.751574, 37.573856]
+      };
+    }
 
     await window.displaySmartWalk(this.mapCore.currentWalkData, startPoint, null, false);
 
-    // Показываем уведомление
     this.showQuickNotification(`✅ Место изменено на: ${newPlace.name}`);
   },
 
@@ -125,7 +161,6 @@ window.MapVariants = {
   }
 };
 
-// Добавляем CSS для анимации уведомлений
 if (!document.getElementById('variants-notification-styles')) {
   const notificationStyles = document.createElement('style');
   notificationStyles.id = 'variants-notification-styles';
