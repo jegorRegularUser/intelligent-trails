@@ -67,49 +67,80 @@ window.RouteModalBuilder = {
         }
     },
 
-    collectPlaces() {
-        // Логика сбора мест зависит от того, какой режим активен (Smart или Simple)
-        // Для надежности собираем из this.modal.activities (Smart) или инпутов (Simple)
-        
-        let places = [];
+collectPlaces() {
+    let places = [];
 
-        if (this.modal.currentRouteType === 'smart') {
-            // Берем из массива активностей модалки
-            this.modal.activities.forEach(act => {
-                if (act.type === 'place' && act.coords) {
+    if (this.modal.currentRouteType === 'smart') {
+        // Добавляем старт
+        const startCoords = this.getCoordsFromInput('smartStartPoint');
+        if (startCoords) {
+            places.push({ 
+                name: 'Старт', 
+                coordinates: startCoords, 
+                type: 'start' 
+            });
+        }
+        
+        // Добавляем активности
+        this.modal.activities.forEach(act => {
+            if (act.type === 'place') {
+                if (act.coords) {
+                    // Конкретное место с координатами
                     places.push({
-                        name: act.name,
+                        name: act.name || act.specificPlaceAddress,
                         coordinates: act.coords,
                         type: 'must_visit'
                     });
+                } else if (act.category) {
+                    // Категорийное место - отправляем категорию, бэкенд сам найдет
+                    places.push({
+                        name: act.category,
+                        coordinates: startCoords || [0, 0], // Временные координаты
+                        type: 'category',
+                        category: act.category
+                    });
                 }
-            });
-            // Добавляем старт, если есть
-            const startCoords = this.getCoordsFromInput('smartStartPoint');
-            if (startCoords) {
-                places.unshift({ name: 'Старт', coordinates: startCoords, type: 'start' });
             }
-        } else {
-            // Simple Mode - берем из инпутов
-            const startCoords = this.getCoordsFromInput('simpleStartPoint');
-            const endCoords = this.getCoordsFromInput('simpleEndPoint');
-            
-            if (startCoords) places.push({ name: 'Начало', coordinates: startCoords });
-            
-            // Промежуточные точки
-            const waypoints = document.querySelectorAll('.waypoint-input');
-            waypoints.forEach(input => {
-                const coords = input.dataset.coords;
-                if (coords) {
-                    places.push({ name: input.value, coordinates: coords.split(',').map(Number) });
-                }
+        });
+        
+        // Добавляем конец, если нужно
+        const returnToStart = document.querySelector('input[name="routeEnd"]:checked')?.value === 'return';
+        if (returnToStart && startCoords) {
+            places.push({ 
+                name: 'Возврат к старту', 
+                coordinates: startCoords, 
+                type: 'end' 
             });
-
-            if (endCoords) places.push({ name: 'Конец', coordinates: endCoords });
+        } else {
+            const endCoords = this.getCoordsFromInput('smartEndPoint');
+            if (endCoords) {
+                places.push({ 
+                    name: 'Конец', 
+                    coordinates: endCoords, 
+                    type: 'end' 
+                });
+            }
         }
+    } else {
+        // Simple Mode - оставляем как есть
+        const startCoords = this.getCoordsFromInput('simpleStartPoint');
+        const endCoords = this.getCoordsFromInput('simpleEndPoint');
+        
+        if (startCoords) places.push({ name: 'Начало', coordinates: startCoords });
+        
+        const waypoints = document.querySelectorAll('.waypoint-input');
+        waypoints.forEach(input => {
+            const coords = input.dataset.coords;
+            if (coords) {
+                places.push({ name: input.value, coordinates: coords.split(',').map(Number) });
+            }
+        });
 
-        return places;
-    },
+        if (endCoords) places.push({ name: 'Конец', coordinates: endCoords });
+    }
+
+    return places;
+},
 
     getCoordsFromInput(id) {
         const input = document.getElementById(id);

@@ -131,7 +131,7 @@ window.RouteModalActivities = {
     this.closeWalkModal();
   },
 
-  savePlaceActivity() {
+async savePlaceActivity() {
     const activeTab = document.querySelector('.place-tab.active').dataset.tab;
     const stayTime = parseInt(document.getElementById('placeStayTime').value);
 
@@ -145,8 +145,10 @@ window.RouteModalActivities = {
       const selectedCategory = document.querySelector('input[name="placeCategory"]:checked');
       if (selectedCategory) {
         activity.category = selectedCategory.value;
+        activity.name = selectedCategory.value; // Добавляем имя
       } else {
         activity.category = 'кафе';
+        activity.name = 'кафе';
       }
     } else {
       const placeInput = document.getElementById('specificPlaceInput');
@@ -155,7 +157,30 @@ window.RouteModalActivities = {
         this.modalInstance.showNotification('⚠️ Укажите адрес или название места', 'error');
         return;
       }
-      activity.specificPlaceAddress = placeAddress;
+      
+      // 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем координаты через Yandex Geocoder
+      this.modalInstance.showLoading(true, 'Ищем место на карте...');
+      
+      try {
+        const coords = await this.geocodeAddress(placeAddress);
+        if (!coords) {
+          this.modalInstance.showNotification('⚠️ Не удалось найти место на карте', 'error');
+          this.modalInstance.showLoading(false);
+          return;
+        }
+        
+        activity.specificPlaceAddress = placeAddress;
+        activity.name = placeAddress;
+        activity.coords = coords; // ✅ Сохраняем координаты!
+        
+      } catch (error) {
+        console.error('Geocoding error:', error);
+        this.modalInstance.showNotification('⚠️ Ошибка поиска места', 'error');
+        this.modalInstance.showLoading(false);
+        return;
+      } finally {
+        this.modalInstance.showLoading(false);
+      }
     }
 
     if (this.modalInstance.editingActivityIndex !== null) {
@@ -166,6 +191,32 @@ window.RouteModalActivities = {
 
     this.updateTimeline(this.modalInstance);
     this.closePlaceModal();
+  },
+
+  // 🔥 НОВЫЙ МЕТОД: Геокодирование адреса
+  async geocodeAddress(address) {
+    return new Promise((resolve, reject) => {
+      if (typeof ymaps === 'undefined') {
+        reject(new Error('Yandex Maps not loaded'));
+        return;
+      }
+      
+      ymaps.geocode(address, { results: 1 }).then(
+        (res) => {
+          const firstGeoObject = res.geoObjects.get(0);
+          if (firstGeoObject) {
+            const coords = firstGeoObject.geometry.getCoordinates();
+            resolve(coords);
+          } else {
+            resolve(null);
+          }
+        },
+        (error) => {
+          console.error('Geocode error:', error);
+          reject(error);
+        }
+      );
+    });
   },
 
   updateTimeline(modal) {
