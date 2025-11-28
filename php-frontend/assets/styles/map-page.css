@@ -1,0 +1,115 @@
+/* ============================================
+   СТРАНИЦА С КАРТОЙ
+   ============================================ */
+
+.map-page-container {
+    position: relative;
+    width: 100%;
+    height: calc(100vh - 70px);
+    overflow: hidden;
+}
+
+#map {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 1;
+}
+
+/* ============================================
+   КНОПКА ПОСТРОЕНИЯ МАРШРУТА
+   ============================================ */
+
+.floating-action-btn {
+    position: fixed;
+    bottom: 35px;
+    right: 35px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    border-radius: 50px;
+    padding: 18px 35px;
+    font-size: 17px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 10px 35px rgba(102, 126, 234, 0.5);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    font-family: inherit;
+}
+
+.floating-action-btn:hover {
+    transform: translateY(-5px) scale(1.05);
+    box-shadow: 0 15px 45px rgba(102, 126, 234, 0.6);
+}
+
+.floating-action-btn:active {
+    transform: translateY(-2px) scale(1.02);
+}
+
+.fab-icon {
+    font-size: 24px;
+    animation: bounce 2s ease-in-out infinite;
+}
+
+@keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px); }
+}
+
+.fab-text {
+    font-weight: 700;
+}
+
+/* ============================================
+   КНОПКИ ДЕЙСТВИЙ С МАРШРУТОМ
+   ============================================ */
+
+.route-action-buttons {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 15px;
+    justify-content: flex-start;
+    align-items: center;
+    margin-top: 10px;
+}
+
+.route-action-buttons .btn {
+    flex: 1 1 auto;
+    min-width: 120px;
+    padding: 12px 20px;
+    font-size: 16px;
+    font-weight: 700;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.route-action-buttons .btn.primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+}
+
+.route-action-buttons .btn.primary:hover {
+    box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+    background: linear-gradient(135deg, #5563db 0%, #653991 100%);
+}
+
+.route-action-buttons .btn.secondary {
+    background: white;
+    color: #667eea;
+    border: 2px solid #667eea;
+}
+
+.route-action-buttons .btn.secondary:hover {
+    background: #f0f4ff;
+    border-color: #5563db;
+    color: #553291;
+}

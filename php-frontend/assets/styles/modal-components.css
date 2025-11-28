@@ -1,0 +1,277 @@
+/* ============================================
+   ПЕРЕКЛЮЧАТЕЛЬ ТИПА МАРШРУТА
+   ============================================ */
+
+.route-type-selector {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    padding: 25px 35px;
+    background: linear-gradient(to bottom, #f8f9ff, #ffffff);
+    border-bottom: 2px solid #f0f2f5;
+}
+
+.route-type-btn {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 20px;
+    background: white;
+    border: 3px solid #e8e8e8;
+    border-radius: 16px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    font-family: inherit;
+}
+
+.route-type-btn:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+    border-color: #667eea;
+}
+
+.route-type-btn.active {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-color: #667eea;
+    color: white;
+    transform: translateY(-3px);
+    box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+}
+
+.type-icon {
+    font-size: 36px;
+    line-height: 1;
+}
+
+.type-title {
+    font-size: 17px;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.type-desc {
+    font-size: 13px;
+    opacity: 0.8;
+}
+
+.route-type-btn.active .type-desc {
+    opacity: 0.9;
+}
+
+/* ============================================
+   ПАНЕЛЬ МАРШРУТА
+   ============================================ */
+
+.route-panel {
+    display: none;
+}
+
+.route-panel.active {
+    display: block;
+    animation: fadeInPanel 0.4s ease;
+}
+
+/* ============================================
+   СЕКЦИИ
+   ============================================ */
+
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 30px;
+    margin-bottom: 18px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #f0f2f5;
+}
+
+.section-header:first-child {
+    margin-top: 0;
+}
+
+.section-icon {
+    font-size: 24px;
+}
+
+.section-header h3 {
+    margin: 0;
+    font-size: 19px;
+    font-weight: 700;
+    color: #2d3748;
+}
+
+.section-desc {
+    font-size: 13px;
+    color: #6c757d;
+    margin-top: 5px;
+    font-weight: 400;
+}
+
+/* ============================================
+   ГРУППЫ ВВОДА
+   ============================================ */
+
+.input-group {
+    margin-bottom: 22px;
+    position: relative;
+}
+
+.input-group label {
+    display: flex;
+    align-items: center;
+    font-weight: 600;
+    margin-bottom: 10px;
+    color: #2d3748;
+    font-size: 15px;
+}
+
+.point-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    font-weight: bold;
+    font-size: 14px;
+    margin-right: 10px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.start-icon {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+}
+
+.end-icon {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    color: white;
+}
+
+.waypoint-icon {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: white;
+}
+
+.location-input {
+    width: 100%;
+    padding: 15px 20px;
+    font-size: 16px;
+    border: 2px solid #e5e7eb;
+    border-radius: 14px;
+    transition: all 0.3s ease;
+    box-sizing: border-box;
+    font-family: inherit;
+}
+
+.location-input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.15);
+}
+
+.location-input::placeholder {
+    color: #9ca3af;
+}
+
+/* ============================================
+   КНОПКИ
+   ============================================ */
+
+.btn-primary, .btn-secondary {
+    padding: 14px 30px;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: none;
+    font-family: inherit;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.btn-primary:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 25px rgba(102, 126, 234, 0.45);
+}
+
+.btn-secondary {
+    background: #e5e7eb;
+    color: #374151;
+}
+
+.btn-secondary:hover {
+    background: #d1d5db;
+    transform: translateY(-2px);
+}
+
+.btn-icon {
+    font-size: 20px;
+}
+
+/* ============================================
+   КОМПАКТНЫЙ СЕЛЕКТОР ВРЕМЕНИ
+   ============================================ */
+
+.time-selector-compact {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 10px;
+    border: 2px solid #dee2e6;
+}
+
+.time-selector-compact input {
+    width: 80px;
+    padding: 8px 12px;
+    border: 2px solid #ced4da;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    text-align: center;
+}
+
+.time-selector-compact span {
+    color: #495057;
+    font-weight: 500;
+}
+
+/* ============================================
+   СЕЛЕКТ ТРАНСПОРТА
+   ============================================ */
+
+.transport-select {
+    width: 100%;
+    padding: 12px 15px;
+    border: 2px solid #ced4da;
+    border-radius: 10px;
+    font-size: 15px;
+    background: white;
+    cursor: pointer;
+    transition: border-color 0.2s ease;
+}
+
+.transport-select:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+/* Скрытие стрелок у number input */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+input[type="number"] {
+    -moz-appearance: textfield;
+}

@@ -1,0 +1,328 @@
+/* ============================================
+   АДАПТИВНОСТЬ
+   ============================================ */
+
+@media (max-width: 1200px) {
+    .route-info-panel {
+        width: 340px;
+    }
+}
+
+@media (max-width: 992px) {
+    .route-info-panel {
+        width: 320px;
+        left: 10px;
+        top: 70px;
+        max-height: calc(100vh - 80px);
+    }
+    
+    .route-info-stats {
+        padding: 15px 20px;
+    }
+    
+    .route-stages-list {
+        padding: 15px 20px;
+    }
+}
+
+@media (max-width: 768px) {
+    .route-modal-content {
+        width: 96%;
+        max-height: 95vh;
+        border-radius: 20px;
+    }
+
+    .modal-header {
+        padding: 20px 25px;
+    }
+
+    .modal-header h2 {
+        font-size: 22px;
+    }
+
+    .modal-body {
+        padding: 25px;
+    }
+
+    .route-type-selector {
+        padding: 20px 25px;
+        gap: 12px;
+    }
+
+    .route-type-btn {
+        padding: 16px;
+        gap: 12px;
+    }
+
+    .type-icon {
+        font-size: 30px;
+    }
+
+    .type-title {
+        font-size: 15px;
+    }
+
+    .type-desc {
+        font-size: 12px;
+    }
+
+    .categories-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .transport-mode-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .modal-footer {
+        flex-direction: column;
+        gap: 12px;
+        padding: 20px 25px;
+    }
+
+    .btn-primary,
+    .btn-secondary {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .notification {
+        right: 15px;
+        top: 15px;
+        max-width: calc(100vw - 30px);
+    }
+
+    .route-info-panel {
+        width: calc(100% - 20px);
+        left: 10px;
+        right: 10px;
+        max-width: 400px;
+    }
+
+    .activity-type-selector {
+        grid-template-columns: 1fr;
+    }
+    
+    .activity-modal-content {
+        width: 95%;
+        max-height: 90vh;
+    }
+    
+    .timeline-item {
+        flex-wrap: wrap;
+    }
+    
+    .timeline-item-remove {
+        width: 28px;
+        height: 28px;
+        font-size: 18px;
+    }
+    
+    .category-grid-compact {
+        grid-template-columns: 1fr;
+    }
+    
+    .walk-style-selector {
+        gap: 10px;
+    }
+    
+    .style-card {
+        padding: 12px;
+    }
+    
+    .style-icon {
+        font-size: 28px;
+        min-width: 35px;
+    }
+}
+
+@media (max-width: 480px) {
+    .modal-header h2 {
+        font-size: 20px;
+    }
+
+    .section-header h3 {
+        font-size: 17px;
+    }
+
+    .categories-grid,
+    .transport-mode-grid {
+        gap: 10px;
+    }
+
+    .category-card,
+    .transport-card {
+        padding: 14px 10px;
+    }
+
+    .cat-icon,
+    .transport-icon {
+        font-size: 28px;
+    }
+
+    .route-info-panel {
+        top: 60px;
+        max-height: calc(100vh - 70px);
+    }
+    
+    .route-info-header {
+        padding: 15px 20px;
+    }
+    
+    .route-info-stats {
+        padding: 12px 15px;
+        gap: 10px;
+    }
+    
+    .route-stages-list {
+        padding: 12px 15px;
+    }
+    
+    .stage-card {
+        padding: 12px;
+    }
+    
+    .stage-icon {
+        font-size: 24px;
+        min-width: 32px;
+    }
+    
+    .slider-btn {
+        width: 32px;
+        height: 32px;
+        font-size: 18px;
+    }
+
+    .timeline-container {
+        padding: 15px;
+    }
+    
+    .timeline-item {
+        padding: 12px;
+    }
+    
+    .timeline-item-icon {
+        font-size: 24px;
+        min-width: 35px;
+    }
+    
+    .activity-modal-body {
+        padding: 20px;
+    }
+    
+    .time-selector-compact input {
+        width: 70px;
+        font-size: 14px;
+    }
+
+    .option-card {
+        padding: 14px;
+        font-size: 14px;
+    }
+    
+    .option-icon {
+        font-size: 24px;
+    }
+}
+
+@media (max-width: 768px) {
+    .navbar .container {
+        padding: 15px 20px;
+        flex-wrap: wrap;
+    }
+
+    .nav-links {
+        width: 100%;
+        justify-content: center;
+        margin-top: 15px;
+        gap: 15px;
+        flex-wrap: wrap;
+    }
+
+    .nav-links a {
+        font-size: 14px;
+        padding: 6px 12px;
+    }
+
+    .floating-action-btn {
+        bottom: 20px;
+        right: 20px;
+        padding: 15px 25px;
+        font-size: 15px;
+    }
+
+    .fab-text {
+        display: none;
+    }
+
+    .route-info-panel {
+        left: 15px;
+        right: 15px;
+        width: auto;
+        top: 80px;
+    }
+
+    .map-page-container {
+        height: calc(100vh - 100px);
+    }
+
+    .form-wrapper {
+        padding: 40px 30px;
+        margin: 30px 20px;
+        max-width: 100%;
+    }
+
+    .form-wrapper h2 {
+        font-size: 28px;
+    }
+
+    .route-action-buttons {
+        flex-wrap: wrap;
+    }
+
+    .route-action-buttons .btn {
+        flex: 1 1 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .logo {
+        font-size: 18px;
+    }
+
+    .logo-icon {
+        font-size: 24px;
+    }
+
+    .floating-action-btn {
+        width: 56px;
+        height: 56px;
+        padding: 0;
+        border-radius: 50%;
+        justify-content: center;
+    }
+
+    .fab-icon {
+        font-size: 28px;
+    }
+
+    .route-info-panel {
+        max-height: calc(100vh - 100px);
+    }
+
+    .form-wrapper {
+        padding: 30px 20px;
+        margin: 20px 15px;
+        border-radius: 20px;
+    }
+
+    .form-wrapper h2 {
+        font-size: 24px;
+    }
+
+    .btn-primary,
+    .yandex-btn {
+        padding: 12px;
+        font-size: 14px;
+    }
+}

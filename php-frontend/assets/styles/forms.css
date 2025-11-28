@@ -1,0 +1,244 @@
+/* ============================================
+   ФОРМЫ И ЭЛЕМЕНТЫ ВВОДА
+   ============================================ */
+
+input, select, textarea {
+    border: 2px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 14px 18px;
+    background: white;
+    color: #1f2937;
+    margin-bottom: 16px;
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 15px;
+    font-family: inherit;
+    transition: all 0.3s ease;
+}
+
+input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.15);
+}
+
+.btn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 14px;
+    padding: 14px 32px;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+    font-weight: 700;
+    font-size: 16px;
+    transition: all 0.3s ease;
+    font-family: inherit;
+}
+
+.btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+}
+
+.btn:active {
+    transform: translateY(0);
+}
+
+/* ============================================
+   ФОРМЫ ВХОДА И РЕГИСТРАЦИИ
+   ============================================ */
+
+.form-wrapper {
+    background: white;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+    border-radius: 24px;
+    padding: 50px 60px;
+    margin: 60px auto;
+    max-width: 500px;
+    animation: slideUp 0.5s ease;
+}
+
+.form-wrapper h2 {
+    text-align: center;
+    margin-bottom: 15px;
+    font-size: 32px;
+    font-weight: 800;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.form-wrapper p {
+    text-align: center;
+    color: #6b7280;
+    margin-bottom: 30px;
+    font-size: 15px;
+}
+
+.form-group {
+    margin-bottom: 25px;
+}
+
+.form-group label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 10px;
+    color: #374151;
+    font-size: 15px;
+}
+
+.form-control {
+    width: 100%;
+    padding: 14px 18px;
+    border: 2px solid #e5e7eb;
+    border-radius: 12px;
+    font-size: 15px;
+    font-family: inherit;
+    transition: all 0.3s ease;
+    box-sizing: border-box;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.15);
+}
+
+.btn-primary {
+    width: 100%;
+    padding: 16px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-family: inherit;
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+}
+
+.btn-primary:active {
+    transform: translateY(0);
+}
+
+/* ============================================
+   РАЗДЕЛИТЕЛЬ "ИЛИ"
+   ============================================ */
+
+.or-separator {
+    text-align: center;
+    margin: 30px 0;
+    position: relative;
+    color: #9ca3af;
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.or-separator::before,
+.or-separator::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 40%;
+    height: 1px;
+    background: #e5e7eb;
+}
+
+.or-separator::before {
+    left: 0;
+}
+
+.or-separator::after {
+    right: 0;
+}
+
+/* ============================================
+   КНОПКА ЯНДЕКС
+   ============================================ */
+
+.yandex-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    width: 100%;
+    padding: 14px;
+    background: white;
+    border: 2px solid #e5e7eb;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    color: #374151;
+    text-decoration: none;
+    transition: all 0.3s ease;
+    box-sizing: border-box;
+}
+
+.yandex-btn:hover {
+    border-color: #667eea;
+    background: #f9fafb;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.15);
+}
+
+.yandex-btn img {
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+}
+
+/* ============================================
+   АЛЕРТЫ
+   ============================================ */
+
+.alert {
+    padding: 14px 18px;
+    border-radius: 12px;
+    margin-bottom: 20px;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.5;
+}
+
+.alert-danger {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(220, 38, 38, 0.1));
+    color: #dc2626;
+    border: 2px solid #fca5a5;
+}
+
+.alert-success {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.1));
+    color: #059669;
+    border: 2px solid #6ee7b7;
+}
+
+.alert-info {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(37, 99, 235, 0.1));
+    color: #2563eb;
+    border: 2px solid #93c5fd;
+}
+
+/* ============================================
+   ССЫЛКИ В ФОРМАХ
+   ============================================ */
+
+.form-wrapper a {
+    color: #667eea;
+    text-decoration: none;
+    font-weight: 600;
+    transition: color 0.3s ease;
+}
+
+.form-wrapper a:hover {
+    color: #764ba2;
+    text-decoration: underline;
+}
