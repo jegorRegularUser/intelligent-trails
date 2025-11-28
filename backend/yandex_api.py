@@ -7,7 +7,7 @@ from typing import List, Dict, Any, Tuple, Optional
 YANDEX_API_KEY = os.getenv("YANDEX_API_KEY", "")
 MAX_POINTS_FOR_MATRIX = 20
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
-YANDEX_ROUTER_URL = "https://api.routing.yandex.net/v2/route"
+OSRM_URL = "https://router.project-osrm.org/route/v1"
 
 
 async def search_places(center_coords: List[float], categories: List[str], radius_m: int = 2000) -> List[Dict[str, Any]]:
@@ -156,100 +156,97 @@ def smart_filter(start, points, limit, priority_categories=None):
     return points[:limit]
 
 
+def convert_mode_to_osrm(mode: str) -> str:
+    """
+    Конвертация режимов в профили OSRM
+    OSRM поддерживает: car, bike, foot
+    """
+    mode_map = {
+        'pedestrian': 'foot',
+        'auto': 'car',
+        'bicycle': 'bike',
+        'masstransit': 'car'  # fallback для общественного транспорта
+    }
+    
+    osrm_profile = mode_map.get(mode, 'foot')
+    print(f"[MODE CONVERT] {mode} -> {osrm_profile}")
+    return osrm_profile
+
+
 async def build_route(waypoints: List[List[float]], mode: str) -> Optional[Dict[str, Any]]:
     """
-    ТОЛЬКО YANDEX ROUTER API - НИКАКИХ FALLBACK!
-    Если не работает - возвращаем None и показываем ошибку
+    Построение маршрута через OSRM (Open Source Routing Machine)
+    ПОЛНОСТЬЮ БЕСПЛАТНЫЙ, использует данные OpenStreetMap
     """
-    if not YANDEX_API_KEY:
-        print("[YANDEX ROUTE] ERROR: No API key configured!")
-        return None
-    
     if len(waypoints) < 2:
-        print("[YANDEX ROUTE] ERROR: Need at least 2 waypoints")
+        print("[OSRM ROUTE] ERROR: Need at least 2 waypoints")
         return None
     
     try:
+        osrm_profile = convert_mode_to_osrm(mode)
+        
         async with httpx.AsyncClient(timeout=30, verify=False) as client:
-            # Yandex Router API v2 формат: lon,lat (НЕ lat,lon!)
-            waypoints_str = '|'.join([f"{wp[1]},{wp[0]}" for wp in waypoints])
+            # OSRM формат: lon,lat (как у Yandex)
+            coordinates = ';'.join([f"{wp[1]},{wp[0]}" for wp in waypoints])
+            
+            url = f"{OSRM_URL}/{osrm_profile}/{coordinates}"
             
             params = {
-                'apikey': YANDEX_API_KEY,
-                'waypoints': waypoints_str,
-                'mode': mode
+                'overview': 'full',
+                'geometries': 'geojson',
+                'steps': 'false'
             }
             
             print(f"\n{'='*60}")
-            print(f"[YANDEX ROUTE] REQUEST")
-            print(f"  URL: {YANDEX_ROUTER_URL}")
+            print(f"[OSRM ROUTE] REQUEST")
+            print(f"  URL: {url[:100]}...")
             print(f"  Waypoints: {len(waypoints)}")
-            print(f"  Mode: {mode}")
-            print(f"  API Key: {YANDEX_API_KEY[:10]}...")
-            print(f"  Waypoints string: {waypoints_str[:100]}...")
+            print(f"  Mode (original): {mode}")
+            print(f"  Profile (OSRM): {osrm_profile}")
             print(f"{'='*60}\n")
             
-            response = await client.get(YANDEX_ROUTER_URL, params=params)
+            response = await client.get(url, params=params)
             
-            print(f"[YANDEX ROUTE] Response status: {response.status_code}")
+            print(f"[OSRM ROUTE] Response status: {response.status_code}")
             
             if response.status_code == 200:
                 data = response.json()
-                print(f"[YANDEX ROUTE] Response keys: {list(data.keys())}")
                 
-                if 'route' in data:
-                    route = data['route']
-                    print(f"[YANDEX ROUTE] Route keys: {list(route.keys())}")
-                    geometry = []
+                if 'routes' in data and len(data['routes']) > 0:
+                    route = data['routes'][0]
                     
-                    if 'legs' in route:
-                        print(f"[YANDEX ROUTE] Legs count: {len(route['legs'])}")
-                        for leg_idx, leg in enumerate(route['legs']):
-                            print(f"[YANDEX ROUTE] Leg {leg_idx} keys: {list(leg.keys())}")
-                            if 'steps' in leg:
-                                print(f"[YANDEX ROUTE] Leg {leg_idx} steps: {len(leg['steps'])}")
-                                for step_idx, step in enumerate(leg['steps']):
-                                    if 'polyline' in step:
-                                        polyline_points = step['polyline'].get('points', [])
-                                        print(f"[YANDEX ROUTE] Step {step_idx} polyline points: {len(polyline_points)}")
-                                        for point in polyline_points:
-                                            # Yandex возвращает [lon, lat], конвертируем в [lat, lon]
-                                            geometry.append([point[1], point[0]])
-                    
-                    total_duration = sum(
-                        leg.get('duration', {}).get('value', 0) 
-                        for leg in route.get('legs', [])
-                    )
-                    total_distance = sum(
-                        leg.get('length', {}).get('value', 0) 
-                        for leg in route.get('legs', [])
-                    )
-                    
-                    if len(geometry) > 0:
+                    # Получаем geometry из GeoJSON
+                    if 'geometry' in route and 'coordinates' in route['geometry']:
+                        coords = route['geometry']['coordinates']
+                        # OSRM возвращает [lon, lat], конвертируем в [lat, lon]
+                        geometry = [[c[1], c[0]] for c in coords]
+                        
+                        duration = route.get('duration', 0)
+                        distance = route.get('distance', 0)
+                        
                         print(f"\n{'='*60}")
-                        print(f"[YANDEX ROUTE] ✓ SUCCESS")
+                        print(f"[OSRM ROUTE] ✓ SUCCESS")
                         print(f"  Geometry points: {len(geometry)}")
-                        print(f"  Distance: {total_distance}m")
-                        print(f"  Duration: {total_duration}s")
+                        print(f"  Distance: {int(distance)}m")
+                        print(f"  Duration: {int(duration)}s")
                         print(f"{'='*60}\n")
                         
                         return {
                             'geometry': geometry,
-                            'duration_seconds': int(total_duration),
-                            'distance_meters': int(total_distance)
+                            'duration_seconds': int(duration),
+                            'distance_meters': int(distance)
                         }
                     else:
-                        print(f"[YANDEX ROUTE] ERROR: Empty geometry!")
-                        print(f"[YANDEX ROUTE] Full response: {data}")
+                        print(f"[OSRM ROUTE] ERROR: No geometry in response")
                         return None
                 else:
-                    print(f"[YANDEX ROUTE] ERROR: No 'route' in response")
-                    print(f"[YANDEX ROUTE] Response data: {data}")
+                    print(f"[OSRM ROUTE] ERROR: No routes in response")
+                    print(f"[OSRM ROUTE] Response: {data}")
                     return None
             else:
                 error_text = response.text[:1000]
                 print(f"\n{'='*60}")
-                print(f"[YANDEX ROUTE] ✗ API ERROR")
+                print(f"[OSRM ROUTE] ✗ API ERROR")
                 print(f"  Status: {response.status_code}")
                 print(f"  Response: {error_text}")
                 print(f"{'='*60}\n")
@@ -257,7 +254,7 @@ async def build_route(waypoints: List[List[float]], mode: str) -> Optional[Dict[
                 
     except Exception as e:
         print(f"\n{'='*60}")
-        print(f"[YANDEX ROUTE] ✗ EXCEPTION")
+        print(f"[OSRM ROUTE] ✗ EXCEPTION")
         print(f"  Type: {type(e).__name__}")
         print(f"  Message: {str(e)}")
         print(f"{'='*60}\n")
