@@ -1,321 +1,354 @@
-import os
-import asyncio
-import httpx
-import math
-from typing import List, Dict, Any, Tuple, Optional
+"""
+Yandex Maps API integration
+Provides routing and geocoding services
+"""
 
-YANDEX_API_KEY = os.getenv("YANDEX_API_KEY", "")
-MAX_POINTS_FOR_MATRIX = 20
-OVERPASS_URL = "https://overpass-api.de/api/interpreter"
-# Публичный сервер OSRM
-OSRM_URL = "https://router.project-osrm.org/route/v1"
+import aiohttp
+import logging
+from typing import List, Dict, Optional, Tuple
+import json
+
+logger = logging.getLogger(__name__)
 
 
-async def search_places(center_coords: List[float], categories: List[str], radius_m: int = 2000) -> List[Dict[str, Any]]:
-    """Поиск мест через OSM Overpass API"""
-    osm_tags = {
-        "кафе": '["amenity"="cafe"]',
-        "парк": '["leisure"="park"]',
-        "сквер": '["leisure"="garden"]',
-        "музей": '["tourism"="museum"]',
-        "памятник": '["historic"="memorial"]',
-        "ресторан": '["amenity"="restaurant"]',
-        "бар": '["amenity"="bar"]',
-        "магазин": '["shop"]'
-    }
-
-    places = []
-    lat, lon = center_coords[0], center_coords[1]
-
-    query_parts = []
-    for cat in categories:
-        tag = osm_tags.get(cat.lower())
-        if tag:
-            query_parts.append(f'node{tag}(around:{radius_m},{lat},{lon});')
-            query_parts.append(f'way{tag}(around:{radius_m},{lat},{lon});')
-
-    if not query_parts:
-        return []
-
-    full_query = f"""
-    [out:json][timeout:25];
-    (
-      {''.join(query_parts)}
-    );
-    out center 50;
-    """
-
-    print(f"[OSM] Requesting from {OVERPASS_URL}")
+class YandexMapsAPI:
+    """Wrapper for Yandex Maps API"""
     
-    async with httpx.AsyncClient(verify=False, timeout=20) as client:
-        try:
-            response = await client.post(OVERPASS_URL, data=full_query)
-            
-            if response.status_code == 200:
-                data = response.json()
-                elements = data.get("elements", [])
-                
-                print(f"[OSM] Found {len(elements)} elements")
-                
-                for el in elements:
-                    tags = el.get("tags", {})
-                    name = tags.get("name:ru") or tags.get("name") or tags.get("brand")
-                    
-                    if not name:
-                        continue
-
-                    if "lat" in el and "lon" in el:
-                        p_lat, p_lon = el["lat"], el["lon"]
-                    elif "center" in el:
-                        p_lat, p_lon = el["center"]["lat"], el["center"]["lon"]
-                    else:
-                        continue
-                        
-                    cat_found = "место"
-                    tags_str = str(tags).lower()
-                    if "cafe" in tags_str:
-                        cat_found = "кафе"
-                    elif "park" in tags_str:
-                        cat_found = "парк"
-                    elif "garden" in tags_str:
-                        cat_found = "сквер"
-                    elif "museum" in tags_str:
-                        cat_found = "музей"
-                    elif "memorial" in tags_str:
-                        cat_found = "памятник"
-                    elif "restaurant" in tags_str:
-                        cat_found = "ресторан"
-                    elif "bar" in tags_str:
-                        cat_found = "бар"
-                    elif "shop" in tags_str:
-                        cat_found = "магазин"
-                    
-                    places.append({
-                        "name": name,
-                        "coords": [p_lat, p_lon],
-                        "category": cat_found,
-                        "osm_id": el.get("id"),
-                        "type": el.get("type")
-                    })
-            else:
-                print(f"[OSM] Error: {response.status_code}")
-                
-        except Exception as e:
-            print(f"[OSM] Exception: {e}")
-
-    unique = {}
-    for p in places:
-        key = f"{p['name']}_{p['coords'][0]:.5f}_{p['coords'][1]:.5f}"
-        unique[key] = p
+    BASE_URL = "https://api.routing.yandex.net/v2/route"
+    GEOCODER_URL = "https://geocode-maps.yandex.ru/1.x/"
     
-    results = list(unique.values())
-    print(f"[OSM] Total unique places: {len(results)}")
-    return results[:50]
-
-
-def calculate_geo_distance(c1, c2):
-    """Геодезическое расстояние (Haversine)"""
-    lat1, lon1 = c1
-    lat2, lon2 = c2
-    R = 6371000
-    phi1, phi2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlambda = math.radians(lon2 - lon1)
-    a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
-    return int(R * c)
-
-
-def point_at_distance(start_coords: List[float], distance_m: int, bearing_deg: float = 0) -> List[float]:
-    """Вычислить точку на заданном расстоянии и направлении"""
-    lat1, lon1 = start_coords
-    R = 6371000
-    
-    lat1_rad = math.radians(lat1)
-    lon1_rad = math.radians(lon1)
-    bearing_rad = math.radians(bearing_deg)
-    
-    lat2_rad = math.asin(
-        math.sin(lat1_rad) * math.cos(distance_m / R) +
-        math.cos(lat1_rad) * math.sin(distance_m / R) * math.cos(bearing_rad)
-    )
-    
-    lon2_rad = lon1_rad + math.atan2(
-        math.sin(bearing_rad) * math.sin(distance_m / R) * math.cos(lat1_rad),
-        math.cos(distance_m / R) - math.sin(lat1_rad) * math.sin(lat2_rad)
-    )
-    
-    return [math.degrees(lat2_rad), math.degrees(lon2_rad)]
-
-
-def smart_filter(start, points, limit, priority_categories=None):
-    """Фильтрация точек по расстоянию"""
-    if len(points) <= limit:
-        return points
-    
-    points.sort(key=lambda p: calculate_geo_distance(start['coords'], p['coords']))
-    return points[:limit]
-
-
-def convert_mode_to_osrm(mode: str) -> str:
-    """
-    Конвертация режимов в профили OSRM.
-    OSRM Public API поддерживает профили: 'foot', 'car', 'bike'.
-    """
-    mode_map = {
-        'pedestrian': 'foot',
-        'walking': 'foot',
-        'auto': 'driving',  # Иногда driving, иногда car, проверим driving
-        'driving': 'driving',
-        'bicycle': 'bike',
-        'masstransit': 'driving'  # Fallback
-    }
-    
-    # Примечание: публичный сервер OSRM обычно использует 'driving', 'foot', 'bike' как часть URL
-    # Например: /route/v1/foot/lon,lat;lon,lat
-    
-    osrm_profile = mode_map.get(mode, 'foot')
-    
-    # Корректировка для публичного API, если нужно
-    if osrm_profile == 'car': osrm_profile = 'driving'
-    
-    print(f"[MODE CONVERT] '{mode}' -> '{osrm_profile}'")
-    return osrm_profile
-
-
-async def build_route(waypoints: List[List[float]], mode: str) -> Optional[Dict[str, Any]]:
-    """
-    Построение маршрута через OSRM (Open Source Routing Machine)
-    ПОЛНОСТЬЮ БЕСПЛАТНЫЙ, использует данные OpenStreetMap
-    """
-    if len(waypoints) < 2:
-        print("[OSRM ROUTE] ERROR: Need at least 2 waypoints")
-        return None
-    
-    try:
-        osrm_profile = convert_mode_to_osrm(mode)
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.session = None
         
-        async with httpx.AsyncClient(timeout=30, verify=False) as client:
-            # OSRM требует координаты в формате: lon,lat
-            # waypoints у нас приходят как [lat, lon]
-            coordinates = ';'.join([f"{wp[1]},{wp[0]}" for wp in waypoints])
+    async def _get_session(self) -> aiohttp.ClientSession:
+        """Get or create aiohttp session"""
+        if self.session is None or self.session.closed:
+            self.session = aiohttp.ClientSession()
+        return self.session
+    
+    async def close(self):
+        """Close the aiohttp session"""
+        if self.session and not self.session.closed:
+            await self.session.close()
+    
+    async def get_route(self, origin: List[float], destination: List[float], 
+                       mode: str = "pedestrian") -> Optional[Dict]:
+        """
+        Get route between two points
+        
+        Args:
+            origin: [longitude, latitude] of start point
+            destination: [longitude, latitude] of end point
+            mode: 'pedestrian', 'driving', or 'masstransit'
             
-            url = f"{OSRM_URL}/{osrm_profile}/{coordinates}"
+        Returns:
+            Dict with route geometry, distance, and duration
+        """
+        try:
+            session = await self._get_session()
             
+            # Format coordinates as "lon,lat"
+            origin_str = f"{origin[0]},{origin[1]}"
+            dest_str = f"{destination[0]},{destination[1]}"
+            
+            # Build request parameters
             params = {
-                'overview': 'full',
-                'geometries': 'geojson',
-                'steps': 'false'
+                "apikey": self.api_key,
+                "waypoints": f"{origin_str}|{dest_str}",
+                "mode": mode
             }
             
-            print(f"\n{'='*60}")
-            print(f"[OSRM ROUTE] REQUEST")
-            print(f"  URL: {url}")
-            print(f"  Points: {len(waypoints)}")
-            print(f"  Profile: {osrm_profile}")
-            print(f"{'='*60}\n")
+            # Add mode-specific parameters
+            if mode == "pedestrian":
+                params["avoid"] = "tolls"
             
-            response = await client.get(url, params=params)
+            logger.debug(f"Requesting route: {mode} from {origin} to {destination}")
             
-            print(f"[OSRM ROUTE] Response status: {response.status_code}")
-            
-            if response.status_code == 200:
-                data = response.json()
-                
-                if 'routes' in data and len(data['routes']) > 0:
-                    route = data['routes'][0]
-                    
-                    # Получаем geometry из GeoJSON
-                    if 'geometry' in route and 'coordinates' in route['geometry']:
-                        coords = route['geometry']['coordinates']
-                        # OSRM возвращает [lon, lat], конвертируем обратно в [lat, lon] для Yandex Maps
-                        geometry = [[c[1], c[0]] for c in coords]
-                        
-                        duration = route.get('duration', 0)
-                        distance = route.get('distance', 0)
-                        
-                        print(f"\n{'='*60}")
-                        print(f"[OSRM ROUTE] ✓ SUCCESS")
-                        print(f"  Geometry points: {len(geometry)}")
-                        print(f"  Distance: {int(distance)}m")
-                        print(f"  Duration: {int(duration)}s")
-                        print(f"{'='*60}\n")
-                        
-                        return {
-                            'geometry': geometry,
-                            'duration_seconds': int(duration),
-                            'distance_meters': int(distance)
-                        }
-                    else:
-                        print(f"[OSRM ROUTE] ERROR: No geometry in response")
-                        return None
-                else:
-                    print(f"[OSRM ROUTE] ERROR: No routes in response")
-                    # print(f"[OSRM ROUTE] Response: {data}") 
+            async with session.get(self.BASE_URL, params=params) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    logger.error(f"Yandex API error {response.status}: {error_text}")
                     return None
-            else:
-                error_text = response.text[:1000]
-                print(f"\n{'='*60}")
-                print(f"[OSRM ROUTE] ✗ API ERROR")
-                print(f"  Status: {response.status_code}")
-                print(f"  Response: {error_text}")
-                print(f"{'='*60}\n")
-                return None
                 
-    except Exception as e:
-        print(f"\n{'='*60}")
-        print(f"[OSRM ROUTE] ✗ EXCEPTION")
-        print(f"  Type: {type(e).__name__}")
-        print(f"  Message: {str(e)}")
-        print(f"{'='*60}\n")
-        return None
-
-
-def estimate_time_by_mode(distance_m: int, mode: str) -> int:
-    """Оценка времени по расстоянию и режиму (для fallback матрицы)"""
-    speeds = {
-        'pedestrian': 1.25,
-        'auto': 10.0,
-        'masstransit': 7.0,
-        'bicycle': 4.5
-    }
+                data = await response.json()
+                
+                # Parse response
+                route_info = self._parse_route_response(data)
+                
+                if route_info:
+                    logger.debug(f"Route received: {route_info['distance']}m, {route_info['duration']}s")
+                
+                return route_info
+                
+        except Exception as e:
+            logger.error(f"Error getting route from Yandex API: {str(e)}", exc_info=True)
+            return None
     
-    tortuosity = {
-        'pedestrian': 1.35,
-        'auto': 1.25,
-        'masstransit': 1.40,
-        'bicycle': 1.30
-    }
+    def _parse_route_response(self, data: Dict) -> Optional[Dict]:
+        """
+        Parse Yandex API route response
+        
+        Returns:
+            Dict with geometry (list of [lon, lat]), distance (meters), duration (seconds)
+        """
+        try:
+            if "route" not in data:
+                logger.warning("No route in Yandex API response")
+                return None
+            
+            route = data["route"]
+            
+            # Extract geometry
+            geometry = []
+            if "legs" in route:
+                for leg in route["legs"]:
+                    if "steps" in leg:
+                        for step in leg["steps"]:
+                            if "polyline" in step:
+                                polyline_data = step["polyline"]
+                                if "points" in polyline_data:
+                                    # Points are in format [lon, lat, lon, lat, ...]
+                                    points = polyline_data["points"]
+                                    for i in range(0, len(points), 2):
+                                        geometry.append([points[i], points[i+1]])
+            
+            # If no geometry from steps, try to get from route level
+            if not geometry and "geometry" in route:
+                route_geom = route["geometry"]
+                if "coordinates" in route_geom:
+                    geometry = route_geom["coordinates"]
+            
+            # Extract distance and duration
+            distance = 0
+            duration = 0
+            
+            if "legs" in route:
+                for leg in route["legs"]:
+                    if "distance" in leg:
+                        distance += leg["distance"]["value"]
+                    if "duration" in leg:
+                        duration += leg["duration"]["value"]
+            
+            return {
+                "geometry": geometry,
+                "distance": distance,
+                "duration": duration
+            }
+            
+        except Exception as e:
+            logger.error(f"Error parsing Yandex route response: {str(e)}", exc_info=True)
+            return None
     
-    speed = speeds.get(mode, 1.25)
-    tort = tortuosity.get(mode, 1.30)
+    async def reverse_geocode(self, coordinates: List[float]) -> Dict:
+        """
+        Get address from coordinates (reverse geocoding)
+        
+        Args:
+            coordinates: [longitude, latitude]
+            
+        Returns:
+            Dict with address and details
+        """
+        try:
+            session = await self._get_session()
+            
+            # Format: "lon,lat"
+            geocode_str = f"{coordinates[0]},{coordinates[1]}"
+            
+            params = {
+                "apikey": self.api_key,
+                "geocode": geocode_str,
+                "format": "json",
+                "results": 1,
+                "lang": "ru_RU"
+            }
+            
+            logger.debug(f"Reverse geocoding: {coordinates}")
+            
+            async with session.get(self.GEOCODER_URL, params=params) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    logger.error(f"Geocoder API error {response.status}: {error_text}")
+                    return {
+                        'address': 'Адрес недоступен',
+                        'details': {}
+                    }
+                
+                data = await response.json()
+                
+                # Parse geocoder response
+                address_info = self._parse_geocoder_response(data)
+                
+                return address_info
+                
+        except Exception as e:
+            logger.error(f"Error in reverse geocoding: {str(e)}", exc_info=True)
+            return {
+                'address': 'Ошибка получения адреса',
+                'details': {}
+            }
     
-    return int((distance_m * tort) / speed)
-
-
-async def get_routing_matrix(points: List[Dict[str, Any]], mode: str) -> Tuple[List[List[int]], float]:
-    """Построение матрицы времени"""
-    n = len(points)
-    matrix = [[0]*n for _ in range(n)]
+    def _parse_geocoder_response(self, data: Dict) -> Dict:
+        """
+        Parse Yandex Geocoder API response
+        
+        Returns:
+            Dict with formatted address and details
+        """
+        try:
+            response = data.get("response", {})
+            collection = response.get("GeoObjectCollection", {})
+            members = collection.get("featureMember", [])
+            
+            if not members:
+                return {
+                    'address': 'Адрес не найден',
+                    'details': {}
+                }
+            
+            geo_object = members[0].get("GeoObject", {})
+            
+            # Get formatted address
+            address = geo_object.get("metaDataProperty", {}).get(
+                "GeocoderMetaData", {}
+            ).get("text", "Адрес неизвестен")
+            
+            # Extract address components
+            components = geo_object.get("metaDataProperty", {}).get(
+                "GeocoderMetaData", {}
+            ).get("Address", {}).get("Components", [])
+            
+            details = {}
+            for component in components:
+                kind = component.get("kind", "")
+                name = component.get("name", "")
+                details[kind] = name
+            
+            return {
+                'address': address,
+                'details': details
+            }
+            
+        except Exception as e:
+            logger.error(f"Error parsing geocoder response: {str(e)}")
+            return {
+                'address': 'Ошибка обработки адреса',
+                'details': {}
+            }
     
-    print(f"[MATRIX] Building fallback matrix for {n} points with mode={mode}")
-    return generate_fallback_matrix_with_mode(points, mode), 1.0
-
-
-def generate_fallback_matrix_with_mode(points: List[Dict[str, Any]], mode: str) -> List[List[int]]:
-    """Генерация матрицы на основе геометрического расстояния"""
-    n = len(points)
-    matrix = [[0]*n for _ in range(n)]
+    async def geocode(self, address: str) -> Optional[List[float]]:
+        """
+        Get coordinates from address (forward geocoding)
+        
+        Args:
+            address: Address string
+            
+        Returns:
+            [longitude, latitude] or None if not found
+        """
+        try:
+            session = await self._get_session()
+            
+            params = {
+                "apikey": self.api_key,
+                "geocode": address,
+                "format": "json",
+                "results": 1,
+                "lang": "ru_RU"
+            }
+            
+            logger.debug(f"Geocoding address: {address}")
+            
+            async with session.get(self.GEOCODER_URL, params=params) as response:
+                if response.status != 200:
+                    logger.error(f"Geocoder API error: {response.status}")
+                    return None
+                
+                data = await response.json()
+                
+                # Parse response
+                response_obj = data.get("response", {})
+                collection = response_obj.get("GeoObjectCollection", {})
+                members = collection.get("featureMember", [])
+                
+                if not members:
+                    logger.warning(f"No results for address: {address}")
+                    return None
+                
+                geo_object = members[0].get("GeoObject", {})
+                point = geo_object.get("Point", {})
+                pos = point.get("pos", "")
+                
+                if not pos:
+                    return None
+                
+                # Parse "lon lat" string
+                lon, lat = map(float, pos.split())
+                
+                logger.debug(f"Geocoded to: [{lon}, {lat}]")
+                return [lon, lat]
+                
+        except Exception as e:
+            logger.error(f"Error geocoding address: {str(e)}", exc_info=True)
+            return None
     
-    for i in range(n):
-        for j in range(n):
-            if i != j:
-                dist_m = calculate_geo_distance(points[i]['coords'], points[j]['coords'])
-                matrix[i][j] = estimate_time_by_mode(dist_m, mode)
-    
-    return matrix
+    async def get_route_alternatives(self, origin: List[float], destination: List[float], 
+                                    mode: str = "pedestrian", 
+                                    alternatives: int = 3) -> List[Dict]:
+        """
+        Get multiple route alternatives between two points
+        
+        Args:
+            origin: [longitude, latitude]
+            destination: [longitude, latitude]
+            mode: routing mode
+            alternatives: number of alternative routes to request
+            
+        Returns:
+            List of route dicts
+        """
+        try:
+            session = await self._get_session()
+            
+            origin_str = f"{origin[0]},{origin[1]}"
+            dest_str = f"{destination[0]},{destination[1]}"
+            
+            params = {
+                "apikey": self.api_key,
+                "waypoints": f"{origin_str}|{dest_str}",
+                "mode": mode,
+                "alternatives": alternatives
+            }
+            
+            if mode == "pedestrian":
+                params["avoid"] = "tolls"
+            
+            logger.debug(f"Requesting {alternatives} alternative routes")
+            
+            async with session.get(self.BASE_URL, params=params) as response:
+                if response.status != 200:
+                    logger.error(f"API error: {response.status}")
+                    return []
+                
+                data = await response.json()
+                
+                # Parse all routes
+                routes = []
+                if "routes" in data:
+                    for route_data in data["routes"]:
+                        route_info = self._parse_route_response({"route": route_data})
+                        if route_info:
+                            routes.append(route_info)
+                
+                return routes
+                
+        except Exception as e:
+            logger.error(f"Error getting route alternatives: {str(e)}")
+            return []
 
 
-def generate_fallback_matrix(points: List[Dict[str, Any]]) -> List[List[int]]:
-    """Обратная совместимость"""
-    return generate_fallback_matrix_with_mode(points, 'pedestrian')
+# Module-level helper functions
+async def create_yandex_api(api_key: str) -> YandexMapsAPI:
+    """Create and return YandexMapsAPI instance"""
+    return YandexMapsAPI(api_key)
