@@ -1,10 +1,5 @@
-/**
- * Управление левой информационной панелью
- * Отображение статистики и этапов маршрута
- */
 window.MapInfoPanel = {
   displayWalkInfo(walkData, pointsInfo) {
-    // Статистика
     const statsHTML = `
       <div class="stat-card">
         <span class="stat-icon">⏱️</span>
@@ -24,16 +19,15 @@ window.MapInfoPanel = {
 
     document.getElementById('routeInfoStats').innerHTML = statsHTML;
 
-    // Этапы с вариантами
     let stagesHTML = '<div class="stages-header">🗺️ Этапы прогулки</div>';
 
     walkData.activities.forEach((activity, idx) => {
       const activityIcon = this.getActivityIcon(activity);
       const activityName = this.getActivityName(activity);
-      const activityDetails = `${activity.duration_minutes} мин · ${this.getTransportLabel(activity.transport_mode)}`;
+      const transportIcon = this.getTransportIcon(activity.transport_mode);
+      const activityDetails = `${activity.duration_minutes} мин · ${transportIcon}`;
 
       if (activity.activity_type === 'place' && activity.alternatives && activity.alternatives.length > 0) {
-        // Этап с вариантами - добавляем слайдер
         const allVariants = [{
           place: activity.selected_place,
           category: activity.category,
@@ -68,7 +62,6 @@ window.MapInfoPanel = {
           </div>
         `;
       } else {
-        // Обычный этап без вариантов
         stagesHTML += `
           <div class="stage-card" data-stage="${idx}">
             <div class="stage-header">
@@ -85,7 +78,6 @@ window.MapInfoPanel = {
 
     document.getElementById('routeStagesList').innerHTML = stagesHTML;
 
-    // Инициализируем обработчики слайдера вариантов
     window.MapVariants.attachSliderHandlers();
 
     document.getElementById('routeInfoPanel').style.display = 'block';
@@ -148,6 +140,16 @@ window.MapInfoPanel = {
     } else {
       return activity.selected_place ? activity.selected_place.name : activity.category;
     }
+  },
+
+  getTransportIcon(mode) {
+    const icons = {
+      'pedestrian': '🚶',
+      'auto': '🚗',
+      'bicycle': '🚴',
+      'masstransit': '🚌'
+    };
+    return icons[mode] || '🚶';
   },
 
   getTransportLabel(mode) {
