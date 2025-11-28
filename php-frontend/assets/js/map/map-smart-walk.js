@@ -47,13 +47,7 @@ window.MapSmartWalk = {
         
         activity.geometry.forEach(coord => allBounds.push(coord));
       } else {
-        console.warn(`[ACTIVITY ${i}] No geometry, using fallback`);
-        
-        if (activity.route_segment && activity.route_segment.length >= 2) {
-          const segmentCoords = activity.route_segment.map(p => p.coords);
-          this.drawFallbackPolyline(segmentCoords, activity.transport_mode);
-          segmentCoords.forEach(coord => allBounds.push(coord));
-        }
+        console.warn(`[ACTIVITY ${i}] No geometry available`);
       }
 
       if (activity.activity_type === 'place' && activity.selected_place) {
@@ -79,11 +73,27 @@ window.MapSmartWalk = {
 
     this.addMarkers(allMarkers);
 
-    if (allBounds.length > 0) {
-      this.mapCore.map.setBounds(allBounds, {
-        checkZoomRange: true,
-        zoomMargin: 50
-      });
+    if (allBounds.length > 1) {
+      console.log('[MAP] Setting bounds for', allBounds.length, 'points');
+      
+      setTimeout(() => {
+        this.mapCore.map.setBounds(allBounds, {
+          checkZoomRange: true,
+          zoomMargin: [50, 50, 50, 50],
+          duration: 500
+        }).then(() => {
+          const currentZoom = this.mapCore.map.getZoom();
+          console.log('[MAP] Current zoom after setBounds:', currentZoom);
+          
+          if (currentZoom < 10) {
+            console.log('[MAP] Zoom too low, setting to 12');
+            this.mapCore.map.setZoom(12, { duration: 300 });
+          } else if (currentZoom > 16) {
+            console.log('[MAP] Zoom too high, setting to 15');
+            this.mapCore.map.setZoom(15, { duration: 300 });
+          }
+        });
+      }, 100);
     }
 
     window.MapInfoPanel.displayWalkInfo(walkData, allMarkers);
@@ -103,22 +113,6 @@ window.MapSmartWalk = {
     this.mapCore.map.geoObjects.add(polyline);
     
     console.log('[GEOMETRY] Drew polyline with color', routeColor);
-  },
-
-  drawFallbackPolyline(coords, transportMode) {
-    const routeColor = this.getRouteColor(transportMode);
-    
-    const polyline = new ymaps.Polyline(coords, {}, {
-      strokeColor: routeColor,
-      strokeWidth: 4,
-      strokeOpacity: 0.5,
-      strokeStyle: 'dash'
-    });
-
-    this.mapCore.currentRouteLines.push(polyline);
-    this.mapCore.map.geoObjects.add(polyline);
-    
-    console.log('[FALLBACK] Drew dashed polyline');
   },
 
   getRouteColor(transportMode) {

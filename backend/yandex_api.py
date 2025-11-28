@@ -163,10 +163,14 @@ def convert_mode_to_osrm(mode: str) -> str:
     """
     mode_map = {
         'pedestrian': 'foot',
+        'walking': 'foot',
         'auto': 'car',
+        'driving': 'car',
         'bicycle': 'bike',
-        'masstransit': 'car'  # fallback для общественного транспорта
+        'bike': 'bike',
+        'masstransit': 'car'  # fallback
     }
+
     
     osrm_profile = mode_map.get(mode, 'foot')
     print(f"[MODE CONVERT] {mode} -> {osrm_profile}")
