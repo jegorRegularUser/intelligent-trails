@@ -21,7 +21,8 @@ function callBackendAPI($endpoint, $method = 'GET', $data = null) {
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 120);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 30);
     
     if ($method === 'POST') {
         curl_setopt($ch, CURLOPT_POST, true);
@@ -66,7 +67,6 @@ switch ($action) {
         $result = callBackendAPI('/calculate_smart_walk', 'POST', $input);
         
         if ($result['code'] === 200 && $result['data']) {
-            // Сохранить в историю
             if (isset($_SESSION["loggedin"]) && $_SESSION["loggedin"] === true) {
                 $userId = $_SESSION["id"];
                 $stmt = $link->prepare("INSERT INTO route_history (user_id, route_type, start_point, route_data, created_at) VALUES (?, ?, ?, ?, NOW())");

@@ -1,6 +1,3 @@
-/**
- * Управление активностями: добавление, редактирование, удаление прогулок и мест
- */
 window.RouteModalActivities = {
   modalInstance: null,
 
@@ -10,7 +7,6 @@ window.RouteModalActivities = {
   },
 
   attachEventListeners() {
-    // Кнопки добавления активностей
     document.querySelectorAll('.activity-type-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const type = e.currentTarget.dataset.type;
@@ -23,17 +19,14 @@ window.RouteModalActivities = {
       });
     });
 
-    // Модальное окно прогулки
     document.getElementById('closeWalkModal').addEventListener('click', () => this.closeWalkModal());
     document.getElementById('cancelWalk').addEventListener('click', () => this.closeWalkModal());
     document.getElementById('confirmWalk').addEventListener('click', () => this.saveWalkActivity());
 
-    // Модальное окно места
     document.getElementById('closePlaceModal').addEventListener('click', () => this.closePlaceModal());
     document.getElementById('cancelPlace').addEventListener('click', () => this.closePlaceModal());
     document.getElementById('confirmPlace').addEventListener('click', () => this.savePlaceActivity());
 
-    // Переключение табов в модальном окне места
     document.querySelectorAll('.place-tab').forEach(tab => {
       tab.addEventListener('click', (e) => {
         const tabName = e.currentTarget.dataset.tab;
@@ -86,19 +79,26 @@ window.RouteModalActivities = {
         document.getElementById('specificPlaceInput').value = activity.specificPlaceAddress;
       } else {
         document.querySelector('.place-tab[data-tab="category"]').click();
-        document.querySelector(`input[name="placeCategory"][value="${activity.category}"]`).checked = true;
+        const categoryRadio = document.querySelector(`input[name="placeCategory"][value="${activity.category}"]`);
+        if (categoryRadio) {
+          categoryRadio.checked = true;
+        }
       }
       
-      document.getElementById('placeRouteTime').value = activity.duration_minutes - (activity.time_at_place || 0);
       document.getElementById('placeStayTime').value = activity.time_at_place || 20;
       document.getElementById('placeTransport').value = activity.transport_mode;
     } else {
       document.getElementById('placeModalTitle').textContent = 'Добавить место';
       document.getElementById('placeConfirmText').textContent = 'Добавить';
       document.querySelector('.place-tab[data-tab="category"]').click();
-      document.querySelector('input[name="placeCategory"][value="кафе"]').checked = true;
-      document.getElementById('specificPlaceInput').value = '';
-      document.getElementById('placeRouteTime').value = 15;
+      const defaultCategory = document.querySelector('input[name="placeCategory"][value="кафе"]');
+      if (defaultCategory) {
+        defaultCategory.checked = true;
+      }
+      const specificInput = document.getElementById('specificPlaceInput');
+      if (specificInput) {
+        specificInput.value = '';
+      }
       document.getElementById('placeStayTime').value = 20;
       document.getElementById('placeTransport').value = 'pedestrian';
     }
@@ -133,7 +133,7 @@ window.RouteModalActivities = {
     this.closeWalkModal();
   },
 
-   savePlaceActivity() {
+  savePlaceActivity() {
     const activeTab = document.querySelector('.place-tab.active').dataset.tab;
     const stayTime = parseInt(document.getElementById('placeStayTime').value);
     const transport = document.getElementById('placeTransport').value;
@@ -146,9 +146,15 @@ window.RouteModalActivities = {
     };
 
     if (activeTab === 'category') {
-      activity.category = document.querySelector('input[name="placeCategory"]:checked').value;
+      const selectedCategory = document.querySelector('input[name="placeCategory"]:checked');
+      if (selectedCategory) {
+        activity.category = selectedCategory.value;
+      } else {
+        activity.category = 'кафе';
+      }
     } else {
-      const placeAddress = document.getElementById('specificPlaceInput').value.trim();
+      const placeInput = document.getElementById('specificPlaceInput');
+      const placeAddress = placeInput ? placeInput.value.trim() : '';
       if (!placeAddress) {
         this.modalInstance.showNotification('⚠️ Укажите адрес или название места', 'error');
         return;
@@ -162,14 +168,13 @@ window.RouteModalActivities = {
       this.modalInstance.activities.push(activity);
     }
 
-    // Генерация прогулок между местами
     if (this.modalInstance.activities.length > 1) {
       const last = this.modalInstance.activities[this.modalInstance.activities.length - 2];
       if (last.type === 'place') {
         this.modalInstance.activities.splice(this.modalInstance.activities.length - 1, 0, {
           type: 'walk',
           duration_minutes: 10,
-          walking_style: 'scenic',
+          walking_style: 'direct',
           transport_mode: transport
         });
       }
@@ -209,7 +214,7 @@ window.RouteModalActivities = {
                  activity.category === 'бар' ? '🍺' :
                  activity.category === 'магазин' ? '🛍️' : '📍';
           title = activity.specificPlaceAddress || activity.category;
-          details = `${activity.duration_minutes} мин (на месте ${activity.time_at_place} мин)`;
+          details = `${activity.duration_minutes} мин`;
         }
 
         html += `
@@ -230,7 +235,6 @@ window.RouteModalActivities = {
 
       timeline.innerHTML = html;
 
-      // Обработчики кнопок
       timeline.querySelectorAll('.timeline-item-remove').forEach(btn => {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -247,7 +251,6 @@ window.RouteModalActivities = {
         });
       });
 
-      // Drag and Drop
       timeline.querySelectorAll('.timeline-item').forEach(item => {
         item.addEventListener('dragstart', (e) => this.handleDragStart(modal, e));
         item.addEventListener('dragover', (e) => this.handleDragOver(e));
@@ -273,7 +276,7 @@ window.RouteModalActivities = {
     e.dataTransfer.dropEffect = 'move';
     
     const target = e.currentTarget;
-    if (target !== this.modalInstance.draggedElement) {
+    if (this.modalInstance && target !== this.modalInstance.draggedElement) {
       const rect = target.getBoundingClientRect();
       const midpoint = rect.top + rect.height / 2;
       

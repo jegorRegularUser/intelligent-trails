@@ -76,9 +76,19 @@ window.RouteModalTemplate = {
 
         <div class="timeline-container">
           <div class="timeline-total">
-            <span class="timeline-icon">🕐</span>
-            <span>Общее время: <strong id="totalTimeDisplay">0 мин</strong></span>
-            <div id="globalTransportSwitcher"></div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span class="timeline-icon">🕐</span>
+              <span>Общее время: <strong id="totalTimeDisplay">0 мин</strong></span>
+            </div>
+            <div class="global-transport-switcher">
+              <label style="font-size: 12px; color: #666; margin-right: 5px;">Способ:</label>
+              <select id="globalTransportMode" style="padding: 5px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px;">
+                <option value="pedestrian">🚶 Пешком</option>
+                <option value="bicycle">🚴 Велосипед</option>
+                <option value="auto">🚗 Авто</option>
+                <option value="masstransit">🚌 Транспорт</option>
+              </select>
+            </div>
           </div>
           
           <div id="activitiesTimeline" class="activities-timeline">
@@ -280,6 +290,7 @@ window.RouteModalTemplate = {
       </div>
     `;
   },
+
   getPlaceModal() {
     return `
       <div id="addPlaceModal" class="activity-modal">

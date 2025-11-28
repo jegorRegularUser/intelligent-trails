@@ -1,7 +1,3 @@
-/**
- * Основной класс для управления модальным окном маршрутов
- * Координирует работу всех компонентов
- */
 class RouteModal {
   constructor() {
     this.modal = null;
@@ -40,7 +36,6 @@ class RouteModal {
   }
 
   attachEventListeners() {
-    // Основные обработчики закрытия
     document.getElementById("closeModal").addEventListener("click", () => this.close());
     document.getElementById("cancelRoute").addEventListener("click", () => this.close());
 
@@ -48,14 +43,12 @@ class RouteModal {
       if (e.target === this.modal) this.close();
     });
 
-    // Переключение типа маршрута
     document.querySelectorAll(".route-type-btn").forEach((btn) => {
       btn.addEventListener("click", (e) => {
         this.switchRouteType(e.currentTarget.dataset.type);
       });
     });
 
-    // Обработчики выбора конечной точки
     document.querySelectorAll('input[name="routeEnd"]').forEach((radio) => {
       radio.addEventListener("change", (e) => {
         const endGroup = document.getElementById("smartEndPointGroup");
@@ -63,13 +56,24 @@ class RouteModal {
       });
     });
 
-    // Инициализация подсистем
     window.RouteModalActivities.init(this);
     window.RouteModalWaypoints.init(this);
     window.RouteModalBuilder.init(this);
     window.RouteModalYandex.init(this);
 
-    // Глобальный обработчик Escape
+    const globalTransportSelect = document.getElementById('globalTransportMode');
+    if (globalTransportSelect) {
+      globalTransportSelect.addEventListener('change', (e) => {
+        const newMode = e.target.value;
+        this.activities.forEach(activity => {
+          if (activity.transport_mode) {
+            activity.transport_mode = newMode;
+          }
+        });
+        window.RouteModalActivities.updateTimeline(this);
+      });
+    }
+
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
         if (document.getElementById('addWalkModal').classList.contains('active')) {
@@ -162,7 +166,6 @@ class RouteModal {
   }
 }
 
-// Инициализация
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => {
     window.routeModal = new RouteModal();
