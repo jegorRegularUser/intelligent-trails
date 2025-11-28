@@ -29,16 +29,28 @@ window.MapInfoPanel = {
     `;
 
     // 1. Вставляем HTML
-    document.getElementById('routeInfoStats').innerHTML = statsHTML;
-
-    // 2. Вешаем обработчик ТОЛЬКО ПОСЛЕ вставки
-    const editBtn = document.getElementById('editRouteBtn');
-    if (editBtn) {
-        editBtn.addEventListener('click', () => {
-            if (window.routeModal) {
-                window.routeModal.open();
+    const statsContainer = document.getElementById('routeInfoStats');
+    if (statsContainer) {
+        statsContainer.innerHTML = statsHTML;
+        
+        // 2. Сразу после вставки ищем кнопку внутри контейнера
+        // Используем setTimeout(0) чтобы гарантировать, что DOM обновился
+        setTimeout(() => {
+            const editBtn = document.getElementById('editRouteBtn');
+            if (editBtn) {
+                // Удаляем старые слушатели (через клонирование), чтобы не дублировать
+                const newBtn = editBtn.cloneNode(true);
+                editBtn.parentNode.replaceChild(newBtn, editBtn);
+                
+                newBtn.addEventListener('click', () => {
+                    if (window.routeModal) {
+                        window.routeModal.open();
+                    }
+                });
+            } else {
+                console.warn('[MapInfoPanel] Edit button not found after render');
             }
-        });
+        }, 0);
     }
 
     let stagesHTML = '<div class="stages-header">🗺️ Этапы прогулки</div>';
@@ -113,13 +125,23 @@ window.MapInfoPanel = {
       stagesHTML += '</div>';
     }
 
-    document.getElementById('routeStagesList').innerHTML = stagesHTML;
-
-    if (window.MapVariants) {
-        window.MapVariants.attachSliderHandlers();
+    const listContainer = document.getElementById('routeStagesList');
+    if (listContainer) {
+        listContainer.innerHTML = stagesHTML;
     }
 
-    document.getElementById('routeInfoPanel').style.display = 'block';
+    // Инициализируем слайдеры вариантов, если модуль загружен
+    if (window.MapVariants && typeof window.MapVariants.attachSliderHandlers === 'function') {
+        // Также даем DOM время на обновление
+        setTimeout(() => {
+            window.MapVariants.attachSliderHandlers();
+        }, 0);
+    }
+
+    const panel = document.getElementById('routeInfoPanel');
+    if (panel) {
+        panel.style.display = 'block';
+    }
   },
 
   displaySimpleRouteInfo(route, routeData) {
@@ -151,9 +173,20 @@ window.MapInfoPanel = {
       </div>
     `;
 
-    document.getElementById('routeInfoStats').innerHTML = statsHTML;
-    document.getElementById('routeStagesList').innerHTML = '';
-    document.getElementById('routeInfoPanel').style.display = 'block';
+    const statsContainer = document.getElementById('routeInfoStats');
+    if (statsContainer) {
+        statsContainer.innerHTML = statsHTML;
+    }
+    
+    const listContainer = document.getElementById('routeStagesList');
+    if (listContainer) {
+        listContainer.innerHTML = '';
+    }
+    
+    const panel = document.getElementById('routeInfoPanel');
+    if (panel) {
+        panel.style.display = 'block';
+    }
   },
 
   getActivityIcon(activity) {
