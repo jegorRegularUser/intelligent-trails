@@ -1,6 +1,6 @@
 """
 Intelligent Trails Backend - FastAPI Application
-Improved version with proper route handling and state management
+Full version with ALL endpoints including legacy support
 """
 
 from fastapi import FastAPI, HTTPException, Body, Query
@@ -13,6 +13,8 @@ from dotenv import load_dotenv
 
 from routing_service import get_routing_service
 from yandex_api import YandexMapsAPI
+import yandex_api as yandex_api_module
+import solver
 
 # Load environment variables
 load_dotenv()
@@ -34,7 +36,7 @@ app = FastAPI(
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify exact origins
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -44,77 +46,36 @@ app.add_middleware(
 YANDEX_API_KEY = os.getenv("YANDEX_API_KEY")
 if not YANDEX_API_KEY:
     logger.error("YANDEX_API_KEY not found in environment variables!")
-    raise ValueError("YANDEX_API_KEY must be set")
 
 # Initialize services
-routing_service = get_routing_service(YANDEX_API_KEY)
-yandex_api = YandexMapsAPI(YANDEX_API_KEY)
+routing_service = get_routing_service(YANDEX_API_KEY) if YANDEX_API_KEY else None
+yandex_api = YandexMapsAPI(YANDEX_API_KEY) if YANDEX_API_KEY else None
+
+# Set module-level variables for legacy code
+if YANDEX_API_KEY:
+    yandex_api_module.YANDEX_API_KEY = YANDEX_API_KEY
 
 
-# Pydantic models for new API
+# ============================================================================
+# PYDANTIC MODELS
+# ============================================================================
+
+# New API models
 class Place(BaseModel):
-    """Model for a place/location"""
     id: Optional[int] = None
-    name: str = Field(..., description="Name of the place")
-    coordinates: List[float] = Field(..., description="[longitude, latitude]")
-    address: Optional[str] = Field(None, description="Human-readable address")
-    type: str = Field("must_visit", description="must_visit or optional")
-    
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "name": "Красная площадь",
-                "coordinates": [37.6173, 55.7539],
-                "address": "Москва, Красная площадь",
-                "type": "must_visit"
-            }
-        }
+    name: str
+    coordinates: List[float]
+    address: Optional[str] = None
+    type: str = "must_visit"
 
 
 class RouteRequest(BaseModel):
-    """Model for route building request"""
-    places: List[Place] = Field(..., min_length=2, description="List of places to visit")
-    mode: str = Field("pedestrian", description="pedestrian, driving, or masstransit")
-    optimize: bool = Field(True, description="Whether to optimize the order of places")
-    
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "places": [
-                    {
-                        "name": "Красная площадь",
-                        "coordinates": [37.6173, 55.7539],
-                        "type": "must_visit"
-                    },
-                    {
-                        "name": "ГУМ",
-                        "coordinates": [37.6211, 55.7558],
-                        "type": "must_visit"
-                    }
-                ],
-                "mode": "pedestrian",
-                "optimize": True
-            }
-        }
+    places: List[Place] = Field(..., min_length=2)
+    mode: str = "pedestrian"
+    optimize: bool = True
 
 
-class UpdatePlaceRequest(BaseModel):
-    """Model for updating a place in existing route"""
-    place_index: int = Field(..., description="Index of place to update (0-based)")
-    new_place: Place = Field(..., description="New place data")
-
-
-class GeocodeRequest(BaseModel):
-    """Model for geocoding request"""
-    address: str = Field(..., description="Address to geocode")
-
-
-class ReverseGeocodeRequest(BaseModel):
-    """Model for reverse geocoding request"""
-    coordinates: List[float] = Field(..., description="[longitude, latitude]")
-
-
-# Legacy models for backward compatibility
+# Legacy models
 class Point(BaseModel):
     name: str
     coords: List[float]
@@ -137,6 +98,28 @@ class SmartWalkRequest(BaseModel):
     end_point: Optional[Point] = None
 
 
+class ActivityResult(BaseModel):
+    activity_index: int
+    activity_type: str
+    duration_minutes: int
+    transport_mode: str
+    geometry: Optional[List[List[float]]] = None
+    duration_seconds: Optional[int] = None
+    distance_meters: Optional[int] = None
+    route_segment: Optional[List[Point]] = None
+    selected_place: Optional[Point] = None
+    alternatives: Optional[List[Dict]] = None
+    category: Optional[str] = None
+    time_at_place: Optional[int] = None
+
+
+class SmartWalkResponse(BaseModel):
+    activities: List[ActivityResult]
+    total_duration_minutes: int
+    total_distance_meters: Optional[int] = None
+    warnings: List[str] = []
+
+
 class RebuildSegmentRequest(BaseModel):
     activity_index: int
     new_place: Point
@@ -145,35 +128,59 @@ class RebuildSegmentRequest(BaseModel):
     transport_mode: str = "pedestrian"
 
 
-# API Endpoints - New improved API
+class RebuildSegmentResponse(BaseModel):
+    geometry: List[List[float]]
+    duration_seconds: int
+    distance_meters: int
+
+
+class RouteSettings(BaseModel):
+    pace: Literal["relaxed", "balanced", "active"] = "balanced"
+    time_strictness: int = 5
+
+
+class RouteRequest2(BaseModel):
+    start_point: Point
+    end_point: Optional[Point] = None
+    categories: List[str]
+    time_limit_minutes: int
+    return_to_start: bool
+    mode: str = "pedestrian"
+    min_places_per_category: Dict[str, int] = Field(default_factory=dict)
+    settings: RouteSettings = Field(default_factory=RouteSettings)
+
+
+class RouteResponse(BaseModel):
+    ordered_route: List[Point]
+    total_time_minutes: int
+    warnings: List[str] = []
+
+
+# ============================================================================
+# NEW API ENDPOINTS
+# ============================================================================
 
 @app.get("/")
 async def root():
-    """Root endpoint"""
     return {
         "service": "Intelligent Trails API",
         "version": "2.0.0",
         "status": "running",
-        "endpoints": {
-            "new_api": {
-                "build_route": "/api/route/build",
-                "update_place": "/api/route/update-place",
-                "place_info": "/api/place/info",
-                "geocode": "/api/geocode",
-                "reverse_geocode": "/api/reverse-geocode",
-                "modes": "/api/route/modes"
-            },
-            "legacy": {
-                "smart_walk": "/calculate_smart_walk",
-                "rebuild_segment": "/rebuild_route_segment"
-            }
-        }
+        "api_key_configured": bool(YANDEX_API_KEY)
+    }
+
+
+@app.get("/status")
+async def status():
+    """Status endpoint for health checks"""
+    return {
+        "status": "ok",
+        "api_key_configured": bool(YANDEX_API_KEY)
     }
 
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
     return {
         "status": "healthy",
         "api_key_configured": bool(YANDEX_API_KEY)
@@ -182,22 +189,11 @@ async def health_check():
 
 @app.post("/api/route/build")
 async def build_route(request: RouteRequest):
-    """
-    Build an optimized route through multiple places
-    
-    Args:
-        request: RouteRequest with places, mode, and optimization flag
-        
-    Returns:
-        Route data with segments, distances, and durations
-    """
     try:
-        logger.info(f"Building route for {len(request.places)} places in {request.mode} mode")
-        
-        # Convert Pydantic models to dicts
+        if not YANDEX_API_KEY or not routing_service:
+            raise HTTPException(status_code=500, detail="API key not configured")
+            
         places_data = [place.model_dump() for place in request.places]
-        
-        # Build route
         route_data = await routing_service.build_route(
             places=places_data,
             mode=request.mode,
@@ -205,238 +201,332 @@ async def build_route(request: RouteRequest):
         )
         
         if not route_data.get('success'):
-            raise HTTPException(
-                status_code=400,
-                detail=route_data.get('error', 'Failed to build route')
-            )
+            raise HTTPException(status_code=400, detail=route_data.get('error'))
         
-        logger.info(f"Route built successfully: {route_data['summary']['total_distance_km']}km")
         return route_data
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error building route: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/route/update-place")
-async def update_route_place(route_data: Dict[str, Any] = Body(...), 
-                            place_index: int = Body(...),
-                            new_place: Place = Body(...)):
-    """
-    Update a specific place in an existing route
-    
-    Args:
-        route_data: Current route data
-        place_index: Index of place to update (0-based)
-        new_place: New place data
-        
-    Returns:
-        Updated route data
-    """
-    try:
-        logger.info(f"Updating place at index {place_index}")
-        
-        new_place_data = new_place.model_dump()
-        
-        updated_route = await routing_service.update_route_place(
-            route_data=route_data,
-            place_index=place_index,
-            new_place=new_place_data
-        )
-        
-        if not updated_route.get('success'):
-            raise HTTPException(
-                status_code=400,
-                detail=updated_route.get('error', 'Failed to update place')
-            )
-        
-        return updated_route
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error updating place: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/api/place/info")
-async def get_place_info(lon: float = Query(...), lat: float = Query(...)):
-    """
-    Get detailed information about a place by coordinates
-    
-    Args:
-        lon: Longitude
-        lat: Latitude
-        
-    Returns:
-        Place information including address
-    """
-    try:
-        coordinates = [lon, lat]
-        
-        place_info = await routing_service.get_place_info(coordinates)
-        
-        if not place_info.get('success'):
-            raise HTTPException(
-                status_code=400,
-                detail=place_info.get('error', 'Failed to get place info')
-            )
-        
-        return place_info
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error getting place info: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/geocode")
-async def geocode_address(request: GeocodeRequest):
-    """
-    Convert address to coordinates (forward geocoding)
-    
-    Args:
-        request: GeocodeRequest with address string
-        
-    Returns:
-        Coordinates [longitude, latitude]
-    """
-    try:
-        logger.info(f"Geocoding address: {request.address}")
-        
-        coordinates = await yandex_api.geocode(request.address)
-        
-        if not coordinates:
-            raise HTTPException(
-                status_code=404,
-                detail="Address not found"
-            )
-        
-        return {
-            "success": True,
-            "address": request.address,
-            "coordinates": coordinates
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error geocoding address: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/reverse-geocode")
-async def reverse_geocode_coordinates(request: ReverseGeocodeRequest):
-    """
-    Convert coordinates to address (reverse geocoding)
-    
-    Args:
-        request: ReverseGeocodeRequest with coordinates
-        
-    Returns:
-        Address and details
-    """
-    try:
-        logger.info(f"Reverse geocoding: {request.coordinates}")
-        
-        address_data = await yandex_api.reverse_geocode(request.coordinates)
-        
-        return {
-            "success": True,
-            "coordinates": request.coordinates,
-            "address": address_data.get('address'),
-            "details": address_data.get('details', {})
-        }
-        
-    except Exception as e:
-        logger.error(f"Error reverse geocoding: {str(e)}", exc_info=True)
+        logger.error(f"Error: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/route/modes")
 async def get_routing_modes():
-    """
-    Get available routing modes and their configurations
-    
-    Returns:
-        Dictionary of routing modes
-    """
     from routing_service import ROUTING_MODES
-    
-    return {
-        "success": True,
-        "modes": ROUTING_MODES
-    }
+    return {"success": True, "modes": ROUTING_MODES}
 
 
-@app.post("/api/route/alternatives")
-async def get_route_alternatives(
-    origin: List[float] = Body(...),
-    destination: List[float] = Body(...),
-    mode: str = Body("pedestrian"),
-    alternatives: int = Body(3)
-):
+# ============================================================================
+# LEGACY API ENDPOINTS (для совместимости со старым фронтом)
+# ============================================================================
+
+@app.post("/calculate_smart_walk", response_model=SmartWalkResponse)
+async def calculate_smart_walk(request: SmartWalkRequest):
     """
-    Get multiple alternative routes between two points
+    LEGACY ENDPOINT - обработка умной прогулки
+    Совместимость со старым фронтендом
+    """
+    if not YANDEX_API_KEY:
+        raise HTTPException(status_code=500, detail="Yandex API key is not configured.")
+
+    logger.info(f"[LEGACY] Smart walk: {len(request.activities)} activities")
+
+    warnings = []
+    activity_results = []
+    current_point = request.start_point
+    total_duration = 0
+    total_distance = 0
+
+    for act_idx, activity in enumerate(request.activities):
+        logger.info(f"[ACTIVITY {act_idx + 1}] Type: {activity.type}, Mode: {activity.transport_mode}")
+        
+        if activity.type == "walk":
+            # Walk activity
+            waypoints = []
+            
+            if activity.walking_style == "scenic":
+                # Scenic walk - try to find parks
+                try:
+                    scenic_places = await yandex_api_module.search_places(
+                        center_coords=current_point.coords,
+                        categories=["парк", "сквер"],
+                        radius_m=int(activity.duration_minutes * 75)
+                    )
+                    
+                    if scenic_places:
+                        scenic_places.sort(
+                            key=lambda p: yandex_api_module.calculate_geo_distance(current_point.coords, p['coords'])
+                        )
+                        waypoints = [Point(name=scenic_places[0]['name'], coords=scenic_places[0]['coords'])]
+                    else:
+                        angle = act_idx * 60
+                        walk_end_coords = yandex_api_module.point_at_distance(
+                            current_point.coords, 
+                            activity.duration_minutes * 75, 
+                            angle
+                        )
+                        waypoints = [Point(name="Точка прогулки", coords=walk_end_coords)]
+                except Exception as e:
+                    logger.error(f"Scenic walk error: {e}")
+                    angle = act_idx * 60
+                    walk_end_coords = yandex_api_module.point_at_distance(
+                        current_point.coords, 
+                        activity.duration_minutes * 75, 
+                        angle
+                    )
+                    waypoints = [Point(name="Точка прогулки", coords=walk_end_coords)]
+            else:
+                # Direct walk
+                next_destination = None
+                for next_idx in range(act_idx + 1, len(request.activities)):
+                    next_act = request.activities[next_idx]
+                    if next_act.type == "place" and next_act.specific_place:
+                        next_destination = next_act.specific_place
+                        break
+                
+                if not next_destination:
+                    if request.return_to_start:
+                        next_destination = request.start_point
+                    elif request.end_point:
+                        next_destination = request.end_point
+                    else:
+                        angle = act_idx * 60
+                        walk_end_coords = yandex_api_module.point_at_distance(
+                            current_point.coords, 
+                            activity.duration_minutes * 75, 
+                            angle
+                        )
+                        next_destination = Point(name="Конец прогулки", coords=walk_end_coords)
+                
+                waypoints = [next_destination]
+            
+            route_waypoints = [current_point.coords] + [w.coords for w in waypoints]
+            route_data = await yandex_api_module.build_route(route_waypoints, activity.transport_mode)
+            
+            if route_data:
+                activity_results.append(ActivityResult(
+                    activity_index=act_idx,
+                    activity_type="walk",
+                    duration_minutes=activity.duration_minutes,
+                    transport_mode=activity.transport_mode,
+                    geometry=route_data['geometry'],
+                    duration_seconds=route_data['duration_seconds'],
+                    distance_meters=route_data['distance_meters'],
+                    route_segment=[current_point] + waypoints
+                ))
+                total_distance += route_data['distance_meters']
+            else:
+                warnings.append(f"Прогулка {act_idx + 1}: не удалось построить маршрут")
+                activity_results.append(ActivityResult(
+                    activity_index=act_idx,
+                    activity_type="walk",
+                    duration_minutes=activity.duration_minutes,
+                    transport_mode=activity.transport_mode,
+                    geometry=None,
+                    route_segment=[current_point] + waypoints
+                ))
+            
+            current_point = waypoints[-1]
+            total_duration += activity.duration_minutes
+            
+        else:
+            # Place activity
+            if activity.specific_place:
+                selected_place = activity.specific_place
+                alternatives = []
+            else:
+                try:
+                    search_radius = 3000
+                    places = await yandex_api_module.search_places(
+                        center_coords=current_point.coords,
+                        categories=[activity.category] if activity.category else [],
+                        radius_m=search_radius
+                    )
+                except Exception as e:
+                    logger.error(f"Place search error: {e}")
+                    places = []
+                
+                if not places:
+                    warnings.append(f"Активность {act_idx + 1}: места категории '{activity.category}' не найдены")
+                    continue
+                
+                places.sort(key=lambda p: yandex_api_module.calculate_geo_distance(current_point.coords, p['coords']))
+                selected_place = Point(name=places[0]['name'], coords=places[0]['coords'])
+                
+                alternatives = []
+                for p in places[1:min(5, len(places))]:
+                    dist = yandex_api_module.calculate_geo_distance(current_point.coords, p['coords'])
+                    est_time = yandex_api_module.estimate_time_by_mode(dist, activity.transport_mode) // 60
+                    alternatives.append({
+                        'place': Point(name=p['name'], coords=p['coords']),
+                        'category': p.get('category', activity.category or 'место'),
+                        'estimated_time_minutes': est_time
+                    })
+            
+            route_waypoints = [current_point.coords, selected_place.coords]
+            route_data = await yandex_api_module.build_route(route_waypoints, activity.transport_mode)
+            
+            if route_data:
+                activity_results.append(ActivityResult(
+                    activity_index=act_idx,
+                    activity_type="place",
+                    duration_minutes=activity.duration_minutes,
+                    transport_mode=activity.transport_mode,
+                    geometry=route_data['geometry'],
+                    duration_seconds=route_data['duration_seconds'],
+                    distance_meters=route_data['distance_meters'],
+                    selected_place=selected_place,
+                    alternatives=alternatives,
+                    category=activity.category or "конкретное место",
+                    time_at_place=activity.time_at_place
+                ))
+                total_distance += route_data['distance_meters']
+            else:
+                warnings.append(f"Место {act_idx + 1}: не удалось построить маршрут")
+                activity_results.append(ActivityResult(
+                    activity_index=act_idx,
+                    activity_type="place",
+                    duration_minutes=activity.duration_minutes,
+                    transport_mode=activity.transport_mode,
+                    geometry=None,
+                    selected_place=selected_place,
+                    alternatives=alternatives,
+                    category=activity.category or "конкретное место",
+                    time_at_place=activity.time_at_place
+                ))
+            
+            current_point = selected_place
+            total_duration += activity.duration_minutes
+
+    return SmartWalkResponse(
+        activities=activity_results,
+        total_duration_minutes=total_duration,
+        total_distance_meters=total_distance if total_distance > 0 else None,
+        warnings=warnings
+    )
+
+
+@app.post("/rebuild_route_segment", response_model=RebuildSegmentResponse)
+async def rebuild_route_segment(request: RebuildSegmentRequest):
+    """
+    LEGACY ENDPOINT - Перестраивает маршрут до нового выбранного места
+    """
+    if not YANDEX_API_KEY:
+        raise HTTPException(status_code=500, detail="Yandex API key is not configured.")
     
-    Args:
-        origin: Starting coordinates [lon, lat]
-        destination: Ending coordinates [lon, lat]
-        mode: Routing mode
-        alternatives: Number of alternatives
-        
-    Returns:
-        List of alternative routes
-    """
-    try:
-        logger.info(f"Getting {alternatives} alternative routes")
-        
-        routes = await yandex_api.get_route_alternatives(
-            origin=origin,
-            destination=destination,
-            mode=mode,
-            alternatives=alternatives
+    waypoints = [request.prev_place_coords, request.new_place.coords]
+    route_data = await yandex_api_module.build_route(waypoints, request.transport_mode)
+    
+    if route_data:
+        return RebuildSegmentResponse(
+            geometry=route_data['geometry'],
+            duration_seconds=route_data['duration_seconds'],
+            distance_meters=route_data['distance_meters']
         )
-        
-        return {
-            "success": True,
-            "origin": origin,
-            "destination": destination,
-            "mode": mode,
-            "alternatives": routes
-        }
-        
+    else:
+        raise HTTPException(status_code=500, detail="Failed to rebuild route")
+
+
+@app.post("/calculate_route", response_model=RouteResponse)
+async def calculate_route_endpoint(request: RouteRequest2):
+    """LEGACY ENDPOINT - Старый эндпоинт для обратной совместимости"""
+    if not YANDEX_API_KEY:
+        raise HTTPException(status_code=500, detail="Yandex API key is not configured.")
+
+    warnings = []
+
+    try:
+        places_of_interest = await yandex_api_module.search_places(
+            center_coords=request.start_point.coords,
+            categories=request.categories
+        )
     except Exception as e:
-        logger.error(f"Error getting alternatives: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Search places error: {e}")
+        places_of_interest = []
+
+    if not places_of_interest:
+        warnings.append("Интересные места не найдены. Построен прямой маршрут.")
+    
+    start_point_dict = {"name": request.start_point.name, "coords": request.start_point.coords, "type": "start"}
+    
+    base_limit = yandex_api_module.MAX_POINTS_FOR_MATRIX - 1
+    if request.settings.pace == "active":
+        limit = base_limit
+    elif request.settings.pace == "relaxed":
+        limit = max(3, int(base_limit * 0.6))
+    else:
+        limit = int(base_limit * 0.8)
+
+    if request.end_point and not request.return_to_start:
+        limit -= 1
+
+    filtered_places = yandex_api_module.smart_filter(start_point_dict, places_of_interest, limit=limit)
+    
+    all_points_dicts = [start_point_dict]
+    all_points_dicts.extend(filtered_places)
+    
+    end_point_index = None
+    if not request.return_to_start and request.end_point:
+        end_point_dict = {"name": request.end_point.name, "coords": request.end_point.coords, "type": "end"}
+        all_points_dicts.append(end_point_dict)
+        end_point_index = len(all_points_dicts) - 1
+
+    try:
+        time_matrix, success_rate = await yandex_api_module.get_routing_matrix(all_points_dicts, request.mode)
+        time_matrix = [[int(cell) for cell in row] for row in time_matrix]
+    except Exception as e:
+        logger.error(f"Matrix calculation error: {e}")
+        time_matrix = yandex_api_module.generate_fallback_matrix_with_mode(all_points_dicts, request.mode)
+        warnings.append("Ошибка сервиса карт. Маршрут построен геометрически.")
+
+    try:
+        ordered_indices = solver.solve_vrp_dynamic(
+            matrix=time_matrix,
+            time_limit_minutes=request.time_limit_minutes,
+            return_to_start=request.return_to_start,
+            end_point_index=end_point_index,
+            pace=request.settings.pace,
+            strictness=request.settings.time_strictness
+        )
+    except Exception as e:
+        logger.error(f"Solver error: {e}")
+        ordered_indices = [0]
+        if end_point_index: 
+            ordered_indices.append(end_point_index)
+
+    final_route_points = []
+    total_time_sec = 0
+    
+    for i in range(len(ordered_indices)):
+        idx = ordered_indices[i]
+        final_route_points.append(Point(
+            name=all_points_dicts[idx]['name'], 
+            coords=all_points_dicts[idx]['coords']
+        ))
+        if i > 0:
+            prev = ordered_indices[i-1]
+            total_time_sec += time_matrix[prev][idx]
+
+    real_time_min = int(total_time_sec / 60)
+
+    return RouteResponse(
+        ordered_route=final_route_points,
+        total_time_minutes=real_time_min,
+        warnings=warnings
+    )
 
 
-# Legacy endpoints for backward compatibility
-# (keeping existing calculate_smart_walk and rebuild_route_segment)
-
-
-# Cleanup on shutdown
+# Cleanup
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Clean up resources on shutdown"""
     logger.info("Shutting down...")
-    await yandex_api.close()
+    if yandex_api:
+        await yandex_api.close()
 
 
 if __name__ == "__main__":
     import uvicorn
-    
     port = int(os.getenv("PORT", 8000))
-    
-    logger.info(f"Starting Intelligent Trails API on port {port}")
-    
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=port,
-        reload=True,
-        log_level="info"
-    )
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
