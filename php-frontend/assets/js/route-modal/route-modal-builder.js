@@ -11,7 +11,7 @@ window.RouteModalBuilder = {
     },
 
     bindEvents() {
-        const buildBtn = document.getElementById('buildRouteBtn');
+        const buildBtn = document.getElementById('buildRoute');
         if (buildBtn) {
             // Удаляем старые слушатели (клонированием), чтобы избежать дублирования
             const newBtn = buildBtn.cloneNode(true);
