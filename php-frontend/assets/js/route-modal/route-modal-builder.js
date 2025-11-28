@@ -1,5 +1,5 @@
 /**
- * Route Builder - UNIFIED VERSION
+ * Route Builder - FIXED VERSION with proper category handling
  * Handles the "Build Route" button click and API calls
  */
 
@@ -24,7 +24,7 @@ window.RouteModalBuilder = {
                 this.handleBuildClick();
             });
         } else {
-            console.error('[RouteModalBuilder] Button #buildRouteBtn not found!');
+            console.error('[RouteModalBuilder] Button #buildRoute not found!');
         }
     },
 
@@ -33,6 +33,8 @@ window.RouteModalBuilder = {
         
         // 1. Собираем данные (места)
         const places = this.collectPlaces();
+        
+        console.log('[RouteModalBuilder] Collected places:', places);
         
         if (places.length < 2) {
             this.modal.showNotification('Добавьте хотя бы 2 места (или место + прогулку)', 'error');
@@ -45,13 +47,22 @@ window.RouteModalBuilder = {
         try {
             // 3. Определяем режим (из активной вкладки или инпута)
             let mode = 'pedestrian';
-            const transportInput = document.querySelector('input[name="simpleTransport"]:checked');
-            if (transportInput) {
-                mode = transportInput.value;
-                // Маппинг для нашего API
-                if (mode === 'auto') mode = 'driving';
-                if (mode === 'public_transport') mode = 'masstransit';
+            
+            if (this.modal.currentRouteType === 'smart') {
+                // В Smart режиме пока всегда пешком
+                mode = 'pedestrian';
+            } else {
+                // В Simple режиме берем из radio buttons
+                const transportInput = document.querySelector('input[name="simpleTransport"]:checked');
+                if (transportInput) {
+                    mode = transportInput.value;
+                    // Маппинг для нашего API
+                    if (mode === 'auto') mode = 'driving';
+                    if (mode === 'public_transport') mode = 'masstransit';
+                }
             }
+
+            console.log('[RouteModalBuilder] Using mode:', mode);
 
             // 4. Отправляем запрос на сервер
             const routeData = await this.sendRequest(places, mode);
@@ -67,86 +78,111 @@ window.RouteModalBuilder = {
         }
     },
 
-collectPlaces() {
-    let places = [];
+    collectPlaces() {
+        let places = [];
 
-    if (this.modal.currentRouteType === 'smart') {
-        // Добавляем старт
-        const startCoords = this.getCoordsFromInput('smartStartPoint');
-        if (startCoords) {
-            places.push({ 
-                name: 'Старт', 
-                coordinates: startCoords, 
-                type: 'start' 
+        if (this.modal.currentRouteType === 'smart') {
+            // Добавляем старт с правильным типом
+            const startCoords = this.getCoordsFromInput('smartStartPoint');
+            if (startCoords) {
+                places.push({ 
+                    name: 'Старт', 
+                    coordinates: startCoords, 
+                    type: 'must_visit'
+                });
+            }
+            
+            // Добавляем активности
+            this.modal.activities.forEach((act, idx) => {
+                if (act.type === 'place') {
+                    if (act.coords) {
+                        // Конкретное место с координатами
+                        places.push({
+                            name: act.name || act.specificPlaceAddress,
+                            coordinates: act.coords,
+                            type: 'must_visit'
+                        });
+                        console.log(`[RouteModalBuilder] Added specific place: ${act.name}`);
+                    } else if (act.category) {
+                        // Категорийное место - отправляем категорию и временные координаты
+                        // Бэкенд сам найдет место этой категории
+                        places.push({
+                            name: act.category,
+                            coordinates: startCoords || [0, 0], // Временные координаты для поиска
+                            type: 'must_visit',
+                            category: act.category  // ✅ КЛЮЧЕВОЕ ПОЛЕ для бэкенда
+                        });
+                        console.log(`[RouteModalBuilder] Added category place: ${act.category}`);
+                    } else {
+                        console.warn(`[RouteModalBuilder] Activity ${idx} has no coords and no category:`, act);
+                    }
+                }
             });
-        }
-        
-        // Добавляем активности
-        this.modal.activities.forEach(act => {
-            if (act.type === 'place') {
-                if (act.coords) {
-                    // Конкретное место с координатами
-                    places.push({
-                        name: act.name || act.specificPlaceAddress,
-                        coordinates: act.coords,
+            
+            // Добавляем конец, если нужно
+            const returnToStart = document.querySelector('input[name="routeEnd"]:checked')?.value === 'return';
+            if (returnToStart && startCoords) {
+                places.push({ 
+                    name: 'Возврат к старту', 
+                    coordinates: startCoords, 
+                    type: 'must_visit'
+                });
+            } else {
+                const endCoords = this.getCoordsFromInput('smartEndPoint');
+                if (endCoords) {
+                    places.push({ 
+                        name: 'Конец', 
+                        coordinates: endCoords, 
                         type: 'must_visit'
-                    });
-                } else if (act.category) {
-                    // Категорийное место - отправляем категорию, бэкенд сам найдет
-                    places.push({
-                        name: act.category,
-                        coordinates: startCoords || [0, 0], // Временные координаты
-                        type: 'category',
-                        category: act.category
                     });
                 }
             }
-        });
-        
-        // Добавляем конец, если нужно
-        const returnToStart = document.querySelector('input[name="routeEnd"]:checked')?.value === 'return';
-        if (returnToStart && startCoords) {
-            places.push({ 
-                name: 'Возврат к старту', 
-                coordinates: startCoords, 
-                type: 'end' 
-            });
         } else {
-            const endCoords = this.getCoordsFromInput('smartEndPoint');
+            // Simple Mode
+            const startCoords = this.getCoordsFromInput('simpleStartPoint');
+            const endCoords = this.getCoordsFromInput('simpleEndPoint');
+            
+            if (startCoords) {
+                places.push({ 
+                    name: 'Начало', 
+                    coordinates: startCoords, 
+                    type: 'must_visit'
+                });
+            }
+            
+            // Промежуточные точки
+            const waypoints = document.querySelectorAll('.waypoint-input');
+            waypoints.forEach(input => {
+                const coords = input.dataset.coords;
+                if (coords) {
+                    places.push({ 
+                        name: input.value, 
+                        coordinates: coords.split(',').map(Number),
+                        type: 'must_visit'
+                    });
+                }
+            });
+
             if (endCoords) {
                 places.push({ 
                     name: 'Конец', 
-                    coordinates: endCoords, 
-                    type: 'end' 
+                    coordinates: endCoords,
+                    type: 'must_visit'
                 });
             }
         }
-    } else {
-        // Simple Mode - оставляем как есть
-        const startCoords = this.getCoordsFromInput('simpleStartPoint');
-        const endCoords = this.getCoordsFromInput('simpleEndPoint');
-        
-        if (startCoords) places.push({ name: 'Начало', coordinates: startCoords });
-        
-        const waypoints = document.querySelectorAll('.waypoint-input');
-        waypoints.forEach(input => {
-            const coords = input.dataset.coords;
-            if (coords) {
-                places.push({ name: input.value, coordinates: coords.split(',').map(Number) });
-            }
-        });
 
-        if (endCoords) places.push({ name: 'Конец', coordinates: endCoords });
-    }
-
-    return places;
-},
+        return places;
+    },
 
     getCoordsFromInput(id) {
         const input = document.getElementById(id);
         if (input && input.dataset.coords) {
-            return input.dataset.coords.split(',').map(Number);
+            const coords = input.dataset.coords.split(',').map(Number);
+            console.log(`[RouteModalBuilder] Got coords from ${id}:`, coords);
+            return coords;
         }
+        console.warn(`[RouteModalBuilder] No coords in input ${id}`);
         return null;
     },
 
@@ -157,21 +193,29 @@ collectPlaces() {
         const API_URL = 'https://intelligent-trails.onrender.com/api/route/build'; 
         // const API_URL = 'http://localhost:8000/api/route/build'; // Для локальных тестов
 
+        const payload = {
+            places: places,
+            mode: mode,
+            optimize: true
+        };
+
+        console.log('[RouteModalBuilder] Request payload:', JSON.stringify(payload, null, 2));
+
         const response = await fetch(API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                places: places,
-                mode: mode,
-                optimize: true
-            })
+            body: JSON.stringify(payload)
         });
 
         if (!response.ok) {
+            const errorText = await response.text();
+            console.error('[RouteModalBuilder] Server error response:', errorText);
             throw new Error(`Server error: ${response.status}`);
         }
 
         const data = await response.json();
+        console.log('[RouteModalBuilder] Server response:', data);
+        
         if (!data.success) {
             throw new Error(data.error || 'Unknown error');
         }
@@ -201,6 +245,12 @@ collectPlaces() {
         if (window.MapPlaceMarkersInstance) {
             window.MapPlaceMarkersInstance.setPlaces(routeData.places);
         }
+
+        // 5. Уведомление об успехе
+        this.modal.showNotification(
+            `✅ Маршрут построен! ${routeData.places?.length || 0} мест, ${routeData.summary?.total_distance_km?.toFixed(1) || '?'} км`,
+            'success'
+        );
     }
 };
 

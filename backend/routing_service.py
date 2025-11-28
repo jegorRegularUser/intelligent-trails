@@ -1,11 +1,12 @@
 """
-Routing Service - Improved version with proper mode handling
+Routing Service - Improved version with CATEGORY SUPPORT
 Handles pedestrian, driving, and masstransit routing modes correctly
 """
 
 import logging
 from typing import List, Dict, Tuple, Optional
 from yandex_api import YandexMapsAPI
+import yandex_api as yandex_api_module
 from solver import solve_vrp_dynamic
 import time
 
@@ -17,7 +18,7 @@ ROUTING_MODES = {
         'yandex_mode': 'pedestrian',
         'avoid_tolls': True,
         'type': 'walking',
-        'color': '#2E86DE',  # Blue
+        'color': '#2E86DE',
         'style': 'dashed',
         'icon': '🚶'
     },
@@ -25,7 +26,7 @@ ROUTING_MODES = {
         'yandex_mode': 'driving',
         'avoid_tolls': False,
         'type': 'car',
-        'color': '#EE5A6F',  # Red
+        'color': '#EE5A6F',
         'style': 'solid',
         'icon': '🚗'
     },
@@ -33,7 +34,7 @@ ROUTING_MODES = {
         'yandex_mode': 'masstransit',
         'avoid_tolls': False,
         'type': 'transit',
-        'color': '#26de81',  # Green
+        'color': '#26de81',
         'style': 'dashed',
         'icon': '🚌'
     }
@@ -48,8 +49,8 @@ class RouteSegment:
         self.from_place = from_place
         self.to_place = to_place
         self.geometry = geometry
-        self.distance = distance  # meters
-        self.duration = duration  # seconds
+        self.distance = distance
+        self.duration = duration
         self.mode = mode
         self.instructions = self._generate_instructions()
         
@@ -98,7 +99,7 @@ class RouteSegment:
 
 
 class RoutingService:
-    """Service for building optimal routes with proper mode handling"""
+    """Service for building optimal routes with category search support"""
     
     def __init__(self, api_key: str):
         self.yandex_api = YandexMapsAPI(api_key)
@@ -106,10 +107,10 @@ class RoutingService:
     async def build_route(self, places: List[Dict], mode: str = 'pedestrian', 
                          optimize: bool = True) -> Dict:
         """
-        Build a route through multiple places
+        Build a route through multiple places with CATEGORY SUPPORT
         
         Args:
-            places: List of places with coordinates, name, type (must_visit/optional)
+            places: List of places with coordinates, name, type, and optional category
             mode: Routing mode - pedestrian, driving, or masstransit
             optimize: Whether to optimize the order of places
             
@@ -128,17 +129,19 @@ class RoutingService:
             if not places or len(places) < 2:
                 raise ValueError("At least 2 places are required to build a route")
             
-            # Separate must-visit and optional places
-            must_visit = [p for p in places if p.get('type') == 'must_visit']
-            optional = [p for p in places if p.get('type') == 'optional']
+            # Process places: resolve categories to actual places
+            resolved_places = await self._resolve_places(places)
             
-            logger.info(f"Must visit: {len(must_visit)}, Optional: {len(optional)}")
+            if len(resolved_places) < 2:
+                raise ValueError("Not enough valid places after resolution")
+            
+            logger.info(f"Resolved {len(resolved_places)} places (from {len(places)} input places)")
             
             # If optimization is enabled, optimize the order
-            if optimize and len(must_visit) > 2:
-                ordered_places = await self._optimize_route_order(must_visit, mode)
+            if optimize and len(resolved_places) > 2:
+                ordered_places = await self._optimize_route_order(resolved_places, mode)
             else:
-                ordered_places = must_visit
+                ordered_places = resolved_places
             
             # Build route segments
             segments = await self._build_route_segments(ordered_places, mode)
@@ -163,7 +166,7 @@ class RoutingService:
                     'number_of_places': len(ordered_places),
                     'number_of_segments': len(segments)
                 },
-                'optimization_applied': optimize and len(must_visit) > 2
+                'optimization_applied': optimize and len(resolved_places) > 2
             }
             
             logger.info(f"Route built successfully: {total_distance/1000:.1f}km, {total_duration/60:.0f}min")
@@ -176,6 +179,62 @@ class RoutingService:
                 'error': str(e),
                 'mode': mode
             }
+    
+    async def _resolve_places(self, places: List[Dict]) -> List[Dict]:
+        """
+        Resolve places with categories to actual coordinates
+        
+        Places with 'category' field will be searched using Yandex API
+        """
+        resolved = []
+        
+        for i, place in enumerate(places):
+            place_type = place.get('type', 'must_visit')
+            category = place.get('category')
+            
+            # If place has coordinates, use them directly
+            if place.get('coordinates') and place['coordinates'] != [0, 0]:
+                resolved.append(place)
+                logger.info(f"Place {i}: '{place.get('name')}' - using provided coordinates")
+                continue
+            
+            # If place has category, search for it
+            if category:
+                logger.info(f"Place {i}: Searching for category '{category}'")
+                
+                # Get center point for search (use first resolved place or [0,0])
+                center = resolved[0]['coordinates'] if resolved else [37.6173, 55.7558]  # Moscow default
+                
+                try:
+                    search_results = await yandex_api_module.search_places(
+                        center_coords=center,
+                        categories=[category],
+                        radius_m=3000
+                    )
+                    
+                    if search_results:
+                        # Take the first result
+                        found_place = search_results[0]
+                        resolved_place = {
+                            'name': found_place.get('name', category),
+                            'coordinates': found_place.get('coords', center),
+                            'address': found_place.get('address', ''),
+                            'type': 'must_visit',
+                            'category': category
+                        }
+                        resolved.append(resolved_place)
+                        logger.info(f"Found place: {resolved_place['name']} at {resolved_place['coordinates']}")
+                    else:
+                        logger.warning(f"No places found for category '{category}'")
+                        
+                except Exception as e:
+                    logger.error(f"Error searching for category '{category}': {e}")
+                    
+            else:
+                # Place without coordinates and without category - skip
+                logger.warning(f"Place {i}: '{place.get('name')}' has no coordinates and no category - skipping")
+        
+        return resolved
     
     async def _optimize_route_order(self, places: List[Dict], mode: str) -> List[Dict]:
         """Optimize the order of places using TSP solver"""
@@ -215,7 +274,7 @@ class RoutingService:
             
         except Exception as e:
             logger.error(f"Error optimizing route: {str(e)}")
-            return places  # Return original order if optimization fails
+            return places
     
     async def _build_route_segments(self, places: List[Dict], mode: str) -> List[RouteSegment]:
         """Build route segments between consecutive places"""
@@ -250,17 +309,7 @@ class RoutingService:
     
     async def _get_route_between_two_points(self, from_coords: List[float], 
                                            to_coords: List[float], mode: str) -> Dict:
-        """
-        Get route between two points using Yandex API
-        
-        Args:
-            from_coords: [longitude, latitude]
-            to_coords: [longitude, latitude]
-            mode: pedestrian, driving, or masstransit
-            
-        Returns:
-            Dict with geometry, distance, duration
-        """
+        """Get route between two points using Yandex API"""
         try:
             mode_config = ROUTING_MODES.get(mode, ROUTING_MODES['pedestrian'])
             yandex_mode = mode_config['yandex_mode']
@@ -312,7 +361,7 @@ class RoutingService:
         lon1, lat1 = coord1
         lon2, lat2 = coord2
         
-        R = 6371000  # Earth radius in meters
+        R = 6371000
         
         phi1 = radians(lat1)
         phi2 = radians(lat2)
@@ -333,6 +382,7 @@ class RoutingService:
             'coordinates': place.get('coordinates', [0, 0]),
             'address': place.get('address', ''),
             'type': place.get('type', 'must_visit'),
+            'category': place.get('category', ''),
             'order': index + 1,
             'marker': {
                 'number': index + 1,
