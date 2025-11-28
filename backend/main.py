@@ -7,6 +7,7 @@ load_dotenv()
 
 import yandex_api
 import solver
+import routing_service  # Новый гибридный сервис маршрутизации
 
 app = FastAPI()
 
@@ -52,6 +53,9 @@ class ActivityResult(BaseModel):
     alternatives: Optional[List[Dict]] = None
     category: Optional[str] = None
     time_at_place: Optional[int] = None
+    
+    # Новое поле: какой сервис построил маршрут
+    routing_service: Optional[str] = None
 
 
 class SmartWalkResponse(BaseModel):
@@ -93,13 +97,29 @@ async def status():
     return {"status": "ok"}
 
 
+@app.get("/routing/stats")
+async def get_routing_stats():
+    """
+    Получить статистику использования сервисов маршрутизации
+    """
+    return routing_service.get_usage_stats()
+
+
+@app.post("/routing/clear_cache")
+async def clear_routing_cache():
+    """
+    Очистить кеш маршрутов
+    """
+    routing_service.clear_cache()
+    return {"status": "ok", "message": "Cache cleared"}
+
+
 @app.post("/calculate_smart_walk", response_model=SmartWalkResponse)
 async def calculate_smart_walk(request: SmartWalkRequest):
     """
     ОСНОВНОЙ ЭНДПОИНТ: обработка умной прогулки
+    Теперь использует гибридный routing_service вместо только OSRM
     """
-    if not yandex_api.YANDEX_API_KEY:
-        raise HTTPException(status_code=500, detail="Yandex API key is not configured.")
 
     print(f"\n{'='*60}")
     print(f"[SMART WALK] NEW REQUEST")
@@ -195,10 +215,12 @@ async def calculate_smart_walk(request: SmartWalkRequest):
             route_waypoints = [current_point.coords] + [w.coords for w in waypoints]
             print(f"  Building route: {len(route_waypoints)} waypoints")
             
-            route_data = await yandex_api.build_route(route_waypoints, activity.transport_mode)
+            # ИСПОЛЬЗУЕМ НОВЫЙ ГИБРИДНЫЙ СЕРВИС
+            route_data = await routing_service.build_route(route_waypoints, activity.transport_mode)
             
             if route_data:
-                print(f"  ✓ Route built: {route_data['distance_meters']}m, {route_data['duration_seconds']}s, {len(route_data['geometry'])} points")
+                service_used = route_data.get('service', 'unknown')
+                print(f"  ✓ Route built via {service_used}: {route_data['distance_meters']}m, {route_data['duration_seconds']}s, {len(route_data['geometry'])} points")
                 
                 activity_results.append(ActivityResult(
                     activity_index=act_idx,
@@ -208,13 +230,14 @@ async def calculate_smart_walk(request: SmartWalkRequest):
                     geometry=route_data['geometry'],
                     duration_seconds=route_data['duration_seconds'],
                     distance_meters=route_data['distance_meters'],
-                    route_segment=[current_point] + waypoints
+                    route_segment=[current_point] + waypoints,
+                    routing_service=service_used
                 ))
                 
                 total_distance += route_data['distance_meters']
             else:
-                print(f"  ✗ Route failed, using fallback")
-                warnings.append(f"Прогулка {act_idx + 1}: не удалось построить маршрут через Яндекс")
+                print(f"  ✗ All routing services failed")
+                warnings.append(f"Прогулка {act_idx + 1}: не удалось построить маршрут (все сервисы недоступны)")
                 
                 activity_results.append(ActivityResult(
                     activity_index=act_idx,
@@ -274,10 +297,13 @@ async def calculate_smart_walk(request: SmartWalkRequest):
             
             print(f"  Building route to place")
             route_waypoints = [current_point.coords, selected_place.coords]
-            route_data = await yandex_api.build_route(route_waypoints, activity.transport_mode)
+            
+            # ИСПОЛЬЗУЕМ НОВЫЙ ГИБРИДНЫЙ СЕРВИС
+            route_data = await routing_service.build_route(route_waypoints, activity.transport_mode)
             
             if route_data:
-                print(f"  ✓ Route to place: {route_data['distance_meters']}m, {route_data['duration_seconds']}s")
+                service_used = route_data.get('service', 'unknown')
+                print(f"  ✓ Route to place via {service_used}: {route_data['distance_meters']}m, {route_data['duration_seconds']}s")
                 
                 activity_results.append(ActivityResult(
                     activity_index=act_idx,
@@ -290,13 +316,14 @@ async def calculate_smart_walk(request: SmartWalkRequest):
                     selected_place=selected_place,
                     alternatives=alternatives,
                     category=activity.category or "конкретное место",
-                    time_at_place=activity.time_at_place
+                    time_at_place=activity.time_at_place,
+                    routing_service=service_used
                 ))
                 
                 total_distance += route_data['distance_meters']
             else:
-                print(f"  ✗ Route to place failed, using fallback")
-                warnings.append(f"Место {act_idx + 1}: не удалось построить маршрут через Яндекс")
+                print(f"  ✗ All routing services failed")
+                warnings.append(f"Место {act_idx + 1}: не удалось построить маршрут (все сервисы недоступны)")
                 
                 activity_results.append(ActivityResult(
                     activity_index=act_idx,
@@ -317,7 +344,7 @@ async def calculate_smart_walk(request: SmartWalkRequest):
     if request.return_to_start and len(request.activities) > 0:
         print(f"\n[RETURN TO START]")
         last_activity = request.activities[-1]
-        route_data = await yandex_api.build_route(
+        route_data = await routing_service.build_route(
             [current_point.coords, request.start_point.coords],
             last_activity.transport_mode
         )
@@ -327,7 +354,7 @@ async def calculate_smart_walk(request: SmartWalkRequest):
     elif request.end_point and len(request.activities) > 0:
         print(f"\n[TO END POINT]")
         last_activity = request.activities[-1]
-        route_data = await yandex_api.build_route(
+        route_data = await routing_service.build_route(
             [current_point.coords, request.end_point.coords],
             last_activity.transport_mode
         )
@@ -354,8 +381,6 @@ async def calculate_smart_walk(request: SmartWalkRequest):
 @app.post("/calculate_route", response_model=RouteResponse)
 async def calculate_route_endpoint(request: RouteRequest):
     """Старый эндпоинт для обратной совместимости"""
-    if not yandex_api.YANDEX_API_KEY:
-        raise HTTPException(status_code=500, detail="Yandex API key is not configured.")
 
     warnings = []
 
