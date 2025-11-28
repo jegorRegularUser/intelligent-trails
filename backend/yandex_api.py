@@ -158,21 +158,20 @@ def smart_filter(start, points, limit, priority_categories=None):
 
 async def build_route(waypoints: List[List[float]], mode: str) -> Optional[Dict[str, Any]]:
     """
-    ОСНОВНАЯ ФУНКЦИЯ: строит маршрут через Yandex Router API v2
-    waypoints: список координат [lat, lon]
-    mode: pedestrian, auto, bicycle, masstransit
+    ТОЛЬКО YANDEX ROUTER API - НИКАКИХ FALLBACK!
+    Если не работает - возвращаем None и показываем ошибку
     """
     if not YANDEX_API_KEY:
-        print("[YANDEX ROUTE] No API key, using fallback")
-        return build_fallback_route(waypoints, mode)
+        print("[YANDEX ROUTE] ERROR: No API key configured!")
+        return None
     
     if len(waypoints) < 2:
-        print("[YANDEX ROUTE] Need at least 2 waypoints")
+        print("[YANDEX ROUTE] ERROR: Need at least 2 waypoints")
         return None
     
     try:
         async with httpx.AsyncClient(timeout=30, verify=False) as client:
-            # Формат для Yandex Router API v2: lon,lat (НЕ lat,lon!)
+            # Yandex Router API v2 формат: lon,lat (НЕ lat,lon!)
             waypoints_str = '|'.join([f"{wp[1]},{wp[0]}" for wp in waypoints])
             
             params = {
@@ -181,9 +180,14 @@ async def build_route(waypoints: List[List[float]], mode: str) -> Optional[Dict[
                 'mode': mode
             }
             
-            print(f"[YANDEX ROUTE] Requesting {YANDEX_ROUTER_URL}")
-            print(f"[YANDEX ROUTE] Waypoints: {len(waypoints)}, mode: {mode}")
-            print(f"[YANDEX ROUTE] API Key: {YANDEX_API_KEY[:10]}...")
+            print(f"\n{'='*60}")
+            print(f"[YANDEX ROUTE] REQUEST")
+            print(f"  URL: {YANDEX_ROUTER_URL}")
+            print(f"  Waypoints: {len(waypoints)}")
+            print(f"  Mode: {mode}")
+            print(f"  API Key: {YANDEX_API_KEY[:10]}...")
+            print(f"  Waypoints string: {waypoints_str[:100]}...")
+            print(f"{'='*60}\n")
             
             response = await client.get(YANDEX_ROUTER_URL, params=params)
             
@@ -191,23 +195,27 @@ async def build_route(waypoints: List[List[float]], mode: str) -> Optional[Dict[
             
             if response.status_code == 200:
                 data = response.json()
+                print(f"[YANDEX ROUTE] Response keys: {list(data.keys())}")
                 
                 if 'route' in data:
                     route = data['route']
+                    print(f"[YANDEX ROUTE] Route keys: {list(route.keys())}")
                     geometry = []
                     
-                    # Парсим geometry из Yandex Router API v2
                     if 'legs' in route:
-                        for leg in route['legs']:
+                        print(f"[YANDEX ROUTE] Legs count: {len(route['legs'])}")
+                        for leg_idx, leg in enumerate(route['legs']):
+                            print(f"[YANDEX ROUTE] Leg {leg_idx} keys: {list(leg.keys())}")
                             if 'steps' in leg:
-                                for step in leg['steps']:
+                                print(f"[YANDEX ROUTE] Leg {leg_idx} steps: {len(leg['steps'])}")
+                                for step_idx, step in enumerate(leg['steps']):
                                     if 'polyline' in step:
                                         polyline_points = step['polyline'].get('points', [])
+                                        print(f"[YANDEX ROUTE] Step {step_idx} polyline points: {len(polyline_points)}")
                                         for point in polyline_points:
                                             # Yandex возвращает [lon, lat], конвертируем в [lat, lon]
                                             geometry.append([point[1], point[0]])
                     
-                    # Вычисляем общую длину и время
                     total_duration = sum(
                         leg.get('duration', {}).get('value', 0) 
                         for leg in route.get('legs', [])
@@ -218,7 +226,12 @@ async def build_route(waypoints: List[List[float]], mode: str) -> Optional[Dict[
                     )
                     
                     if len(geometry) > 0:
-                        print(f"[YANDEX ROUTE] SUCCESS: {len(geometry)} points, {total_distance}m, {total_duration}s")
+                        print(f"\n{'='*60}")
+                        print(f"[YANDEX ROUTE] ✓ SUCCESS")
+                        print(f"  Geometry points: {len(geometry)}")
+                        print(f"  Distance: {total_distance}m")
+                        print(f"  Duration: {total_duration}s")
+                        print(f"{'='*60}\n")
                         
                         return {
                             'geometry': geometry,
@@ -226,52 +239,29 @@ async def build_route(waypoints: List[List[float]], mode: str) -> Optional[Dict[
                             'distance_meters': int(total_distance)
                         }
                     else:
-                        print(f"[YANDEX ROUTE] Empty geometry in response")
+                        print(f"[YANDEX ROUTE] ERROR: Empty geometry!")
+                        print(f"[YANDEX ROUTE] Full response: {data}")
+                        return None
                 else:
-                    print(f"[YANDEX ROUTE] No 'route' in response: {list(data.keys())}")
+                    print(f"[YANDEX ROUTE] ERROR: No 'route' in response")
+                    print(f"[YANDEX ROUTE] Response data: {data}")
+                    return None
             else:
-                error_text = response.text[:500]
-                print(f"[YANDEX ROUTE] API error {response.status_code}: {error_text}")
+                error_text = response.text[:1000]
+                print(f"\n{'='*60}")
+                print(f"[YANDEX ROUTE] ✗ API ERROR")
+                print(f"  Status: {response.status_code}")
+                print(f"  Response: {error_text}")
+                print(f"{'='*60}\n")
+                return None
                 
     except Exception as e:
-        print(f"[YANDEX ROUTE] Exception: {type(e).__name__}: {str(e)}")
-    
-    # Fallback если Yandex не сработал
-    print(f"[YANDEX ROUTE] Using fallback")
-    return build_fallback_route(waypoints, mode)
-
-
-def build_fallback_route(waypoints: List[List[float]], mode: str) -> Dict[str, Any]:
-    """
-    Fallback: прямые линии с интерполяцией
-    """
-    geometry = []
-    total_distance = 0
-    
-    for i in range(len(waypoints) - 1):
-        start = waypoints[i]
-        end = waypoints[i + 1]
-        
-        # Добавляем промежуточные точки
-        num_intermediate = 15
-        for j in range(num_intermediate + 1):
-            t = j / num_intermediate
-            lat = start[0] + (end[0] - start[0]) * t
-            lon = start[1] + (end[1] - start[1]) * t
-            geometry.append([lat, lon])
-        
-        dist = calculate_geo_distance(start, end)
-        total_distance += dist
-    
-    duration = estimate_time_by_mode(total_distance, mode)
-    
-    print(f"[ROUTE FALLBACK] {len(geometry)} points, {total_distance}m, {duration}s")
-    
-    return {
-        'geometry': geometry,
-        'duration_seconds': duration,
-        'distance_meters': total_distance
-    }
+        print(f"\n{'='*60}")
+        print(f"[YANDEX ROUTE] ✗ EXCEPTION")
+        print(f"  Type: {type(e).__name__}")
+        print(f"  Message: {str(e)}")
+        print(f"{'='*60}\n")
+        return None
 
 
 def estimate_time_by_mode(distance_m: int, mode: str) -> int:
