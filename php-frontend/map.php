@@ -46,7 +46,7 @@
 
     <!-- Map Scripts -->
     <script src="assets/js/map/map-info-panel.js"></script>
-    <script src="assets/js/mapl/map-variants.js"></script>
+    <script src="assets/js/map/map-variants.js"></script>
     <script src="assets/js/map/map-simple-route.js"></script>
     <script src="assets/js/map/map-smart-walk.js"></script>
     <script src="assets/js/map/map-core.js"></script>
