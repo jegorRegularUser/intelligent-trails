@@ -275,3 +275,18 @@ input[type="number"]::-webkit-outer-spin-button {
 input[type="number"] {
     -moz-appearance: textfield;
 }
+
+
+.global-transport-switcher {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.timeline-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
