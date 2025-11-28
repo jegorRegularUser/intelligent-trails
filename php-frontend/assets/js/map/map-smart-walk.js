@@ -1,7 +1,3 @@
-/**
- * Отображение умных прогулок с реальными маршрутами
- * Построение маршрута через активности
- */
 window.MapSmartWalk = {
   mapCore: null,
 
@@ -15,7 +11,6 @@ window.MapSmartWalk = {
       await this.displaySmartWalk(walkData, startPoint, endPoint, returnToStart);
     };
 
-    // Старая функция для совместимости
     window.displaySmartRoute = (routeData) => {
       this.displaySmartRoute(routeData);
     };
@@ -30,131 +25,193 @@ window.MapSmartWalk = {
       return;
     }
 
-    // Собираем все точки для маршрута
-    const allPoints = [startPoint.coords];
-    const pointsInfo = [{
-      name: startPoint.name,
-      type: 'start',
-      coords: startPoint.coords
-    }];
+    console.log('[SMART WALK] Starting walk construction');
+    console.log('[SMART WALK] Activities:', walkData.activities);
 
-    walkData.activities.forEach((activity, idx) => {
-      if (activity.activity_type === 'walk' && activity.route_segment) {
-        activity.route_segment.forEach((point, segIdx) => {
-          // Пропускаем первую точку сегмента, если она совпадает с предыдущей
-          if (segIdx > 0 || allPoints.length === 0 ||
-            !this.coordsEqual(allPoints[allPoints.length - 1], point.coords)) {
-            allPoints.push(point.coords);
-            pointsInfo.push({
-              name: point.name,
-              type: 'walk_point',
-              coords: point.coords,
-              activityIndex: idx
-            });
-          }
-        });
+    let currentCoords = startPoint.coords;
+    const allMarkers = [];
+    const allBounds = [];
+
+    allMarkers.push({
+      coords: startPoint.coords,
+      name: startPoint.name,
+      type: 'start'
+    });
+    allBounds.push(startPoint.coords);
+
+    for (let i = 0; i < walkData.activities.length; i++) {
+      const activity = walkData.activities[i];
+      console.log(`[ACTIVITY ${i}] Type: ${activity.activity_type}, Transport: ${activity.transport_mode}`);
+
+      if (activity.activity_type === 'walk') {
+        const nextCoords = this.getNextCoords(walkData, i, startPoint, endPoint, returnToStart);
+        
+        if (nextCoords) {
+          console.log(`[WALK ${i}] Route from`, currentCoords, 'to', nextCoords, 'using', activity.transport_mode);
+          
+          await this.buildSingleRoute(currentCoords, nextCoords, activity.transport_mode);
+          currentCoords = nextCoords;
+          allBounds.push(nextCoords);
+        }
       } else if (activity.activity_type === 'place' && activity.selected_place) {
-        allPoints.push(activity.selected_place.coords);
-        pointsInfo.push({
+        const placeCoords = activity.selected_place.coords;
+        
+        console.log(`[PLACE ${i}] Route to`, activity.selected_place.name, 'from', currentCoords, 'using', activity.transport_mode);
+        
+        await this.buildSingleRoute(currentCoords, placeCoords, activity.transport_mode);
+        
+        allMarkers.push({
+          coords: placeCoords,
           name: activity.selected_place.name,
           type: 'place',
-          coords: activity.selected_place.coords,
           category: activity.category,
-          activityIndex: idx,
           alternatives: activity.alternatives
         });
+        
+        currentCoords = placeCoords;
+        allBounds.push(placeCoords);
       }
-    });
+    }
 
     if (returnToStart) {
-      allPoints.push(startPoint.coords);
+      console.log('[RETURN] Building route back to start');
+      const lastActivity = walkData.activities[walkData.activities.length - 1];
+      const mode = lastActivity ? lastActivity.transport_mode : 'pedestrian';
+      console.log('[RETURN] Using mode:', mode);
+      await this.buildSingleRoute(currentCoords, startPoint.coords, mode);
+      allBounds.push(startPoint.coords);
     } else if (endPoint) {
-      allPoints.push(endPoint.coords);
-      pointsInfo.push({
+      console.log('[END] Building route to end point');
+      const lastActivity = walkData.activities[walkData.activities.length - 1];
+      const mode = lastActivity ? lastActivity.transport_mode : 'pedestrian';
+      console.log('[END] Using mode:', mode);
+      await this.buildSingleRoute(currentCoords, endPoint.coords, mode);
+      
+      allMarkers.push({
+        coords: endPoint.coords,
         name: endPoint.name,
-        type: 'end',
-        coords: endPoint.coords
+        type: 'end'
+      });
+      allBounds.push(endPoint.coords);
+    }
+
+    this.addMarkers(allMarkers);
+
+    if (allBounds.length > 0) {
+      this.mapCore.map.setBounds(allBounds, {
+        checkZoomRange: true,
+        zoomMargin: 50
       });
     }
 
-    // Строим РЕАЛЬНЫЙ маршрут через Yandex Maps API
-    await this.buildRoute(allPoints, walkData);
-
-    // Добавляем маркеры
-    this.addMarkers(pointsInfo);
-
-    // Добавляем зоны для парков
-    this.addParkZones(walkData);
-
-    // Отображаем информацию в левой панели
-    window.MapInfoPanel.displayWalkInfo(walkData, pointsInfo);
+    window.MapInfoPanel.displayWalkInfo(walkData, allMarkers);
+    document.getElementById('routeInfoPanel').style.display = 'block';
   },
 
-  async buildRoute(allPoints, walkData) {
-    try {
-      const mode = walkData.activities[0]?.transport_mode || 'pedestrian';
-      const routingMode = {
-        'pedestrian': 'pedestrian',
-        'auto': 'auto',
-        'bicycle': 'bicycle',
-        'masstransit': 'masstransit'
-      }[mode] || 'pedestrian';
+  getNextCoords(walkData, currentIndex, startPoint, endPoint, returnToStart) {
+    for (let i = currentIndex + 1; i < walkData.activities.length; i++) {
+      const nextActivity = walkData.activities[i];
+      if (nextActivity.activity_type === 'place' && nextActivity.selected_place) {
+        return nextActivity.selected_place.coords;
+      }
+    }
 
-      const route = await ymaps.route(allPoints, {
+    if (returnToStart) {
+      return startPoint.coords;
+    } else if (endPoint) {
+      return endPoint.coords;
+    }
+
+    return null;
+  },
+
+  async buildSingleRoute(fromCoords, toCoords, transportMode) {
+    const routingMode = this.getYandexRoutingMode(transportMode);
+    
+    console.log(`[BUILD ROUTE] From ${fromCoords} to ${toCoords}`);
+    console.log(`[BUILD ROUTE] Transport mode: ${transportMode} -> Yandex mode: ${routingMode}`);
+    
+    try {
+      const route = await ymaps.route([fromCoords, toCoords], {
         routingMode: routingMode,
         mapStateAutoApply: false
       });
 
+      const routeColor = this.getRouteColor(transportMode);
+      
+      route.getPaths().each((path) => {
+        path.options.set({
+          strokeColor: routeColor,
+          strokeWidth: 5,
+          strokeOpacity: 0.7
+        });
+      });
+
       this.mapCore.currentRouteLines.push(route);
       this.mapCore.map.geoObjects.add(route);
-
-      // Центрируем карту на маршруте
-      this.mapCore.map.setBounds(route.getBounds(), {
-        checkZoomRange: true,
-        zoomMargin: 50
-      });
-
+      
+      console.log('[BUILD ROUTE] Successfully added Yandex route');
+      
     } catch (error) {
-      console.error('Error building route:', error);
-      // Fallback - просто линия между точками
-      const polyline = new ymaps.Polyline(allPoints, {}, {
-        strokeColor: '#667eea',
+      console.error('[BUILD ROUTE ERROR]', error);
+      console.warn('[BUILD ROUTE] Fallback to polyline');
+      
+      const polyline = new ymaps.Polyline([fromCoords, toCoords], {}, {
+        strokeColor: this.getRouteColor(transportMode),
         strokeWidth: 4,
-        strokeOpacity: 0.8
+        strokeOpacity: 0.5,
+        strokeStyle: 'dash'
       });
+      
       this.mapCore.currentRouteLines.push(polyline);
       this.mapCore.map.geoObjects.add(polyline);
-
-      this.mapCore.map.setBounds(polyline.geometry.getBounds(), {
-        checkZoomRange: true,
-        zoomMargin: 50
-      });
     }
   },
 
-  addMarkers(pointsInfo) {
-    pointsInfo.forEach((point) => {
+  getYandexRoutingMode(transportMode) {
+    const modeMap = {
+      'pedestrian': 'pedestrian',
+      'auto': 'auto',
+      'bicycle': 'bicycle',
+      'masstransit': 'masstransit'
+    };
+    const result = modeMap[transportMode] || 'pedestrian';
+    console.log(`[MODE MAP] ${transportMode} -> ${result}`);
+    return result;
+  },
+
+  getRouteColor(transportMode) {
+    const colorMap = {
+      'pedestrian': '#10b981',
+      'auto': '#3b82f6',
+      'bicycle': '#f59e0b',
+      'masstransit': '#8b5cf6'
+    };
+    return colorMap[transportMode] || '#667eea';
+  },
+
+  addMarkers(markers) {
+    markers.forEach((marker) => {
       let iconPreset, iconColor;
 
-      if (point.type === 'start') {
+      if (marker.type === 'start') {
         iconPreset = 'islands#greenDotIcon';
         iconColor = '#10b981';
-      } else if (point.type === 'end') {
+      } else if (marker.type === 'end') {
         iconPreset = 'islands#redDotIcon';
         iconColor = '#ef4444';
-      } else if (point.type === 'place') {
+      } else if (marker.type === 'place') {
         iconPreset = 'islands#blueDotIcon';
         iconColor = '#667eea';
       } else {
-        // walk_point - не показываем маркеры для промежуточных точек прогулки
         return;
       }
 
       const placemark = new ymaps.Placemark(
-        point.coords,
+        marker.coords,
         {
-          balloonContent: `<strong>${point.name}</strong>${point.category ? '<br>' + point.category : ''}`,
-          iconCaption: point.name
+          balloonContent: `<strong>${marker.name}</strong>${marker.category ? '<br>' + marker.category : ''}`,
+          iconCaption: marker.name
         },
         {
           preset: iconPreset,
@@ -167,38 +224,7 @@ window.MapSmartWalk = {
     });
   },
 
-  addParkZones(walkData) {
-    walkData.activities.forEach((activity) => {
-      if (activity.activity_type === 'place' &&
-        (activity.category === 'парк' || activity.category === 'сквер')) {
-
-        if (activity.selected_place) {
-          // Рисуем круг вокруг парка как зону прогулки
-          const circle = new ymaps.Circle(
-            [activity.selected_place.coords, 200], // радиус 200м
-            {},
-            {
-              fillColor: '#10b98130',
-              strokeColor: '#10b981',
-              strokeWidth: 2,
-              strokeStyle: 'shortdash'
-            }
-          );
-
-          this.mapCore.routeMarkers.push(circle);
-          this.mapCore.map.geoObjects.add(circle);
-        }
-      }
-    });
-  },
-
-  coordsEqual(c1, c2) {
-    return Math.abs(c1[0] - c2[0]) < 0.0001 && Math.abs(c1[1] - c2[1]) < 0.0001;
-  },
-
-  // Старая функция для совместимости
   displaySmartRoute(routeData) {
-    // Конвертируем в новый формат
     const walkData = {
       activities: routeData.ordered_route.map((point, idx) => ({
         activity_type: 'place',

@@ -61,19 +61,6 @@ class RouteModal {
     window.RouteModalBuilder.init(this);
     window.RouteModalYandex.init(this);
 
-    const globalTransportSelect = document.getElementById('globalTransportMode');
-    if (globalTransportSelect) {
-      globalTransportSelect.addEventListener('change', (e) => {
-        const newMode = e.target.value;
-        this.activities.forEach(activity => {
-          if (activity.transport_mode) {
-            activity.transport_mode = newMode;
-          }
-        });
-        window.RouteModalActivities.updateTimeline(this);
-      });
-    }
-
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
         if (document.getElementById('addWalkModal').classList.contains('active')) {

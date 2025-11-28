@@ -204,7 +204,18 @@ window.RouteModalActivities = {
                  activity.transport_mode === 'bicycle' ? '🚴' :
                  activity.transport_mode === 'auto' ? '🚗' : '🚌';
           title = activity.walking_style === 'scenic' ? 'Живописная прогулка' : 'Прямая прогулка';
-          details = `${activity.duration_minutes} мин`;
+          
+          details = `
+            <div style="display: flex; align-items: center; gap: 10px; width: 100%;">
+              <span>${activity.duration_minutes} мин</span>
+              <select class="quick-transport-select" data-index="${index}" onclick="event.stopPropagation()">
+                <option value="pedestrian" ${activity.transport_mode === 'pedestrian' ? 'selected' : ''}>🚶 Пешком</option>
+                <option value="bicycle" ${activity.transport_mode === 'bicycle' ? 'selected' : ''}>🚴 Велосипед</option>
+                <option value="auto" ${activity.transport_mode === 'auto' ? 'selected' : ''}>🚗 Авто</option>
+                <option value="masstransit" ${activity.transport_mode === 'masstransit' ? 'selected' : ''}>🚌 Транспорт</option>
+              </select>
+            </div>
+          `;
         } else {
           icon = activity.category === 'кафе' ? '☕' :
                  activity.category === 'ресторан' ? '🍽️' :
@@ -234,6 +245,15 @@ window.RouteModalActivities = {
       });
 
       timeline.innerHTML = html;
+
+      timeline.querySelectorAll('.quick-transport-select').forEach(select => {
+        select.addEventListener('change', (e) => {
+          e.stopPropagation();
+          const index = parseInt(e.target.dataset.index);
+          modal.activities[index].transport_mode = e.target.value;
+          this.updateTimeline(modal);
+        });
+      });
 
       timeline.querySelectorAll('.timeline-item-remove').forEach(btn => {
         btn.addEventListener('click', (e) => {
