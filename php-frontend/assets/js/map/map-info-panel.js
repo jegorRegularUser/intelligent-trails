@@ -1,11 +1,22 @@
 window.MapInfoPanel = {
   displayWalkInfo(walkData, pointsInfo) {
+    const distance = walkData.total_distance_meters 
+      ? `${(walkData.total_distance_meters / 1000).toFixed(2)} км`
+      : 'не указано';
+
     const statsHTML = `
       <div class="stat-card">
         <span class="stat-icon">⏱️</span>
         <div>
           <div class="stat-label">Общее время</div>
           <div class="stat-value">${walkData.total_duration_minutes} мин</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <span class="stat-icon">📏</span>
+        <div>
+          <div class="stat-label">Расстояние</div>
+          <div class="stat-value">${distance}</div>
         </div>
       </div>
       <div class="stat-card">
@@ -25,7 +36,12 @@ window.MapInfoPanel = {
       const activityIcon = this.getActivityIcon(activity);
       const activityName = this.getActivityName(activity);
       const transportIcon = this.getTransportIcon(activity.transport_mode);
-      const activityDetails = `${activity.duration_minutes} мин · ${transportIcon}`;
+      
+      let activityDetails = `${activity.duration_minutes} мин · ${transportIcon}`;
+      
+      if (activity.distance_meters) {
+        activityDetails += ` · ${(activity.distance_meters / 1000).toFixed(2)} км`;
+      }
 
       if (activity.activity_type === 'place' && activity.alternatives && activity.alternatives.length > 0) {
         const allVariants = [{
@@ -50,6 +66,7 @@ window.MapInfoPanel = {
                        data-stage="${idx}" data-variant="${vIdx}">
                     <div class="variant-name">${variant.place.name}</div>
                     <div class="variant-category">${variant.category}</div>
+                    ${variant.estimated_time_minutes > 0 ? `<div class="variant-time">~${variant.estimated_time_minutes} мин</div>` : ''}
                   </div>
                 `).join('')}
               </div>
@@ -75,6 +92,15 @@ window.MapInfoPanel = {
         `;
       }
     });
+
+    if (walkData.warnings && walkData.warnings.length > 0) {
+      stagesHTML += '<div class="warnings-section">';
+      stagesHTML += '<div class="warnings-header">⚠️ Предупреждения</div>';
+      walkData.warnings.forEach(warning => {
+        stagesHTML += `<div class="warning-item">${warning}</div>`;
+      });
+      stagesHTML += '</div>';
+    }
 
     document.getElementById('routeStagesList').innerHTML = stagesHTML;
 

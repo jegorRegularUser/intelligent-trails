@@ -25,10 +25,8 @@ window.MapSmartWalk = {
       return;
     }
 
-    console.log('[SMART WALK] Starting walk construction');
-    console.log('[SMART WALK] Activities:', walkData.activities);
+    console.log('[SMART WALK] Displaying walk with', walkData.activities.length, 'activities');
 
-    let currentCoords = startPoint.coords;
     const allMarkers = [];
     const allBounds = [];
 
@@ -41,52 +39,36 @@ window.MapSmartWalk = {
 
     for (let i = 0; i < walkData.activities.length; i++) {
       const activity = walkData.activities[i];
-      console.log(`[ACTIVITY ${i}] Type: ${activity.activity_type}, Transport: ${activity.transport_mode}`);
+      console.log(`[ACTIVITY ${i}]`, activity.activity_type, 'transport:', activity.transport_mode);
 
-      if (activity.activity_type === 'walk') {
-        const nextCoords = this.getNextCoords(walkData, i, startPoint, endPoint, returnToStart);
+      if (activity.geometry && activity.geometry.length > 0) {
+        console.log(`[ACTIVITY ${i}] Drawing geometry with ${activity.geometry.length} points`);
+        this.drawGeometry(activity.geometry, activity.transport_mode);
         
-        if (nextCoords) {
-          console.log(`[WALK ${i}] Route from`, currentCoords, 'to', nextCoords, 'using', activity.transport_mode);
-          
-          await this.buildSingleRoute(currentCoords, nextCoords, activity.transport_mode);
-          currentCoords = nextCoords;
-          allBounds.push(nextCoords);
+        activity.geometry.forEach(coord => allBounds.push(coord));
+      } else {
+        console.warn(`[ACTIVITY ${i}] No geometry, using fallback`);
+        
+        if (activity.route_segment && activity.route_segment.length >= 2) {
+          const segmentCoords = activity.route_segment.map(p => p.coords);
+          this.drawFallbackPolyline(segmentCoords, activity.transport_mode);
+          segmentCoords.forEach(coord => allBounds.push(coord));
         }
-      } else if (activity.activity_type === 'place' && activity.selected_place) {
-        const placeCoords = activity.selected_place.coords;
-        
-        console.log(`[PLACE ${i}] Route to`, activity.selected_place.name, 'from', currentCoords, 'using', activity.transport_mode);
-        
-        await this.buildSingleRoute(currentCoords, placeCoords, activity.transport_mode);
-        
+      }
+
+      if (activity.activity_type === 'place' && activity.selected_place) {
         allMarkers.push({
-          coords: placeCoords,
+          coords: activity.selected_place.coords,
           name: activity.selected_place.name,
           type: 'place',
           category: activity.category,
           alternatives: activity.alternatives
         });
-        
-        currentCoords = placeCoords;
-        allBounds.push(placeCoords);
+        allBounds.push(activity.selected_place.coords);
       }
     }
 
-    if (returnToStart) {
-      console.log('[RETURN] Building route back to start');
-      const lastActivity = walkData.activities[walkData.activities.length - 1];
-      const mode = lastActivity ? lastActivity.transport_mode : 'pedestrian';
-      console.log('[RETURN] Using mode:', mode);
-      await this.buildSingleRoute(currentCoords, startPoint.coords, mode);
-      allBounds.push(startPoint.coords);
-    } else if (endPoint) {
-      console.log('[END] Building route to end point');
-      const lastActivity = walkData.activities[walkData.activities.length - 1];
-      const mode = lastActivity ? lastActivity.transport_mode : 'pedestrian';
-      console.log('[END] Using mode:', mode);
-      await this.buildSingleRoute(currentCoords, endPoint.coords, mode);
-      
+    if (endPoint) {
       allMarkers.push({
         coords: endPoint.coords,
         name: endPoint.name,
@@ -108,76 +90,35 @@ window.MapSmartWalk = {
     document.getElementById('routeInfoPanel').style.display = 'block';
   },
 
-  getNextCoords(walkData, currentIndex, startPoint, endPoint, returnToStart) {
-    for (let i = currentIndex + 1; i < walkData.activities.length; i++) {
-      const nextActivity = walkData.activities[i];
-      if (nextActivity.activity_type === 'place' && nextActivity.selected_place) {
-        return nextActivity.selected_place.coords;
-      }
-    }
+  drawGeometry(geometry, transportMode) {
+    const routeColor = this.getRouteColor(transportMode);
+    
+    const polyline = new ymaps.Polyline(geometry, {}, {
+      strokeColor: routeColor,
+      strokeWidth: 5,
+      strokeOpacity: 0.8
+    });
 
-    if (returnToStart) {
-      return startPoint.coords;
-    } else if (endPoint) {
-      return endPoint.coords;
-    }
-
-    return null;
+    this.mapCore.currentRouteLines.push(polyline);
+    this.mapCore.map.geoObjects.add(polyline);
+    
+    console.log('[GEOMETRY] Drew polyline with color', routeColor);
   },
 
-  async buildSingleRoute(fromCoords, toCoords, transportMode) {
-    const routingMode = this.getYandexRoutingMode(transportMode);
+  drawFallbackPolyline(coords, transportMode) {
+    const routeColor = this.getRouteColor(transportMode);
     
-    console.log(`[BUILD ROUTE] From ${fromCoords} to ${toCoords}`);
-    console.log(`[BUILD ROUTE] Transport mode: ${transportMode} -> Yandex mode: ${routingMode}`);
+    const polyline = new ymaps.Polyline(coords, {}, {
+      strokeColor: routeColor,
+      strokeWidth: 4,
+      strokeOpacity: 0.5,
+      strokeStyle: 'dash'
+    });
+
+    this.mapCore.currentRouteLines.push(polyline);
+    this.mapCore.map.geoObjects.add(polyline);
     
-    try {
-      const route = await ymaps.route([fromCoords, toCoords], {
-        routingMode: routingMode,
-        mapStateAutoApply: false
-      });
-
-      const routeColor = this.getRouteColor(transportMode);
-      
-      route.getPaths().each((path) => {
-        path.options.set({
-          strokeColor: routeColor,
-          strokeWidth: 5,
-          strokeOpacity: 0.7
-        });
-      });
-
-      this.mapCore.currentRouteLines.push(route);
-      this.mapCore.map.geoObjects.add(route);
-      
-      console.log('[BUILD ROUTE] Successfully added Yandex route');
-      
-    } catch (error) {
-      console.error('[BUILD ROUTE ERROR]', error);
-      console.warn('[BUILD ROUTE] Fallback to polyline');
-      
-      const polyline = new ymaps.Polyline([fromCoords, toCoords], {}, {
-        strokeColor: this.getRouteColor(transportMode),
-        strokeWidth: 4,
-        strokeOpacity: 0.5,
-        strokeStyle: 'dash'
-      });
-      
-      this.mapCore.currentRouteLines.push(polyline);
-      this.mapCore.map.geoObjects.add(polyline);
-    }
-  },
-
-  getYandexRoutingMode(transportMode) {
-    const modeMap = {
-      'pedestrian': 'pedestrian',
-      'auto': 'auto',
-      'bicycle': 'bicycle',
-      'masstransit': 'masstransit'
-    };
-    const result = modeMap[transportMode] || 'pedestrian';
-    console.log(`[MODE MAP] ${transportMode} -> ${result}`);
-    return result;
+    console.log('[FALLBACK] Drew dashed polyline');
   },
 
   getRouteColor(transportMode) {
@@ -231,7 +172,8 @@ window.MapSmartWalk = {
         selected_place: point,
         category: 'место',
         duration_minutes: idx < routeData.ordered_route.length - 1 ? 10 : 0,
-        transport_mode: 'pedestrian'
+        transport_mode: 'pedestrian',
+        geometry: null
       })),
       total_duration_minutes: routeData.total_time_minutes,
       warnings: routeData.warnings || []
