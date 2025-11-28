@@ -12,7 +12,10 @@ import os
 from dotenv import load_dotenv
 
 from routing_service import get_routing_service
-from yandex_api import YandexMapsAPI
+
+from yandex_api import YandexStaticRouter as YandexMapsAPI
+import yandex_api as yandex_api_module
+
 import yandex_api as yandex_api_module
 import solver
 
