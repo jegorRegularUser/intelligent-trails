@@ -1,7 +1,7 @@
 # ========== main.py ==========
 """
-Intelligent Trails Backend - ФИНАЛЬНАЯ ВЕРСИЯ
-✅ Исправлены дубликаты + возвращает 5 мест для выбора на фронте
+Intelligent Trails Backend - ИСПРАВЛЕННАЯ ВЕРСИЯ
+✅ Исправлена логика построения маршрута и выбора мест
 """
 
 from fastapi import FastAPI, HTTPException, Body
@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Intelligent Trails API",
-    description="✅ ФИНАЛЬНАЯ ВЕРСИЯ: Исправлены дубликаты + 5 мест для выбора",
-    version="3.1.0"
+    description="✅ ИСПРАВЛЕННАЯ ВЕРСИЯ: Правильная логика маршрута",
+    version="3.2.0"
 )
 
 app.add_middleware(
@@ -70,14 +70,14 @@ def correct_coordinates(coords: List[float]) -> List[float]:
 async def root():
     return {
         "service": "Intelligent Trails API", 
-        "version": "3.1.0",
+        "version": "3.2.0",
         "status": "running",
-        "features": ["✅ ФИНАЛЬНАЯ ВЕРСИЯ: Исправлены дубликаты + 5 мест для выбора"]
+        "features": ["✅ ИСПРАВЛЕННАЯ ВЕРСИЯ: Правильная логика маршрута"]
     }
 
 @app.post("/api/route/build")
 async def build_route(request: dict = Body(...)):
-    """✅ ФИНАЛЬНАЯ ВЕРСИЯ: Возвращает альтернативные места для выбора"""
+    """✅ ИСПРАВЛЕННАЯ ВЕРСИЯ: Правильная логика построения маршрута"""
     try:
         if not YANDEX_API_KEY or not routing_service:
             raise HTTPException(status_code=500, detail="API key not configured")
@@ -88,17 +88,22 @@ async def build_route(request: dict = Body(...)):
             request['start_point'] = correct_coordinates(request['start_point'])
             logger.info(f"📍 Corrected start_point: {request['start_point']}")
         
+        # Определяем формат запроса
         if 'start_point' in request:
-            route_data = await build_route_with_alternatives(request)
+            places_data = await convert_new_format_to_places(request)
         else:
             places_data = request.get('places', [])
-            if not places_data or len(places_data) < 2:
-                raise HTTPException(status_code=400, detail="Need at least 2 places")
-            
-            route_data = await routing_service.build_route(
-                places=places_data,
-                optimize=request.get('optimize', True)
-            )
+        
+        if not places_data or len(places_data) < 2:
+            raise HTTPException(status_code=400, detail="Need at least 2 places")
+        
+        logger.info(f"🎯 Building route for {len(places_data)} places")
+        
+        # Строим маршрут
+        route_data = await routing_service.build_route(
+            places=places_data,
+            optimize=request.get('optimize', True)
+        )
         
         if not route_data.get('success'):
             raise HTTPException(status_code=400, detail=route_data.get('error'))
@@ -110,100 +115,103 @@ async def build_route(request: dict = Body(...)):
         raise
     except Exception as e:
         logger.error(f"❌ Error: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(statuscode=500, detail=str(e))
 
-async def build_route_with_alternatives(request: dict) -> Dict:
-    """✅ ФИНАЛЬНАЯ ВЕРСИЯ: Строит маршрут и возвращает альтернативные места"""
+async def convert_new_format_to_places(request: dict) -> List[dict]:
+    """✅ ИСПРАВЛЕННАЯ ВЕРСИЯ: Правильная логика выбора мест"""
+    places = []
     start_point = request.get('start_point', [])
-    categories = request.get('categories', [])
     
     if not start_point or len(start_point) != 2:
         raise ValueError("❌ start_point must be [lon, lat]")
     
-    # 1. ПОИСК ВСЕХ МЕСТ ДЛЯ КАЖДОЙ КАТЕГОРИИ
-    all_category_places = {}
-    current_center = start_point
-    
-    for i, cat_req in enumerate(categories):
-        category = cat_req.get('category') if isinstance(cat_req, dict) else str(cat_req)
-        
-        logger.info(f"🔍 {i+1}. Searching ALL places for '{category}' near {current_center}")
-        
-        try:
-            # ✅ ИЩЕМ ВСЕ МЕСТА ДЛЯ КАТЕГОРИИ (до 5 штук)
-            search_results = await yandex_api_module.search_places(
-                center_coords=current_center,
-                categories=[category],
-                radius_m=5000
-            )
-            
-            if search_results:
-                all_category_places[category] = search_results
-                logger.info(f"✅ Found {len(search_results)} places for '{category}'")
-                
-                # Обновляем центр для следующей категории (берем первое место)
-                current_center = search_results[0]['coords']
-            else:
-                logger.warning(f"⚠️ No places found for '{category}'")
-                all_category_places[category] = []
-                
-        except Exception as e:
-            logger.error(f"❌ Error searching '{category}': {str(e)}")
-            all_category_places[category] = []
-    
-    # 2. СОЗДАЕМ ОСНОВНОЙ МАРШРУТ (используем первые места из каждой категории)
-    route_places = []
-    
-    # Стартовая точка
-    route_places.append({
+    # 1. НАЧАЛЬНАЯ ТОЧКА
+    places.append({
         'name': 'Старт',
         'coordinates': start_point,
         'type': 'must_visit',
         'transport_mode': 'pedestrian',
         'is_start': True
     })
+    logger.info(f"✅ 1. Start point: {start_point}")
     
-    # Добавляем первые места из каждой категории в маршрут
-    for category, places in all_category_places.items():
-        if places:
-            first_place = places[0]
-            transport_mode = next((cat_req.get('transport_mode', 'pedestrian') 
-                                for cat_req in categories 
-                                if (cat_req.get('category') if isinstance(cat_req, dict) else str(cat_req)) == category), 
-                              'pedestrian')
+    # 2. КАТЕГОРИИ - ИСПРАВЛЕННАЯ ЛОГИКА
+    categories = request.get('categories', [])
+    
+    if categories:
+        logger.info(f"🔍 Processing {len(categories)} categories")
+        
+        for i, cat_req in enumerate(categories):
+            category = cat_req.get('category') if isinstance(cat_req, dict) else str(cat_req)
+            transport_mode = cat_req.get('transport_mode', 'pedestrian') if isinstance(cat_req, dict) else 'pedestrian'
             
-            route_places.append({
-                'name': first_place['name'],
-                'coordinates': first_place['coords'],
-                'address': first_place.get('address', ''),
-                'type': 'must_visit',
-                'category': category,
-                'transport_mode': transport_mode,
-                'is_category': True
-            })
+            logger.info(f"🔍 {i+1}. Searching '{category}' near {start_point}")
+            
+            try:
+                # ✅ ИЩЕМ МЕСТО ДЛЯ КАТЕГОРИИ (ближайшее к стартовой точке)
+                search_results = await yandex_api_module.search_places(
+                    center_coords=start_point,  # Всегда ищем от стартовой точки
+                    categories=[category],
+                    radius_m=5000
+                )
+                
+                if search_results:
+                    # ✅ ВЫБИРАЕМ САМОЕ БЛИЖАЙШЕЕ МЕСТО (не первое из списка)
+                    best_place = min(search_results, key=lambda x: x['distance'])
+                    
+                    place_data = {
+                        'name': best_place.get('name', category),
+                        'coordinates': best_place.get('coords', start_point),
+                        'address': best_place.get('address', ''),
+                        'type': 'must_visit',
+                        'category': category,
+                        'transport_mode': transport_mode,
+                        'is_category': True,
+                        'distance_from_start': best_place.get('distance', 0)
+                    }
+                    
+                    places.append(place_data)
+                    logger.info(f"✅ {i+1}. Found: '{place_data['name']}' at {place_data['coordinates']} ({best_place['distance']}м)")
+                    
+                else:
+                    logger.warning(f"⚠️ No places found for '{category}'")
+                    places.append({
+                        'name': f'{category} (не найдено)',
+                        'coordinates': start_point,
+                        'type': 'must_visit',
+                        'category': category,
+                        'transport_mode': transport_mode,
+                        'is_fallback': True
+                    })
+                    
+            except Exception as e:
+                logger.error(f"❌ Error searching '{category}': {str(e)}")
+                places.append({
+                    'name': f'{category} (ошибка)',
+                    'coordinates': start_point,
+                    'type': 'must_visit',
+                    'category': category,
+                    'transport_mode': transport_mode,
+                    'is_error': True
+                })
     
-    # Возврат к старту
-    if request.get('return_to_start', False):
-        route_places.append({
+    # 3. КОНЕЧНАЯ ТОЧКА - ТОЛЬКО ЕСЛИ ЕСТЬ КУДА ВОЗВРАЩАТЬСЯ
+    if request.get('return_to_start', False) and len(places) > 1:
+        places.append({
             'name': 'Возврат к старту',
             'coordinates': start_point,
             'type': 'must_visit',
             'transport_mode': 'pedestrian',
             'is_return': True
         })
+        logger.info(f"✅ Added return to start")
     
-    # 3. СТРОИМ МАРШРУТ
-    route_data = await routing_service.build_route(
-        places=route_places,
-        optimize=request.get('optimize', True)
-    )
+    logger.info(f"✅ Final places count: {len(places)}")
+    for i, place in enumerate(places):
+        place_type = ' | '.join([k for k, v in place.items() if v is True and k.startswith('is_')])
+        logger.info(f"  {i+1}. '{place['name']}' at {place['coordinates']} [{place_type}]")
     
-    # 4. ДОБАВЛЯЕМ АЛЬТЕРНАТИВНЫЕ МЕСТА В ОТВЕТ
-    if route_data.get('success'):
-        route_data['alternative_places'] = all_category_places
-        logger.info(f"✅ Added alternative places: {len(all_category_places)} categories")
-    
-    return route_data
+    return places
 
 @app.post("/api/search/places")
 async def search_places_endpoint(request: dict = Body(...)):
