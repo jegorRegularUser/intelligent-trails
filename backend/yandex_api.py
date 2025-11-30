@@ -1,6 +1,6 @@
 """
-Yandex Maps API - РАБОТАЕТ С ОБЫЧНЫМ API КЛЮЧОМ
-Использует Geocoder API вместо Organizations API для поиска мест
+Yandex Maps API - ИСПРАВЛЕННАЯ ВЕРСИЯ
+Правильный поиск мест через Geocoder API
 """
 
 import aiohttp
@@ -23,8 +23,8 @@ MAX_POINTS_FOR_MATRIX = 10
 
 class YandexStaticRouter:
     """
-    Yandex Maps API Wrapper - ИСПОЛЬЗУЕТ ТОЛЬКО GEOCODER API
-    Поддержка поиска мест, геокодирования и построения маршрутов
+    Yandex Maps API Wrapper
+    ИСПРАВЛЕНО: Правильный поиск организаций через Geocoder API
     """
     
     GEOCODER_URL = "https://geocode-maps.yandex.ru/1.x/"
@@ -35,7 +35,7 @@ class YandexStaticRouter:
         logger.info(f"[YandexAPI] Initialized with key: {api_key[:10]}...")
         
     async def _get_session(self) -> aiohttp.ClientSession:
-        """Get or create aiohttp session with connection pooling"""
+        """Get or create aiohttp session"""
         if self.session is None or self.session.closed:
             connector = aiohttp.TCPConnector(
                 limit=100, 
@@ -52,7 +52,7 @@ class YandexStaticRouter:
         return self.session
     
     async def close(self):
-        """Close the aiohttp session gracefully"""
+        """Close the aiohttp session"""
         if self.session and not self.session.closed:
             await self.session.close()
             logger.info("[YandexAPI] Session closed")
@@ -60,7 +60,8 @@ class YandexStaticRouter:
     async def search_places(self, center_coords: List[float], categories: List[str], 
                            radius_m: int = 3000) -> List[Dict]:
         """
-        🔍 Поиск мест через Geocoder API (РАБОТАЕТ С ОБЫЧНЫМ КЛЮЧОМ!)
+        🔍 Поиск мест через Geocoder API
+        ПРАВИЛЬНАЯ ВЕРСИЯ - поиск организаций по категориям
         
         Args:
             center_coords: [longitude, latitude] - центр поиска
@@ -73,7 +74,7 @@ class YandexStaticRouter:
         try:
             session = await self._get_session()
             
-            # Маппинг категорий на поисковые запросы
+            # Маппинг категорий на русском языке
             category_mapping = {
                 'кафе': 'кафе',
                 'ресторан': 'ресторан',
@@ -92,43 +93,34 @@ class YandexStaticRouter:
             
             all_places = []
             
-            # Получаем название города для контекста
-            city_name = await self._get_city_name(center_coords)
-            
             for category in categories:
                 search_text = category_mapping.get(category.lower(), category)
                 
-                # Формируем поисковый запрос с городом для точности
-                if city_name:
-                    query = f"{city_name}, {search_text}"
-                else:
-                    query = search_text
-                
+                # ✅ ПРАВИЛЬНЫЙ ЗАПРОС К GEOCODER API
                 params = {
                     'apikey': self.api_key,
-                    'geocode': query,
+                    'geocode': search_text,  # Категория на русском
                     'format': 'json',
-                    'll': f"{center_coords[0]},{center_coords[1]}",
-                    'spn': f"{radius_m/111000},{radius_m/111000}",
-                    'rspn': 1,  # Учитывать регион поиска
-                    'results': 10,
-                    'lang': 'ru_RU',
-                    'kind': 'house'  # Поиск зданий/объектов
+                    'll': f"{center_coords[0]},{center_coords[1]}",  # Центр поиска
+                    'spn': f"{radius_m},{radius_m}",  # Область в градусах
+                    'rspn': 1,  # Учитывать регион
+                    'results': 50,  # Побольше результатов
+                    'lang': 'ru_RU'
                 }
                 
-                logger.info(f"[YandexAPI] Searching '{query}' near {center_coords}")
+                logger.info(f"[YandexAPI] Searching '{search_text}' near {center_coords}, radius={radius_m}m")
                 
                 try:
                     async with session.get(self.GEOCODER_URL, params=params) as response:
                         if response.status != 200:
                             error_text = await response.text()
-                            logger.warning(f"[YandexAPI] Geocoder error {response.status}: {error_text[:100]}")
+                            logger.warning(f"[YandexAPI] Geocoder error {response.status}: {error_text[:200]}")
                             continue
                         
                         data = await response.json()
                         members = data.get('response', {}).get('GeoObjectCollection', {}).get('featureMember', [])
                         
-                        logger.info(f"[YandexAPI] Found {len(members)} results for '{query}'")
+                        logger.info(f"[YandexAPI] Found {len(members)} results for '{search_text}'")
                         
                         for member in members:
                             try:
@@ -153,8 +145,8 @@ class YandexStaticRouter:
                                 # Расстояние от центра
                                 distance = self._haversine_distance(center_coords, coords)
                                 
-                                # Фильтруем по радиусу (с запасом)
-                                if distance > radius_m * 1.5:
+                                # Фильтруем по радиусу
+                                if distance > radius_m:
                                     continue
                                 
                                 # Описание (kind объекта)
@@ -176,7 +168,7 @@ class YandexStaticRouter:
                                 continue
                                 
                 except Exception as request_error:
-                    logger.error(f"[YandexAPI] Request error for '{query}': {request_error}")
+                    logger.error(f"[YandexAPI] Request error for '{search_text}': {request_error}")
                     continue
             
             # Удаляем дубликаты по координатам
@@ -193,25 +185,11 @@ class YandexStaticRouter:
             unique_places.sort(key=lambda p: p['distance'])
             
             logger.info(f"[YandexAPI] ✅ Total found: {len(unique_places)} unique places")
-            return unique_places
+            return unique_places[:10]  # Топ-10 ближайших
             
         except Exception as e:
             logger.error(f"[YandexAPI] ❌ Critical error in search_places: {str(e)}", exc_info=True)
             return []
-    
-    async def _get_city_name(self, coords: List[float]) -> str:
-        """Получить название города по координатам"""
-        try:
-            address_data = await self.reverse_geocode(coords)
-            details = address_data.get('details', {})
-            
-            # Пробуем найти город
-            city = details.get('locality') or details.get('province') or ''
-            return city
-            
-        except Exception as e:
-            logger.debug(f"Could not get city name: {e}")
-            return ''
     
     async def get_route(self, origin: List[float], destination: List[float], 
                        mode: str = "pedestrian") -> Optional[Dict]:
@@ -227,10 +205,10 @@ class YandexStaticRouter:
                 'pedestrian': 1.39,     # 5 км/ч
                 'walking': 1.39,
                 'driving': 13.89,       # 50 км/ч
+                'auto': 13.89,
                 'masstransit': 8.33,    # 30 км/ч
                 'transit': 8.33,
-                'bicycle': 4.17,        # 15 км/ч
-                'auto': 13.89
+                'bicycle': 4.17         # 15 км/ч
             }
             
             speed = speeds.get(mode, 1.39)
@@ -264,10 +242,10 @@ class YandexStaticRouter:
             'pedestrian': 1.3,
             'walking': 1.3,
             'driving': 1.4,
+            'auto': 1.4,
             'masstransit': 1.5,
             'transit': 1.5,
-            'bicycle': 1.35,
-            'auto': 1.4
+            'bicycle': 1.35
         }
         
         coef = tortuosity.get(mode, 1.3)
@@ -469,7 +447,13 @@ def point_at_distance(origin: List[float], distance_m: float, bearing_degrees: f
 
 def estimate_time_by_mode(distance_m: float, mode: str) -> int:
     """Время в секундах"""
-    speeds = {'pedestrian': 1.39, 'driving': 13.89, 'masstransit': 8.33, 'auto': 13.89, 'bicycle': 4.17}
+    speeds = {
+        'pedestrian': 1.39, 
+        'driving': 13.89, 
+        'auto': 13.89,
+        'masstransit': 8.33, 
+        'bicycle': 4.17
+    }
     return int(distance_m / speeds.get(mode, 1.39))
 
 
@@ -478,7 +462,15 @@ async def get_routing_matrix(points: List[Dict], mode: str) -> Tuple[List[List[i
     n = len(points)
     matrix = [[0] * n for _ in range(n)]
     
-    coefs = {'pedestrian': 1.3, 'driving': 1.4, 'masstransit': 1.5, 'auto': 1.4, 'bicycle': 1.35, 'walking': 1.3, 'transit': 1.5}
+    coefs = {
+        'pedestrian': 1.3, 
+        'driving': 1.4, 
+        'auto': 1.4,
+        'masstransit': 1.5, 
+        'bicycle': 1.35, 
+        'walking': 1.3, 
+        'transit': 1.5
+    }
     coef = coefs.get(mode, 1.3)
     
     for i in range(n):
@@ -495,7 +487,7 @@ def generate_fallback_matrix_with_mode(points: List[Dict], mode: str) -> List[Li
     n = len(points)
     matrix = [[0] * n for _ in range(n)]
     
-    coefs = {'pedestrian': 1.3, 'driving': 1.4, 'masstransit': 1.5, 'auto': 1.4, 'bicycle': 1.35}
+    coefs = {'pedestrian': 1.3, 'driving': 1.4, 'auto': 1.4, 'masstransit': 1.5, 'bicycle': 1.35}
     coef = coefs.get(mode, 1.3)
     
     for i in range(n):
