@@ -1,7 +1,7 @@
 # ========== yandex_api.py ==========
 """
-Yandex Maps API - ФИНАЛЬНАЯ ВЕРСИЯ v6
-✅ Исправлены дубликаты координат + возвращает 5 мест для фронта
+Yandex Maps API - ИСПРАВЛЕННАЯ ВЕРСИЯ v7
+✅ Улучшенное геокодирование + правильный выбор ближайших мест
 """
 
 import aiohttp
@@ -100,17 +100,23 @@ class YandexStaticRouter:
         }
 
     async def _smart_geocode(self, name: str, address: str, location_info: Dict) -> Optional[Tuple[List[float], str]]:
+        """✅ УЛУЧШЕННОЕ ГЕОКОДИРОВАНИЕ: Только релевантные стратегии"""
         url = self.GEOCODER_URL
         
         if location_info.get('is_russian') and location_info.get('name'):
             city = location_info['name']
             
-            strategies = [
-                (f"{name}, {city}", "name_city"),
-                (f"{address}, {city}", "address_city"),
-                (f"{name}", "name_only"),
-                (f"{address}", "address_only"),
-            ]
+            # ✅ ТОЛЬКО ЭФФЕКТИВНЫЕ СТРАТЕГИИ
+            strategies = []
+            
+            if name and address:
+                strategies.append((f"{name}, {address}, {city}", "name_address_city"))
+            if name:
+                strategies.append((f"{name}, {city}", "name_city"))
+            if address:
+                strategies.append((f"{address}, {city}", "address_city"))
+            if name:
+                strategies.append((f"{name}", "name_only"))
             
             for query, method in strategies:
                 params = {
@@ -133,6 +139,7 @@ class YandexStaticRouter:
 
                                 if pos:
                                     lon, lat = map(float, pos.split())
+                                    # ✅ ПРОВЕРКА: координаты в пределах России
                                     if 19 < lon < 180 and 41 < lat < 82:
                                         return ([lon, lat], method)
                 except:
@@ -141,7 +148,7 @@ class YandexStaticRouter:
         return None
 
     async def search_places(self, center_coords: List[float], categories: List[str], radius_m: int = 5000) -> List[Dict]:
-        """✅ ФИНАЛЬНАЯ ВЕРСИЯ: Возвращает 5 уникальных мест для каждой категории"""
+        """✅ ИСПРАВЛЕННАЯ ВЕРСИЯ: Правильный выбор ближайших мест"""
         try:
             if not self.suggest_key:
                 logger.error("❌ YANDEX_SUGGEST_API_KEY not configured!")
@@ -162,7 +169,7 @@ class YandexStaticRouter:
                     "apikey": self.suggest_key,
                     "text": category,
                     "ll": f"{corrected_coords[0]},{corrected_coords[1]}",
-                    "results": 15,  # ✅ Берем больше результатов для выбора
+                    "results": 10,  # Достаточно для выбора
                     "types": "biz",
                     "lang": "ru_RU"
                 }
@@ -181,7 +188,6 @@ class YandexStaticRouter:
                             continue
                         
                         category_places = []
-                        processed_coords = set()  # ✅ Для избежания дубликатов координат
                         
                         for i, result in enumerate(suggest_results, 1):
                             title = result.get("title", {})
@@ -199,22 +205,15 @@ class YandexStaticRouter:
                             else:
                                 address = subtitle_text
                             
-                            logger.info(f"  🔎 {i}. '{name}'")
+                            logger.debug(f"  🔎 {i}. '{name}'")
                             
+                            # 🔥 ГЕОКОДИРОВАНИЕ
                             result_coords = await self._smart_geocode(name, address, location_info)
                             
                             if not result_coords:
                                 continue
                             
                             coords, method = result_coords
-                            
-                            # ✅ ПРОВЕРКА ДУБЛИКАТОВ: пропускаем если координаты уже были обработаны
-                            coord_key = f"{coords[0]:.6f},{coords[1]:.6f}"
-                            if coord_key in processed_coords:
-                                logger.debug(f"  ⏭️ Duplicate coordinates: {coords}")
-                                continue
-                            processed_coords.add(coord_key)
-                            
                             distance_m = self._haversine_distance(corrected_coords, coords)
                             
                             if distance_m > radius_m:
@@ -232,15 +231,12 @@ class YandexStaticRouter:
                             
                             category_places.append(place)
                             logger.info(f"  ✅ {i}. {name[:30]} [{coords}] {distance_m:.0f}м")
-                            
-                            # ✅ Останавливаемся когда набрали 5 уникальных мест
-                            if len(category_places) >= 5:
-                                break
                         
+                        # ✅ ВЫБИРАЕМ 5 САМЫХ БЛИЖАЙШИХ МЕСТ
                         if category_places:
                             category_places.sort(key=lambda p: p['distance'])
-                            all_places.extend(category_places)
-                            logger.info(f"✅ '{category}': {len(category_places)} unique places")
+                            all_places.extend(category_places[:5])  # Берем 5 ближайших
+                            logger.info(f"✅ '{category}': {len(category_places)} -> {min(5, len(category_places))} ближайших")
                         else:
                             logger.warning(f"❌ No valid places for '{category}'")
                 
@@ -248,17 +244,13 @@ class YandexStaticRouter:
                     logger.error(f"Category '{category}' error: {e}")
                     continue
             
-            # ✅ ФИНАЛЬНАЯ ПРОВЕРКА: убираем дубликаты по имени и координатам
+            # ✅ УБИРАЕМ ДУБЛИКАТЫ
             final_places = []
-            seen_names = set()
             seen_coords = set()
             
             for place in all_places:
-                name_key = place['name'].lower()[:50]
                 coord_key = f"{place['coords'][0]:.6f},{place['coords'][1]:.6f}"
-                
-                if name_key not in seen_names and coord_key not in seen_coords:
-                    seen_names.add(name_key)
+                if coord_key not in seen_coords:
                     seen_coords.add(coord_key)
                     final_places.append(place)
             
@@ -278,16 +270,6 @@ class YandexStaticRouter:
         dlat, dlon = lat2 - lat1, lon2 - lon1
         a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
         return R * 2 * atan2(sqrt(a), sqrt(1-a))
-    
-    async def get_route(self, origin: List[float], destination: List[float], mode: str = "pedestrian") -> Optional[Dict]:
-        distance = self._haversine_distance(origin, destination) * 1.3
-        speed = {'pedestrian': 1.39, 'driving': 13.89}.get(mode, 1.39)
-        duration = distance / speed
-        return {
-            "geometry": [origin, destination],
-            "distance": round(distance),
-            "duration": round(duration)
-        }
 
 YandexMapsAPI = YandexStaticRouter
 
