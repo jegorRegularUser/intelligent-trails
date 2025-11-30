@@ -1,3 +1,8 @@
+/**
+ * Route Modal Template
+ * ИСПРАВЛЕННАЯ ВЕРСИЯ с 3-м вариантом завершения и селектом транспорта для мест
+ */
+
 window.RouteModalTemplate = {
   getHTML() {
     return `
@@ -113,11 +118,20 @@ window.RouteModalTemplate = {
               <span>Вернуться к началу</span>
             </div>
           </label>
+          
           <label class="radio-option">
             <input type="radio" name="routeEnd" value="custom" />
             <div class="option-card">
               <span class="option-icon">🎯</span>
               <span>Закончить в другом месте</span>
+            </div>
+          </label>
+          
+          <label class="radio-option">
+            <input type="radio" name="routeEnd" value="smart" />
+            <div class="option-card">
+              <span class="option-icon">🤖</span>
+              <span>Закончить в интересном месте</span>
             </div>
           </label>
         </div>
@@ -349,6 +363,16 @@ window.RouteModalTemplate = {
                 <input type="number" id="placeStayTime" value="20" min="5" max="120" step="5" />
                 <span>минут</span>
               </div>
+            </div>
+
+            <div class="input-group">
+              <label>🚶 Как добираться до места?</label>
+              <select id="placeTransport" class="transport-select">
+                <option value="pedestrian">🚶 Пешком</option>
+                <option value="bicycle">🚴 Велосипед</option>
+                <option value="auto">🚗 Авто</option>
+                <option value="masstransit">🚌 Транспорт</option>
+              </select>
             </div>
           </div>
           <div class="activity-modal-footer">

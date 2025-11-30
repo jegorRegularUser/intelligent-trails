@@ -1,3 +1,8 @@
+/**
+ * Route Modal Activities
+ * ИСПРАВЛЕННАЯ ВЕРСИЯ с сохранением transport_mode для каждой активности
+ */
+
 window.RouteModalActivities = {
   modalInstance: null,
 
@@ -86,6 +91,7 @@ window.RouteModalActivities = {
       }
       
       document.getElementById('placeStayTime').value = activity.time_at_place || 20;
+      document.getElementById('placeTransport').value = activity.transport_mode || 'pedestrian';
     } else {
       document.getElementById('placeModalTitle').textContent = 'Добавить место';
       document.getElementById('placeConfirmText').textContent = 'Добавить';
@@ -99,6 +105,7 @@ window.RouteModalActivities = {
         specificInput.value = '';
       }
       document.getElementById('placeStayTime').value = 20;
+      document.getElementById('placeTransport').value = 'pedestrian';
     }
     
     document.getElementById('addPlaceModal').classList.add('active');
@@ -118,7 +125,9 @@ window.RouteModalActivities = {
       type: 'walk',
       duration_minutes: duration,
       walking_style: style,
-      transport_mode: transport
+      transport_mode: transport,
+      coords: null,
+      category: null
     };
 
     if (this.modalInstance.editingActivityIndex !== null) {
@@ -131,25 +140,31 @@ window.RouteModalActivities = {
     this.closeWalkModal();
   },
 
-async savePlaceActivity() {
+  async savePlaceActivity() {
     const activeTab = document.querySelector('.place-tab.active').dataset.tab;
     const stayTime = parseInt(document.getElementById('placeStayTime').value);
+    const transport = document.getElementById('placeTransport').value;
 
     let activity = {
       type: 'place',
       duration_minutes: stayTime,
-      time_at_place: stayTime
+      time_at_place: stayTime,
+      transport_mode: transport  // ✅ КЛЮЧЕВОЕ ДОБАВЛЕНИЕ!
     };
 
     if (activeTab === 'category') {
       const selectedCategory = document.querySelector('input[name="placeCategory"]:checked');
       if (selectedCategory) {
         activity.category = selectedCategory.value;
-        activity.name = selectedCategory.value; // Добавляем имя
+        activity.name = selectedCategory.value;
+        activity.coords = null;  // Категории не имеют координат
       } else {
         activity.category = 'кафе';
         activity.name = 'кафе';
+        activity.coords = null;
       }
+      
+      console.log('[RouteModalActivities] ✅ Saved category place:', activity);
     } else {
       const placeInput = document.getElementById('specificPlaceInput');
       const placeAddress = placeInput ? placeInput.value.trim() : '';
@@ -158,7 +173,7 @@ async savePlaceActivity() {
         return;
       }
       
-      // 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем координаты через Yandex Geocoder
+      // Геокодирование через Yandex
       this.modalInstance.showLoading(true, 'Ищем место на карте...');
       
       try {
@@ -171,10 +186,13 @@ async savePlaceActivity() {
         
         activity.specificPlaceAddress = placeAddress;
         activity.name = placeAddress;
-        activity.coords = coords; // ✅ Сохраняем координаты!
+        activity.coords = coords;
+        activity.category = null;  // Конкретные места не имеют категории
+        
+        console.log('[RouteModalActivities] ✅ Saved specific place:', activity);
         
       } catch (error) {
-        console.error('Geocoding error:', error);
+        console.error('[RouteModalActivities] Geocoding error:', error);
         this.modalInstance.showNotification('⚠️ Ошибка поиска места', 'error');
         this.modalInstance.showLoading(false);
         return;
@@ -193,7 +211,6 @@ async savePlaceActivity() {
     this.closePlaceModal();
   },
 
-  // 🔥 НОВЫЙ МЕТОД: Геокодирование адреса
   async geocodeAddress(address) {
     return new Promise((resolve, reject) => {
       if (typeof ymaps === 'undefined') {
@@ -206,13 +223,14 @@ async savePlaceActivity() {
           const firstGeoObject = res.geoObjects.get(0);
           if (firstGeoObject) {
             const coords = firstGeoObject.geometry.getCoordinates();
+            console.log(`[RouteModalActivities] Geocoded "${address}" to`, coords);
             resolve(coords);
           } else {
             resolve(null);
           }
         },
         (error) => {
-          console.error('Geocode error:', error);
+          console.error('[RouteModalActivities] Geocode error:', error);
           reject(error);
         }
       );
@@ -260,11 +278,23 @@ async savePlaceActivity() {
                  activity.category === 'памятник' ? '🗿' :
                  activity.category === 'бар' ? '🍺' :
                  activity.category === 'магазин' ? '🛍️' : '📍';
+          
           title = activity.specificPlaceAddress || activity.category;
+          
+          const transportIcon = activity.transport_mode === 'pedestrian' ? '🚶' :
+                               activity.transport_mode === 'bicycle' ? '🚴' :
+                               activity.transport_mode === 'auto' ? '🚗' : '🚌';
+          
           details = `
             <div style="display: flex; align-items: center; gap: 10px;">
               <input type="number" class="quick-time-input" data-index="${index}" value="${activity.duration_minutes}" min="5" max="120" step="5" onclick="event.stopPropagation()" />
               <span>мин</span>
+              <select class="quick-transport-select" data-index="${index}" onclick="event.stopPropagation()">
+                <option value="pedestrian" ${activity.transport_mode === 'pedestrian' ? 'selected' : ''}>🚶 Пешком</option>
+                <option value="bicycle" ${activity.transport_mode === 'bicycle' ? 'selected' : ''}>🚴 Велосипед</option>
+                <option value="auto" ${activity.transport_mode === 'auto' ? 'selected' : ''}>🚗 Авто</option>
+                <option value="masstransit" ${activity.transport_mode === 'masstransit' ? 'selected' : ''}>🚌 Транспорт</option>
+              </select>
             </div>
           `;
         }
@@ -287,6 +317,7 @@ async savePlaceActivity() {
 
       timeline.innerHTML = html;
 
+      // Event listeners для быстрого редактирования
       timeline.querySelectorAll('.quick-time-input').forEach(input => {
         input.addEventListener('change', (e) => {
           e.stopPropagation();
@@ -305,6 +336,7 @@ async savePlaceActivity() {
           e.stopPropagation();
           const index = parseInt(e.target.dataset.index);
           modal.activities[index].transport_mode = e.target.value;
+          console.log(`[RouteModalActivities] ✅ Updated transport mode for activity ${index}: ${e.target.value}`);
         });
       });
 
@@ -408,95 +440,5 @@ async savePlaceActivity() {
   removeActivity(modal, index) {
     modal.activities.splice(index, 1);
     this.updateTimeline(modal);
-  },
-    async savePlaceActivity() {
-    const activeTab = document.querySelector('.place-tab.active').dataset.tab;
-    const stayTime = parseInt(document.getElementById('placeStayTime').value);
-
-    let activity = {
-      type: 'place',
-      duration_minutes: stayTime,
-      time_at_place: stayTime
-    };
-
-    if (activeTab === 'category') {
-      const selectedCategory = document.querySelector('input[name="placeCategory"]:checked');
-      if (selectedCategory) {
-        activity.category = selectedCategory.value;
-        activity.name = selectedCategory.value;
-      } else {
-        activity.category = 'кафе';
-        activity.name = 'кафе';
-      }
-    } else {
-      const placeInput = document.getElementById('specificPlaceInput');
-      const placeAddress = placeInput ? placeInput.value.trim() : '';
-      if (!placeAddress) {
-        this.modalInstance.showNotification('⚠️ Укажите адрес или название места', 'error');
-        return;
-      }
-      
-      // 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Получаем координаты через Yandex Geocoder
-      this.modalInstance.showLoading(true, 'Ищем место на карте...');
-      
-      try {
-        const coords = await this.geocodeAddress(placeAddress);
-        if (!coords) {
-          this.modalInstance.showNotification('⚠️ Не удалось найти место на карте', 'error');
-          this.modalInstance.showLoading(false);
-          return;
-        }
-        
-        activity.specificPlaceAddress = placeAddress;
-        activity.name = placeAddress;
-        activity.coords = coords; // ✅ Сохраняем координаты!
-        
-        console.log(`[RouteModalActivities] Geocoded "${placeAddress}" to`, coords);
-        
-      } catch (error) {
-        console.error('Geocoding error:', error);
-        this.modalInstance.showNotification('⚠️ Ошибка поиска места', 'error');
-        this.modalInstance.showLoading(false);
-        return;
-      } finally {
-        this.modalInstance.showLoading(false);
-      }
-    }
-
-    if (this.modalInstance.editingActivityIndex !== null) {
-      this.modalInstance.activities[this.modalInstance.editingActivityIndex] = activity;
-    } else {
-      this.modalInstance.activities.push(activity);
-    }
-
-    this.updateTimeline(this.modalInstance);
-    this.closePlaceModal();
-  },
-
-  // 🔥 НОВЫЙ МЕТОД: Геокодирование адреса
-  async geocodeAddress(address) {
-    return new Promise((resolve, reject) => {
-      if (typeof ymaps === 'undefined') {
-        reject(new Error('Yandex Maps not loaded'));
-        return;
-      }
-      
-      ymaps.geocode(address, { results: 1 }).then(
-        (res) => {
-          const firstGeoObject = res.geoObjects.get(0);
-          if (firstGeoObject) {
-            const coords = firstGeoObject.geometry.getCoordinates();
-            resolve(coords);
-          } else {
-            resolve(null);
-          }
-        },
-        (error) => {
-          console.error('Geocode error:', error);
-          reject(error);
-        }
-      );
-    });
-  },
-
+  }
 };

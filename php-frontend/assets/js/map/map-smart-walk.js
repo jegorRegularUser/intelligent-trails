@@ -1,6 +1,7 @@
 /**
  * Map Smart Walk - С РЕАЛЬНЫМ YANDEX ROUTING
- * Бэкенд отправляет точки, фронтенд строит маршрут через Yandex
+ * Бэкенд отправляет точки, фронтенд строит маршрут через Yandex Maps JS API
+ * ПОЛНАЯ ВЕРСИЯ с поддержкой индивидуальных режимов транспорта
  */
 
 class MapSmartWalk {
@@ -17,60 +18,61 @@ class MapSmartWalk {
         }
         
         this.init();
-        console.log('[MapSmartWalk] Initialized with Yandex routing');
+        console.log('[MapSmartWalk] ✅ Initialized with Yandex routing');
     }
     
     init() {
+        // Подписываемся на события
         window.EventBus?.on('route:updated', (routeData) => {
-            console.log('[MapSmartWalk] Route updated');
+            console.log('[MapSmartWalk] Route updated event received');
             this.visualizeRoute(routeData);
         });
     }
     
     /**
-     * Visualize route using REAL Yandex routing
+     * 🔥 ГЛАВНАЯ ФУНКЦИЯ: Визуализация маршрута с YANDEX ROUTING
      */
     async visualizeRoute(routeData) {
-        console.log('[MapSmartWalk] Visualizing with Yandex routing...', routeData);
+        console.log('[MapSmartWalk] Visualizing route with Yandex routing...', routeData);
         
+        // Очищаем старые маршруты
         this.clearRouteLines();
         
         if (!routeData || !routeData.places || routeData.places.length < 2) {
-            console.warn('[MapSmartWalk] Not enough places');
+            console.warn('[MapSmartWalk] Not enough places to build route');
             return;
         }
         
         const places = routeData.places;
-        const mode = routeData.mode || 'pedestrian';
+        console.log(`[MapSmartWalk] Building route through ${places.length} places`);
         
-        // Конвертируем режим для Yandex
-        const yandexMode = this.convertModeToYandex(mode);
-        
-        console.log(`[MapSmartWalk] Building ${places.length - 1} segments in ${yandexMode} mode`);
-        
-        // 🔥 СТРОИМ МАРШРУТ ЧЕРЕЗ YANDEX для каждого сегмента
+        // Строим каждый сегмент через Yandex
         for (let i = 0; i < places.length - 1; i++) {
-            await this.drawSegmentWithYandex(places[i], places[i + 1], yandexMode, i);
+            await this.drawSegmentWithYandex(places[i], places[i + 1], i);
         }
         
-        // Fit map
+        // Подгоняем карту под маршрут
         setTimeout(() => this.fitMapToRoute(), 500);
         
         console.log('[MapSmartWalk] ✅ Route visualization complete');
     }
     
     /**
-     * 🔥 ГЛАВНАЯ ФУНКЦИЯ: Рисует сегмент через Yandex Router
+     * 🔥 Рисует сегмент через Yandex Router API
      */
-    async drawSegmentWithYandex(fromPlace, toPlace, yandexMode, segmentIndex) {
+    async drawSegmentWithYandex(fromPlace, toPlace, segmentIndex) {
         try {
             const fromCoords = fromPlace.coordinates;
             const toCoords = toPlace.coordinates;
+            const mode = toPlace.transport_mode || 'pedestrian';  // Режим ИЗ места назначения
             
-            console.log(`[MapSmartWalk] Building segment ${segmentIndex + 1}: ${fromPlace.name} -> ${toPlace.name}`);
-            console.log(`  From: ${fromCoords}, To: ${toCoords}, Mode: ${yandexMode}`);
+            console.log(`[MapSmartWalk] Segment ${segmentIndex + 1}: ${fromPlace.name} -> ${toPlace.name} (${mode})`);
+            console.log(`  From: ${fromCoords}, To: ${toCoords}`);
             
-            // 🔥 ЗАПРОС К YANDEX ROUTER API
+            // Конвертируем режим для Yandex
+            const yandexMode = this.convertModeToYandex(mode);
+            
+            // 🔥 ЗАПРОС К YANDEX ROUTER через JS API
             const route = await ymaps.route(
                 [fromCoords, toCoords],
                 {
@@ -80,50 +82,48 @@ class MapSmartWalk {
                 }
             );
             
-            // Сохраняем route объект
+            // Сохраняем route объект для доступа к данным
             this.yandexRoutes.push(route);
             
-            // Получаем путь (первый путь, если их несколько)
+            // Получаем путь
             const paths = route.getPaths();
             const firstPath = paths.get(0);
             
             if (!firstPath) {
                 console.warn(`[MapSmartWalk] No path found for segment ${segmentIndex}`);
-                // Fallback: прямая линия
-                this.drawFallbackLine(fromCoords, toCoords, yandexMode);
+                this.drawFallbackLine(fromCoords, toCoords, mode);
                 return;
             }
             
-            // 🎨 Получаем геометрию (РЕАЛЬНАЯ геометрия дорог!)
+            // Получаем геометрию (РЕАЛЬНАЯ геометрия дорог!)
             const geometry = firstPath.geometry;
             
-            // 📊 Получаем данные о маршруте
+            // Получаем данные о маршруте
             const distance = firstPath.getLength();  // метры
             const duration = firstPath.getTime();     // секунды
             const segments = firstPath.getSegments(); // сегменты с инструкциями
             
             console.log(`  ✅ Distance: ${(distance / 1000).toFixed(2)} km, Time: ${(duration / 60).toFixed(0)} min`);
             
-            // 🎨 РИСУЕМ ЛИНИЮ
+            // 🎨 Рисуем линию на карте
             const polyline = new ymaps.Polyline(
                 geometry.getCoordinates(),
                 {
-                    // Balloon с деталями
                     balloonContent: this.createSegmentBalloon(
                         fromPlace, 
                         toPlace, 
                         distance, 
                         duration,
                         segments,
-                        yandexMode
+                        mode
                     ),
                     hintContent: `${fromPlace.name} → ${toPlace.name}`
                 },
                 {
-                    strokeColor: this.getModeColor(yandexMode),
+                    strokeColor: this.getModeColor(mode),
                     strokeWidth: 5,
                     strokeOpacity: 0.8,
-                    strokeStyle: this.getModeStyle(yandexMode)
+                    strokeStyle: this.getModeStyle(mode)
                 }
             );
             
@@ -139,23 +139,24 @@ class MapSmartWalk {
                     from: fromPlace, 
                     to: toPlace,
                     distance: distance,
-                    duration: duration
+                    duration: duration,
+                    mode: mode
                 });
             });
             
-            console.log(`  ✅ Segment ${segmentIndex + 1} drawn`);
+            console.log(`  ✅ Segment ${segmentIndex + 1} drawn successfully`);
             
         } catch (error) {
-            console.error(`[MapSmartWalk] Error building segment ${segmentIndex}:`, error);
+            console.error(`[MapSmartWalk] ❌ Error building segment ${segmentIndex}:`, error);
             // Fallback: прямая линия
-            this.drawFallbackLine(fromPlace.coordinates, toPlace.coordinates, yandexMode);
+            this.drawFallbackLine(fromPlace.coordinates, toPlace.coordinates, fromPlace.transport_mode || 'pedestrian');
         }
     }
     
     /**
      * Fallback: прямая линия если Yandex не вернул маршрут
      */
-    drawFallbackLine(fromCoords, toCoords, yandexMode) {
+    drawFallbackLine(fromCoords, toCoords, mode) {
         console.warn('[MapSmartWalk] Using fallback straight line');
         
         const polyline = new ymaps.Polyline(
@@ -245,47 +246,50 @@ class MapSmartWalk {
     /**
      * Цвет линии по режиму
      */
-    getModeColor(yandexMode) {
+    getModeColor(mode) {
         const colors = {
             'pedestrian': '#2E86DE',  // Синий
             'auto': '#EE5A6F',        // Красный
+            'driving': '#EE5A6F',
             'masstransit': '#26de81', // Зеленый
             'bicycle': '#FFA502'      // Оранжевый
         };
-        return colors[yandexMode] || '#2E86DE';
+        return colors[mode] || '#2E86DE';
     }
     
     /**
      * Стиль линии по режиму
      */
-    getModeStyle(yandexMode) {
-        return yandexMode === 'auto' ? 'solid' : '5 5';
+    getModeStyle(mode) {
+        return (mode === 'auto' || mode === 'driving') ? 'solid' : '5 5';
     }
     
     /**
      * Иконка по режиму
      */
-    getModeIcon(yandexMode) {
+    getModeIcon(mode) {
         const icons = {
             'pedestrian': '🚶',
             'auto': '🚗',
+            'driving': '🚗',
             'masstransit': '🚌',
             'bicycle': '🚴'
         };
-        return icons[yandexMode] || '🚶';
+        return icons[mode] || '🚶';
     }
     
     /**
      * Название режима
      */
-    getModeName(yandexMode) {
+    getModeName(mode) {
         const names = {
             'pedestrian': 'Пешком',
             'auto': 'На машине',
+            'driving': 'На машине',
             'masstransit': 'Общественный транспорт',
             'bicycle': 'На велосипеде'
         };
-        return names[yandexMode] || 'Пешком';
+        return names[mode] || 'Пешком';
     }
     
     /**
@@ -382,4 +386,4 @@ class MapSmartWalk {
 // Export
 window.MapSmartWalk = MapSmartWalk;
 
-console.log('[MapSmartWalk] Class loaded with Yandex routing support');
+console.log('[MapSmartWalk] ✅ Class loaded with Yandex routing support');

@@ -1,6 +1,6 @@
 """
 Intelligent Trails Backend - FastAPI Application
-Full version with ALL endpoints including legacy support
+ИСПРАВЛЕННАЯ ВЕРСИЯ с поддержкой индивидуальных режимов транспорта
 """
 
 from fastapi import FastAPI, HTTPException, Body, Query
@@ -12,10 +12,7 @@ import os
 from dotenv import load_dotenv
 
 from routing_service import get_routing_service
-
 from yandex_api import YandexStaticRouter as YandexMapsAPI
-import yandex_api as yandex_api_module
-
 import yandex_api as yandex_api_module
 import solver
 
@@ -32,8 +29,8 @@ logger = logging.getLogger(__name__)
 # Initialize FastAPI app
 app = FastAPI(
     title="Intelligent Trails API",
-    description="Backend API for intelligent route planning with multiple places",
-    version="2.0.0"
+    description="Backend API for intelligent route planning with individual transport modes",
+    version="2.1.0"
 )
 
 # Configure CORS
@@ -60,25 +57,36 @@ if YANDEX_API_KEY:
 
 
 # ============================================================================
-# PYDANTIC MODELS
+# PYDANTIC MODELS - НОВАЯ ВЕРСИЯ
 # ============================================================================
 
-# New API models
 class Place(BaseModel):
+    """
+    Модель места с поддержкой:
+    - Конкретных координат
+    - Категорий для поиска
+    - Индивидуального режима транспорта
+    """
     id: Optional[int] = None
     name: str
     coordinates: List[float]
     address: Optional[str] = None
     type: str = "must_visit"
+    category: Optional[str] = None  # Для категорийного поиска (кафе, парк и тп)
+    transport_mode: str = "pedestrian"  # Как добираться ДО этого места
 
 
 class RouteRequest(BaseModel):
-    places: List[Place] = Field(..., min_length=2)
-    mode: str = "pedestrian"
+    """
+    Запрос на построение маршрута
+    ИЗМЕНЕНО: убран глобальный mode, каждое место имеет свой transport_mode
+    """
+    places: List[Place] = Field(..., min_length=2, description="Список мест маршрута")
     optimize: bool = True
+    # mode убран - теперь каждое место хранит свой transport_mode
 
 
-# Legacy models
+# Legacy models (для старых эндпоинтов)
 class Point(BaseModel):
     name: str
     coords: List[float]
@@ -167,9 +175,14 @@ class RouteResponse(BaseModel):
 async def root():
     return {
         "service": "Intelligent Trails API",
-        "version": "2.0.0",
+        "version": "2.1.0",
         "status": "running",
-        "api_key_configured": bool(YANDEX_API_KEY)
+        "api_key_configured": bool(YANDEX_API_KEY),
+        "features": [
+            "Individual transport modes per segment",
+            "Category-based place search",
+            "Route optimization"
+        ]
     }
 
 
@@ -192,31 +205,49 @@ async def health_check():
 
 @app.post("/api/route/build")
 async def build_route(request: RouteRequest):
+    """
+    Построить маршрут через несколько мест
+    НОВАЯ ВЕРСИЯ: поддержка индивидуальных режимов транспорта
+    
+    Каждое место в places может иметь:
+    - coordinates: реальные координаты [lon, lat]
+    - category: категория для поиска (если coordinates = [0,0])
+    - transport_mode: как добираться ДО этого места
+    """
     try:
         if not YANDEX_API_KEY or not routing_service:
             raise HTTPException(status_code=500, detail="API key not configured")
-            
+        
+        # Конвертируем Place объекты в словари
         places_data = [place.model_dump() for place in request.places]
+        
+        logger.info(f"[API] Building route for {len(places_data)} places")
+        for i, place in enumerate(places_data):
+            logger.info(f"  Place {i+1}: {place['name']}, mode={place.get('transport_mode', 'pedestrian')}, category={place.get('category', 'N/A')}")
+        
+        # Строим маршрут
         route_data = await routing_service.build_route(
             places=places_data,
-            mode=request.mode,
             optimize=request.optimize
         )
         
         if not route_data.get('success'):
             raise HTTPException(status_code=400, detail=route_data.get('error'))
         
+        logger.info(f"[API] ✅ Route built: {route_data['summary']['number_of_places']} places, {route_data['summary']['total_distance_km']} km")
+        
         return route_data
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error: {str(e)}", exc_info=True)
+        logger.error(f"[API] ❌ Error: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/route/modes")
 async def get_routing_modes():
+    """Получить доступные режимы передвижения"""
     from routing_service import ROUTING_MODES
     return {"success": True, "modes": ROUTING_MODES}
 
@@ -533,3 +564,4 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))
     uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
+    
