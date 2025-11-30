@@ -1,6 +1,6 @@
 """
-Routing Service - Improved version with CATEGORY SUPPORT
-Handles pedestrian, driving, and masstransit routing modes correctly
+Routing Service - FIXED VERSION
+Правильная обработка категорий с передачей центра поиска
 """
 
 import logging
@@ -184,56 +184,72 @@ class RoutingService:
         """
         Resolve places with categories to actual coordinates
         
-        Places with 'category' field will be searched using Yandex API
+        ИСПРАВЛЕНО: Используем первое место с координатами как центр поиска
         """
         resolved = []
+        
+        # Найти первое место с реальными координатами для центра поиска
+        search_center = None
+        for place in places:
+            coords = place.get('coordinates', [0, 0])
+            if coords and coords != [0, 0] and coords[0] != 0 and coords[1] != 0:
+                search_center = coords
+                logger.info(f"Using search center from place '{place.get('name')}': {search_center}")
+                break
+        
+        # Если нет мест с координатами, используем Москву по умолчанию
+        if not search_center:
+            search_center = [37.6173, 55.7558]  # Москва
+            logger.warning(f"No valid coordinates found, using default center: {search_center}")
         
         for i, place in enumerate(places):
             place_type = place.get('type', 'must_visit')
             category = place.get('category')
+            coords = place.get('coordinates', [0, 0])
             
-            # If place has coordinates, use them directly
-            if place.get('coordinates') and place['coordinates'] != [0, 0]:
+            # Если место имеет ВАЛИДНЫЕ координаты, используем их
+            if coords and coords != [0, 0] and coords[0] != 0 and coords[1] != 0:
                 resolved.append(place)
-                logger.info(f"Place {i}: '{place.get('name')}' - using provided coordinates")
+                logger.info(f"Place {i}: '{place.get('name')}' - using provided coordinates {coords}")
                 continue
             
-            # If place has category, search for it
+            # Если место имеет категорию, ищем его
             if category:
-                logger.info(f"Place {i}: Searching for category '{category}'")
-                
-                # Get center point for search (use first resolved place or [0,0])
-                center = resolved[0]['coordinates'] if resolved else [37.6173, 55.7558]  # Moscow default
+                logger.info(f"Place {i}: Searching for category '{category}' near {search_center}")
                 
                 try:
                     search_results = await yandex_api_module.search_places(
-                        center_coords=center,
+                        center_coords=search_center,  # ИСПРАВЛЕНО: используем правильный центр
                         categories=[category],
-                        radius_m=3000
+                        radius_m=5000  # Увеличил радиус до 5км
                     )
                     
                     if search_results:
-                        # Take the first result
+                        # Берем первый результат
                         found_place = search_results[0]
                         resolved_place = {
                             'name': found_place.get('name', category),
-                            'coordinates': found_place.get('coords', center),
+                            'coordinates': found_place.get('coords', search_center),
                             'address': found_place.get('address', ''),
-                            'type': 'must_visit',
+                            'type': place_type,
                             'category': category
                         }
                         resolved.append(resolved_place)
-                        logger.info(f"Found place: {resolved_place['name']} at {resolved_place['coordinates']}")
+                        logger.info(f"✅ Found: '{resolved_place['name']}' at {resolved_place['coordinates']}")
+                        
+                        # Обновляем центр поиска для следующих мест
+                        search_center = resolved_place['coordinates']
                     else:
-                        logger.warning(f"No places found for category '{category}'")
+                        logger.warning(f"❌ No places found for category '{category}'")
                         
                 except Exception as e:
-                    logger.error(f"Error searching for category '{category}': {e}")
+                    logger.error(f"❌ Error searching for category '{category}': {e}", exc_info=True)
                     
             else:
-                # Place without coordinates and without category - skip
-                logger.warning(f"Place {i}: '{place.get('name')}' has no coordinates and no category - skipping")
+                # Место без координат и без категории - пропускаем
+                logger.warning(f"Place {i}: '{place.get('name')}' has no coordinates and no category - SKIPPING")
         
+        logger.info(f"Resolved {len(resolved)} places from {len(places)} input places")
         return resolved
     
     async def _optimize_route_order(self, places: List[Dict], mode: str) -> List[Dict]:

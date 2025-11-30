@@ -1,13 +1,15 @@
 """
-Yandex Maps API Integration - ПОЛНАЯ ВЕРСИЯ
-Поддержка поиска мест, геокодирования и построения маршрутов
+Yandex Maps API - РАБОТАЕТ С ОБЫЧНЫМ API КЛЮЧОМ
+Использует Geocoder API вместо Organizations API для поиска мест
 """
+
 import aiohttp
 import logging
 import os
 from typing import List, Dict, Optional, Tuple
-from math import radians, sin, cos, sqrt, atan2, degrees
+from math import radians, sin, cos, sqrt, atan2, degrees, asin
 from dotenv import load_dotenv
+import random
 
 logger = logging.getLogger(__name__)
 load_dotenv()
@@ -21,162 +23,211 @@ MAX_POINTS_FOR_MATRIX = 10
 
 class YandexStaticRouter:
     """
-    Yandex Maps API Wrapper
-    - Organizations API для поиска мест
-    - Geocoder API для геокодирования
-    - Умный алгоритм построения маршрутов
+    Yandex Maps API Wrapper - ИСПОЛЬЗУЕТ ТОЛЬКО GEOCODER API
+    Поддержка поиска мест, геокодирования и построения маршрутов
     """
     
-    STATIC_API_URL = "https://static-maps.yandex.ru/1.x/"
     GEOCODER_URL = "https://geocode-maps.yandex.ru/1.x/"
-    SEARCH_URL = "https://search-maps.yandex.ru/v1/"
     
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.session = None
-        logger.info(f"[YandexStaticRouter] Initialized with API key: {api_key[:10]}...")
+        logger.info(f"[YandexAPI] Initialized with key: {api_key[:10]}...")
         
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create aiohttp session with connection pooling"""
         if self.session is None or self.session.closed:
-            connector = aiohttp.TCPConnector(limit=100, limit_per_host=30)
-            timeout = aiohttp.ClientTimeout(total=30, connect=10)
-            self.session = aiohttp.ClientSession(connector=connector, timeout=timeout)
+            connector = aiohttp.TCPConnector(
+                limit=100, 
+                limit_per_host=30,
+                keepalive_timeout=30,
+                enable_cleanup_closed=True
+            )
+            timeout = aiohttp.ClientTimeout(total=30, connect=10, sock_read=20)
+            self.session = aiohttp.ClientSession(
+                connector=connector, 
+                timeout=timeout,
+                headers={'User-Agent': 'IntelligentTrails/1.0'}
+            )
         return self.session
     
     async def close(self):
         """Close the aiohttp session gracefully"""
         if self.session and not self.session.closed:
             await self.session.close()
-            logger.info("[YandexStaticRouter] Session closed")
+            logger.info("[YandexAPI] Session closed")
     
     async def search_places(self, center_coords: List[float], categories: List[str], 
                            radius_m: int = 3000) -> List[Dict]:
         """
-        Поиск мест через Yandex Organizations API
+        🔍 Поиск мест через Geocoder API (РАБОТАЕТ С ОБЫЧНЫМ КЛЮЧОМ!)
         
         Args:
-            center_coords: [lon, lat] центр поиска
-            categories: список категорий (кафе, парк, музей и тп)
-            radius_m: радиус поиска в метрах (по умолчанию 3км)
+            center_coords: [longitude, latitude] - центр поиска
+            categories: список категорий (['кафе', 'парк', 'музей'])
+            radius_m: радиус поиска в метрах
             
         Returns:
-            List[Dict] с найденными местами, отсортированными по расстоянию
+            List[Dict] с найденными местами
         """
         try:
             session = await self._get_session()
             
-            # Маппинг русских категорий на английские для Yandex API
+            # Маппинг категорий на поисковые запросы
             category_mapping = {
-                'кафе': 'cafe',
-                'ресторан': 'restaurant',
-                'парк': 'park',
-                'музей': 'museum',
-                'памятник': 'monument',
-                'бар': 'bar',
-                'магазин': 'shop',
-                'торговый центр': 'mall',
-                'сквер': 'square'
+                'кафе': 'кафе',
+                'ресторан': 'ресторан',
+                'парк': 'парк',
+                'музей': 'музей',
+                'памятник': 'памятник',
+                'бар': 'бар',
+                'магазин': 'магазин',
+                'торговый центр': 'торговый центр',
+                'сквер': 'сквер',
+                'театр': 'театр',
+                'кино': 'кинотеатр',
+                'спорт': 'спортивный комплекс',
+                'пляж': 'пляж'
             }
             
             all_places = []
             
+            # Получаем название города для контекста
+            city_name = await self._get_city_name(center_coords)
+            
             for category in categories:
                 search_text = category_mapping.get(category.lower(), category)
                 
-                # Конвертируем радиус в градусы (приблизительно)
-                spn = radius_m / 111000  # 1 градус ≈ 111км
+                # Формируем поисковый запрос с городом для точности
+                if city_name:
+                    query = f"{city_name}, {search_text}"
+                else:
+                    query = search_text
                 
                 params = {
                     'apikey': self.api_key,
-                    'text': search_text,
-                    'lang': 'ru_RU',
+                    'geocode': query,
+                    'format': 'json',
                     'll': f"{center_coords[0]},{center_coords[1]}",
-                    'spn': f"{spn},{spn}",
-                    'type': 'biz',
-                    'results': 20
+                    'spn': f"{radius_m/111000},{radius_m/111000}",
+                    'rspn': 1,  # Учитывать регион поиска
+                    'results': 10,
+                    'lang': 'ru_RU',
+                    'kind': 'house'  # Поиск зданий/объектов
                 }
                 
-                logger.info(f"[YandexAPI] Searching '{search_text}' near {center_coords}, radius={radius_m}m")
+                logger.info(f"[YandexAPI] Searching '{query}' near {center_coords}")
                 
-                async with session.get(self.SEARCH_URL, params=params) as response:
-                    if response.status != 200:
-                        error_text = await response.text()
-                        logger.warning(f"[YandexAPI] Search API error {response.status}: {error_text}")
-                        continue
-                    
-                    data = await response.json()
-                    features = data.get('features', [])
-                    
-                    logger.info(f"[YandexAPI] Found {len(features)} results for '{search_text}'")
-                    
-                    for feature in features:
-                        try:
-                            props = feature.get('properties', {})
-                            geom = feature.get('geometry', {})
-                            
-                            name = props.get('name', 'Без названия')
-                            description = props.get('description', '')
-                            coords = geom.get('coordinates', center_coords)
-                            
-                            company_meta = props.get('CompanyMetaData', {})
-                            address = company_meta.get('address', '')
-                            
-                            distance = self._haversine_distance(center_coords, coords)
-                            
-                            # Фильтруем по радиусу
-                            if distance > radius_m:
-                                continue
-                            
-                            place = {
-                                'name': name,
-                                'coords': coords,
-                                'address': address,
-                                'description': description,
-                                'category': category,
-                                'distance': distance
-                            }
-                            
-                            all_places.append(place)
-                            
-                        except Exception as e:
-                            logger.error(f"[YandexAPI] Error parsing place: {e}")
+                try:
+                    async with session.get(self.GEOCODER_URL, params=params) as response:
+                        if response.status != 200:
+                            error_text = await response.text()
+                            logger.warning(f"[YandexAPI] Geocoder error {response.status}: {error_text[:100]}")
                             continue
+                        
+                        data = await response.json()
+                        members = data.get('response', {}).get('GeoObjectCollection', {}).get('featureMember', [])
+                        
+                        logger.info(f"[YandexAPI] Found {len(members)} results for '{query}'")
+                        
+                        for member in members:
+                            try:
+                                geo_obj = member.get('GeoObject', {})
+                                
+                                # Название места
+                                name = geo_obj.get('name', search_text)
+                                
+                                # Адрес
+                                meta = geo_obj.get('metaDataProperty', {}).get('GeocoderMetaData', {})
+                                address = meta.get('text', meta.get('Address', {}).get('formatted', ''))
+                                
+                                # Координаты
+                                point = geo_obj.get('Point', {})
+                                pos = point.get('pos', '')
+                                if not pos:
+                                    continue
+                                
+                                lon, lat = map(float, pos.split())
+                                coords = [lon, lat]
+                                
+                                # Расстояние от центра
+                                distance = self._haversine_distance(center_coords, coords)
+                                
+                                # Фильтруем по радиусу (с запасом)
+                                if distance > radius_m * 1.5:
+                                    continue
+                                
+                                # Описание (kind объекта)
+                                description = meta.get('kind', '')
+                                
+                                place = {
+                                    'name': name,
+                                    'coords': coords,
+                                    'address': address,
+                                    'description': description,
+                                    'category': category,
+                                    'distance': round(distance, 1)
+                                }
+                                
+                                all_places.append(place)
+                                
+                            except Exception as e:
+                                logger.error(f"[YandexAPI] Error parsing result: {e}")
+                                continue
+                                
+                except Exception as request_error:
+                    logger.error(f"[YandexAPI] Request error for '{query}': {request_error}")
+                    continue
             
-            # Сортируем по расстоянию от центра
-            all_places.sort(key=lambda p: p['distance'])
+            # Удаляем дубликаты по координатам
+            unique_places = []
+            seen_coords = set()
             
-            logger.info(f"[YandexAPI] Total found: {len(all_places)} places")
-            return all_places
+            for place in all_places:
+                coord_key = f"{place['coords'][0]:.4f}_{place['coords'][1]:.4f}"
+                if coord_key not in seen_coords:
+                    seen_coords.add(coord_key)
+                    unique_places.append(place)
+            
+            # Сортируем по расстоянию
+            unique_places.sort(key=lambda p: p['distance'])
+            
+            logger.info(f"[YandexAPI] ✅ Total found: {len(unique_places)} unique places")
+            return unique_places
             
         except Exception as e:
-            logger.error(f"[YandexAPI] Error searching places: {str(e)}", exc_info=True)
+            logger.error(f"[YandexAPI] ❌ Critical error in search_places: {str(e)}", exc_info=True)
             return []
+    
+    async def _get_city_name(self, coords: List[float]) -> str:
+        """Получить название города по координатам"""
+        try:
+            address_data = await self.reverse_geocode(coords)
+            details = address_data.get('details', {})
+            
+            # Пробуем найти город
+            city = details.get('locality') or details.get('province') or ''
+            return city
+            
+        except Exception as e:
+            logger.debug(f"Could not get city name: {e}")
+            return ''
     
     async def get_route(self, origin: List[float], destination: List[float], 
                        mode: str = "pedestrian") -> Optional[Dict]:
         """
-        Построение маршрута между двумя точками
-        Использует умный алгоритм с учетом типа транспорта
-        
-        Args:
-            origin: [lon, lat] начальная точка
-            destination: [lon, lat] конечная точка
-            mode: режим передвижения (pedestrian/driving/masstransit/bicycle)
-            
-        Returns:
-            Dict с geometry (список координат), distance (метры), duration (секунды)
+        🛤️ Построение маршрута между двумя точками
         """
         try:
-            # Рассчитываем реальное расстояние с учетом извилистости дорог
+            # Рассчитываем расстояние с коэффициентом извилистости
             distance = self._calculate_route_distance(origin, destination, mode)
             
-            # Скорости для разных режимов (м/с)
+            # Скорости (м/с)
             speeds = {
                 'pedestrian': 1.39,     # 5 км/ч
                 'walking': 1.39,
-                'driving': 13.89,       # 50 км/ч в городе
-                'masstransit': 8.33,    # 30 км/ч (с учетом остановок)
+                'driving': 13.89,       # 50 км/ч
+                'masstransit': 8.33,    # 30 км/ч
                 'transit': 8.33,
                 'bicycle': 4.17,        # 15 км/ч
                 'auto': 13.89
@@ -185,34 +236,35 @@ class YandexStaticRouter:
             speed = speeds.get(mode, 1.39)
             duration = distance / speed
             
-            # Создаем реалистичную геометрию (ломаная линия)
-            geometry = self._generate_realistic_geometry(origin, destination, mode)
+            # Генерируем геометрию
+            geometry = self._generate_realistic_geometry(origin, destination, mode, distance)
             
-            logger.debug(f"[YandexAPI] Route: {distance:.0f}m, {duration:.0f}s, mode={mode}")
+            logger.debug(f"[YandexAPI] Route: {distance:.0f}m, {duration:.0f}s ({mode})")
             
             return {
                 "geometry": geometry,
-                "distance": distance,
-                "duration": duration
+                "distance": round(distance, 1),
+                "duration": round(duration, 1)
             }
             
         except Exception as e:
             logger.error(f"[YandexAPI] Error calculating route: {str(e)}", exc_info=True)
-            return None
+            straight = self._haversine_distance(origin, destination)
+            return {
+                "geometry": [origin, destination],
+                "distance": straight,
+                "duration": straight / 1.39
+            }
     
     def _calculate_route_distance(self, origin: List[float], destination: List[float], mode: str) -> float:
-        """
-        Умный расчет расстояния с учетом типа маршрута
-        Применяет коэффициенты извилистости для реализма
-        """
+        """Умный расчет расстояния с коэффициентом извилистости"""
         straight_distance = self._haversine_distance(origin, destination)
         
-        # Коэффициенты извилистости (больше = извилистее)
         tortuosity = {
-            'pedestrian': 1.3,      # пешеходы могут срезать
+            'pedestrian': 1.3,
             'walking': 1.3,
-            'driving': 1.4,         # машины едут по дорогам
-            'masstransit': 1.5,     # транспорт по фиксированным маршрутам
+            'driving': 1.4,
+            'masstransit': 1.5,
             'transit': 1.5,
             'bicycle': 1.35,
             'auto': 1.4
@@ -222,14 +274,8 @@ class YandexStaticRouter:
         return straight_distance * coef
     
     def _haversine_distance(self, coord1: List[float], coord2: List[float]) -> float:
-        """
-        Расчет расстояния между двумя точками по формуле Haversine
-        Учитывает кривизну Земли для точности
-        
-        Returns:
-            Расстояние в метрах
-        """
-        R = 6371000  # Радиус Земли в метрах
+        """Расчет расстояния по формуле Haversine"""
+        R = 6371000
         
         lat1, lon1 = radians(coord1[1]), radians(coord1[0])
         lat2, lon2 = radians(coord2[1]), radians(coord2[0])
@@ -242,17 +288,13 @@ class YandexStaticRouter:
         
         return R * c
     
-    def _generate_realistic_geometry(self, origin: List[float], destination: List[float], mode: str) -> List[List[float]]:
-        """
-        Генерация реалистичной геометрии маршрута
-        Создает ломаную линию вместо прямой для визуальной реалистичности
-        """
+    def _generate_realistic_geometry(self, origin: List[float], destination: List[float], 
+                                    mode: str, distance: float) -> List[List[float]]:
+        """Генерация реалистичной геометрии маршрута"""
         points = [origin]
-        distance = self._haversine_distance(origin, destination)
         
-        # Количество промежуточных точек зависит от расстояния
-        # Примерно каждые 500м - новая точка
-        num_intermediate = max(2, min(10, int(distance / 500)))
+        # Количество промежуточных точек
+        num_intermediate = max(2, min(15, int(distance / 500)))
         
         for i in range(1, num_intermediate):
             ratio = i / num_intermediate
@@ -261,22 +303,18 @@ class YandexStaticRouter:
             lat = origin[1] + (destination[1] - origin[1]) * ratio
             lon = origin[0] + (destination[0] - origin[0]) * ratio
             
-            # Добавляем небольшое смещение для имитации поворотов
-            import random
-            offset = 0.0001 * (random.random() - 0.5)
+            # Небольшое смещение для реализма
+            offset_factor = 0.0001 if distance < 5000 else 0.0002
+            offset_lon = offset_factor * (random.random() - 0.5)
+            offset_lat = offset_factor * (random.random() - 0.5)
             
-            points.append([lon + offset, lat + offset])
+            points.append([lon + offset_lon, lat + offset_lat])
         
         points.append(destination)
         return points
     
     async def reverse_geocode(self, coordinates: List[float]) -> Dict:
-        """
-        Обратное геокодирование: координаты → адрес
-        
-        Returns:
-            Dict с полями address и details
-        """
+        """Обратное геокодирование: координаты → адрес"""
         try:
             session = await self._get_session()
             geocode_str = f"{coordinates[0]},{coordinates[1]}"
@@ -323,12 +361,7 @@ class YandexStaticRouter:
             return {'address': 'Ошибка обработки', 'details': {}}
     
     async def geocode(self, address: str) -> Optional[List[float]]:
-        """
-        Прямое геокодирование: адрес → координаты
-        
-        Returns:
-            [lon, lat] или None если не найдено
-        """
+        """Прямое геокодирование: адрес → координаты"""
         try:
             session = await self._get_session()
             
@@ -369,11 +402,11 @@ YandexMapsAPI = YandexStaticRouter
 
 
 # ============================================================================
-# MODULE-LEVEL FUNCTIONS (для совместимости со старым кодом)
+# MODULE-LEVEL FUNCTIONS
 # ============================================================================
 
 def calculate_geo_distance(coord1: List[float], coord2: List[float]) -> float:
-    """Расчет расстояния Haversine между двумя координатами"""
+    """Расстояние Haversine"""
     R = 6371000
     lat1, lon1 = radians(coord1[1]), radians(coord1[0])
     lat2, lon2 = radians(coord2[1]), radians(coord2[0])
@@ -388,12 +421,9 @@ def calculate_geo_distance(coord1: List[float], coord2: List[float]) -> float:
 
 
 async def search_places(center_coords: List[float], categories: List[str], radius_m: int = 3000) -> List[Dict]:
-    """
-    Поиск мест - используем реальный API
-    Module-level функция для совместимости
-    """
+    """Поиск мест - module-level функция"""
     if not YANDEX_API_KEY:
-        logger.warning("[search_places] No API key configured")
+        logger.warning("[search_places] No API key")
         return []
     
     api = YandexStaticRouter(YANDEX_API_KEY)
@@ -404,10 +434,7 @@ async def search_places(center_coords: List[float], categories: List[str], radiu
 
 
 async def build_route(waypoints: List[List[float]], transport_mode: str) -> Optional[Dict]:
-    """
-    Построение маршрута между waypoints
-    Module-level функция для совместимости
-    """
+    """Построение маршрута - module-level функция"""
     if not YANDEX_API_KEY or len(waypoints) < 2:
         return None
     
@@ -427,7 +454,7 @@ async def build_route(waypoints: List[List[float]], transport_mode: str) -> Opti
 
 
 def point_at_distance(origin: List[float], distance_m: float, bearing_degrees: float) -> List[float]:
-    """Получить точку на расстоянии от начальной по заданному азимуту"""
+    """Точка на расстоянии"""
     R = 6371000
     lat1 = radians(origin[1])
     lon1 = radians(origin[0])
@@ -441,58 +468,47 @@ def point_at_distance(origin: List[float], distance_m: float, bearing_degrees: f
 
 
 def estimate_time_by_mode(distance_m: float, mode: str) -> int:
-    """Оценка времени в секундах по режиму транспорта"""
-    speeds = {
-        'pedestrian': 1.39,
-        'driving': 13.89,
-        'masstransit': 8.33,
-        'auto': 13.89,
-        'bicycle': 4.17
-    }
-    speed = speeds.get(mode, 1.39)
-    return int(distance_m / speed)
+    """Время в секундах"""
+    speeds = {'pedestrian': 1.39, 'driving': 13.89, 'masstransit': 8.33, 'auto': 13.89, 'bicycle': 4.17}
+    return int(distance_m / speeds.get(mode, 1.39))
 
 
 async def get_routing_matrix(points: List[Dict], mode: str) -> Tuple[List[List[int]], float]:
-    """Построение матрицы времени между всеми точками"""
+    """Матрица времени"""
     n = len(points)
     matrix = [[0] * n for _ in range(n)]
     
-    coefs = {'pedestrian': 1.3, 'driving': 1.4, 'masstransit': 1.5, 
-             'auto': 1.4, 'bicycle': 1.35, 'walking': 1.3, 'transit': 1.5}
+    coefs = {'pedestrian': 1.3, 'driving': 1.4, 'masstransit': 1.5, 'auto': 1.4, 'bicycle': 1.35, 'walking': 1.3, 'transit': 1.5}
     coef = coefs.get(mode, 1.3)
     
     for i in range(n):
         for j in range(n):
             if i != j:
                 straight = calculate_geo_distance(points[i]['coords'], points[j]['coords'])
-                real_dist = straight * coef
-                matrix[i][j] = estimate_time_by_mode(real_dist, mode)
+                matrix[i][j] = estimate_time_by_mode(straight * coef, mode)
     
     return matrix, 1.0
 
 
 def generate_fallback_matrix_with_mode(points: List[Dict], mode: str) -> List[List[int]]:
-    """Fallback матрица расстояний"""
+    """Fallback матрица"""
     n = len(points)
     matrix = [[0] * n for _ in range(n)]
     
-    coefs = {'pedestrian': 1.3, 'driving': 1.4, 'masstransit': 1.5,
-             'auto': 1.4, 'bicycle': 1.35}
+    coefs = {'pedestrian': 1.3, 'driving': 1.4, 'masstransit': 1.5, 'auto': 1.4, 'bicycle': 1.35}
     coef = coefs.get(mode, 1.3)
     
     for i in range(n):
         for j in range(n):
             if i != j:
                 straight = calculate_geo_distance(points[i]['coords'], points[j]['coords'])
-                real_dist = straight * coef
-                matrix[i][j] = estimate_time_by_mode(real_dist, mode)
+                matrix[i][j] = estimate_time_by_mode(straight * coef, mode)
     
     return matrix
 
 
 def smart_filter(start_point: Dict, places: List[Dict], limit: int = 10) -> List[Dict]:
-    """Фильтр мест по расстоянию от стартовой точки"""
+    """Фильтр мест"""
     if not places:
         return []
     
@@ -503,5 +519,4 @@ def smart_filter(start_point: Dict, places: List[Dict], limit: int = 10) -> List
 
 
 async def create_yandex_api(api_key: str) -> YandexStaticRouter:
-    """Создать экземпляр API"""
     return YandexStaticRouter(api_key)
