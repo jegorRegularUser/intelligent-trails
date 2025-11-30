@@ -1,6 +1,8 @@
+
+# ========== routing_service.py ==========
 """
-Routing Service - ИСПРАВЛЕННАЯ ВЕРСИЯ
-Поддержка индивидуальных режимов транспорта для каждого сегмента
+Routing Service - СОВМЕСТИМАЯ ВЕРСИЯ
+✅ Работает с исправленным yandex_api.py
 """
 
 import logging
@@ -11,7 +13,6 @@ from solver import solve_vrp_dynamic
 
 logger = logging.getLogger(__name__)
 
-# Routing mode configurations
 ROUTING_MODES = {
     'pedestrian': {
         'yandex_mode': 'pedestrian',
@@ -57,8 +58,6 @@ ROUTING_MODES = {
 
 
 class RouteSegment:
-    """Represents a single segment of the route between two places"""
-    
     def __init__(self, from_place: Dict, to_place: Dict, geometry: List, 
                  distance: float, duration: float, mode: str):
         self.from_place = from_place
@@ -70,7 +69,6 @@ class RouteSegment:
         self.instructions = self._generate_instructions()
         
     def _generate_instructions(self) -> str:
-        """Generate human-readable instructions for this segment"""
         mode_config = ROUTING_MODES.get(self.mode, ROUTING_MODES['pedestrian'])
         icon = mode_config['icon']
         mode_name = {
@@ -87,7 +85,6 @@ class RouteSegment:
         return f"{icon} {mode_name} от '{self.from_place['name']}' до '{self.to_place['name']}' ({distance_str}, {duration_str})"
     
     def to_dict(self) -> Dict:
-        """Convert segment to dictionary for JSON serialization"""
         mode_config = ROUTING_MODES.get(self.mode, ROUTING_MODES['pedestrian'])
         
         return {
@@ -116,37 +113,16 @@ class RouteSegment:
 
 
 class RoutingService:
-    """Service for building optimal routes with category search and individual transport modes"""
-    
     def __init__(self, api_key: str):
         self.yandex_api = YandexMapsAPI(api_key)
         
     async def build_route(self, places: List[Dict], optimize: bool = True) -> Dict:
-        """
-        Build a route through multiple places
-        
-        НОВАЯ ВЕРСИЯ: каждое место имеет свой transport_mode
-        
-        Args:
-            places: List of places with:
-                - coordinates: [lon, lat] (реальные или [0,0] для категорий)
-                - name: название
-                - type: тип места
-                - category: опциональная категория для поиска
-                - transport_mode: как добираться ДО этого места
-            optimize: оптимизировать ли порядок мест
-            
-        Returns:
-            Dict с информацией о маршруте
-        """
         try:
             logger.info(f"[RoutingService] Building route for {len(places)} places, optimize={optimize}")
             
-            # Validate places
             if not places or len(places) < 2:
                 raise ValueError("At least 2 places are required to build a route")
             
-            # Process places: resolve categories to actual places
             resolved_places = await self._resolve_places(places)
             
             if len(resolved_places) < 2:
@@ -154,20 +130,16 @@ class RoutingService:
             
             logger.info(f"[RoutingService] ✅ Resolved {len(resolved_places)} places (from {len(places)} input)")
             
-            # If optimization is enabled, optimize the order
             if optimize and len(resolved_places) > 2:
                 ordered_places = await self._optimize_route_order(resolved_places)
             else:
                 ordered_places = resolved_places
             
-            # Build route segments with INDIVIDUAL transport modes
             segments = await self._build_route_segments(ordered_places)
             
-            # Calculate totals
             total_distance = sum(s.distance for s in segments)
             total_duration = sum(s.duration for s in segments)
             
-            # Build response
             route_data = {
                 'success': True,
                 'places': [self._place_to_dict(p, idx) for idx, p in enumerate(ordered_places)],
@@ -195,23 +167,16 @@ class RoutingService:
             }
     
     async def _resolve_places(self, places: List[Dict]) -> List[Dict]:
-        """
-        Resolve places with categories to actual coordinates
-        ИСПРАВЛЕНО: правильная проверка координат и отступы
-        """
         resolved = []
         
-        # Найти первое место с реальными координатами для центра поиска
         search_center = None
         for place in places:
             coords = place.get('coordinates', [0, 0])
-            # Проверяем что координаты НЕ [0, 0]
             if coords and len(coords) == 2 and (coords[0] != 0 or coords[1] != 0):
                 search_center = coords
                 logger.info(f"[RoutingService] Using search center from '{place.get('name')}': {search_center}")
                 break
         
-        # Если нет мест с координатами, используем Москву по умолчанию
         if not search_center:
             search_center = [37.6173, 55.7558]
             logger.warning(f"[RoutingService] ⚠️ No valid coordinates, using Moscow: {search_center}")
@@ -222,16 +187,13 @@ class RoutingService:
             coords = place.get('coordinates', [0, 0])
             transport_mode = place.get('transport_mode', 'pedestrian')
             
-            # Проверяем что координаты РЕАЛЬНЫЕ (не [0,0])
             has_valid_coords = (coords and len(coords) == 2 and (coords[0] != 0 or coords[1] != 0))
             
             if has_valid_coords:
-                # Место с реальными координатами
                 resolved.append(place)
                 logger.info(f"[RoutingService] Place {i}: '{place.get('name')}' - ✅ coords {coords}, mode={transport_mode}")
                 continue
             
-            # Место БЕЗ координат - проверяем категорию
             if category:
                 logger.info(f"[RoutingService] Place {i}: Searching '{category}' near {search_center}")
                 
@@ -250,46 +212,37 @@ class RoutingService:
                             'address': found_place.get('address', ''),
                             'type': place_type,
                             'category': category,
-                            'transport_mode': transport_mode  # Сохраняем режим транспорта!
+                            'transport_mode': transport_mode
                         }
                         resolved.append(resolved_place)
                         logger.info(f"[RoutingService] ✅ Found: '{resolved_place['name']}' at {resolved_place['coordinates']}, mode={transport_mode}")
                         
-                        # Обновляем центр поиска для следующих мест
                         search_center = resolved_place['coordinates']
                     else:
                         logger.warning(f"[RoutingService] ❌ No places found for category '{category}'")
                         
                 except Exception as e:
-                    logger.error(f"[RoutingService] ❌ Error searching '{category}': {e}", exc_info=True)
+                    logger.error(f"[RoutingService] ❌ Error searching '{category}': {e}")
                     
             else:
-                # Место БЕЗ координат И БЕЗ категории - пропускаем
                 logger.warning(f"[RoutingService] ⚠️ Place {i}: '{place.get('name')}' - NO coords, NO category - SKIPPING")
         
         logger.info(f"[RoutingService] ✅ Resolved {len(resolved)} places from {len(places)} input")
         return resolved
     
     async def _optimize_route_order(self, places: List[Dict]) -> List[Dict]:
-        """
-        Optimize the order of places using TSP solver
-        ВАЖНО: первое место (старт) всегда остается первым!
-        """
         try:
             logger.info(f"[RoutingService] Optimizing route order for {len(places)} places")
             
-            # Если меньше 3 мест - оптимизация не нужна
             if len(places) < 3:
                 return places
             
-            # Build distance matrix
             n = len(places)
             distance_matrix = [[0] * n for _ in range(n)]
             
             for i in range(n):
                 for j in range(n):
                     if i != j:
-                        # Используем transport_mode из TO места (куда идем)
                         to_mode = places[j].get('transport_mode', 'pedestrian')
                         
                         route_info = await self._get_route_between_two_points(
@@ -299,7 +252,6 @@ class RoutingService:
                         )
                         distance_matrix[i][j] = int(route_info.get('duration', 999999))
             
-            # Solve TSP - первое место фиксировано как старт
             optimal_order = solve_vrp_dynamic(
                 matrix=distance_matrix,
                 time_limit_minutes=999,
@@ -309,7 +261,6 @@ class RoutingService:
                 strictness=5
             )
             
-            # Reorder places according to optimal solution
             ordered_places = [places[i] for i in optimal_order if i < len(places)]
             
             logger.info(f"[RoutingService] ✅ Optimization complete. Order: {[p['name'] for p in ordered_places]}")
@@ -320,36 +271,29 @@ class RoutingService:
             return places
     
     async def _build_route_segments(self, places: List[Dict]) -> List[RouteSegment]:
-        """
-        Build route segments with INDIVIDUAL transport modes
-        НОВАЯ ВЕРСИЯ: используем transport_mode из каждого места
-        """
         segments = []
         
         for i in range(len(places) - 1):
             from_place = places[i]
             to_place = places[i + 1]
             
-            # ✅ КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: используем transport_mode из TO места (куда идем)
             mode = to_place.get('transport_mode', 'pedestrian')
             
             logger.info(f"[RoutingService] Segment {i+1}: {from_place['name']} -> {to_place['name']} ({mode})")
             
-            # Get route info from Yandex API
             route_info = await self._get_route_between_two_points(
                 from_place['coordinates'],
                 to_place['coordinates'],
                 mode
             )
             
-            # Create segment with individual mode
             segment = RouteSegment(
                 from_place=from_place,
                 to_place=to_place,
                 geometry=route_info.get('geometry', []),
                 distance=route_info.get('distance', 0),
                 duration=route_info.get('duration', 0),
-                mode=mode  # Индивидуальный режим для этого сегмента!
+                mode=mode
             )
             
             segments.append(segment)
@@ -358,14 +302,12 @@ class RoutingService:
     
     async def _get_route_between_two_points(self, from_coords: List[float], 
                                            to_coords: List[float], mode: str) -> Dict:
-        """Get route between two points using Yandex API"""
         try:
             mode_config = ROUTING_MODES.get(mode, ROUTING_MODES['pedestrian'])
             yandex_mode = mode_config['yandex_mode']
             
             logger.debug(f"[RoutingService] Requesting {yandex_mode} route from {from_coords} to {to_coords}")
             
-            # Request route from Yandex API
             route_data = await self.yandex_api.get_route(
                 origin=from_coords,
                 destination=to_coords,
@@ -374,14 +316,12 @@ class RoutingService:
             
             if not route_data:
                 logger.warning(f"[RoutingService] No route data for {yandex_mode} mode")
-                # Fallback to straight line
                 return {
                     'geometry': [from_coords, to_coords],
                     'distance': self._calculate_haversine_distance(from_coords, to_coords),
                     'duration': 0
                 }
             
-            # Extract route information
             geometry = route_data.get('geometry', [from_coords, to_coords])
             distance = route_data.get('distance', 0)
             duration = route_data.get('duration', 0)
@@ -396,7 +336,6 @@ class RoutingService:
             
         except Exception as e:
             logger.error(f"[RoutingService] Error getting route: {str(e)}")
-            # Fallback to straight line
             return {
                 'geometry': [from_coords, to_coords],
                 'distance': self._calculate_haversine_distance(from_coords, to_coords),
@@ -404,7 +343,6 @@ class RoutingService:
             }
     
     def _calculate_haversine_distance(self, coord1: List[float], coord2: List[float]) -> float:
-        """Calculate distance between two coordinates using Haversine formula"""
         from math import radians, sin, cos, sqrt, atan2
         
         lon1, lat1 = coord1
@@ -424,7 +362,6 @@ class RoutingService:
         return distance
     
     def _place_to_dict(self, place: Dict, index: int) -> Dict:
-        """Convert place to dictionary with additional info"""
         return {
             'id': place.get('id', index),
             'name': place.get('name', f'Place {index + 1}'),
@@ -441,7 +378,6 @@ class RoutingService:
         }
     
     async def get_place_info(self, coordinates: List[float]) -> Dict:
-        """Get detailed information about a place by coordinates"""
         try:
             address_data = await self.yandex_api.reverse_geocode(coordinates)
             
@@ -459,11 +395,9 @@ class RoutingService:
             }
 
 
-# Singleton instance
 _routing_service = None
 
 def get_routing_service(api_key: str) -> RoutingService:
-    """Get or create routing service singleton"""
     global _routing_service
     if _routing_service is None:
         _routing_service = RoutingService(api_key)
