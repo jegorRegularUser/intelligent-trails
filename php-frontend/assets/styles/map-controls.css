@@ -1,3 +1,542 @@
+/**
+ * Map Controls Styles
+ * Styles for legend, markers, info panel, and map overlays
+ */
+
+/* ===========================
+   MAP LEGEND
+   =========================== */
+
+#map-legend {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+    max-width: 280px;
+    z-index: 1000;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.legend-container {
+    padding: 0;
+}
+
+.legend-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.legend-header h3 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+}
+
+.legend-toggle {
+    background: none;
+    border: none;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #666;
+    transition: color 0.2s;
+}
+
+.legend-toggle:hover {
+    color: #2E86DE;
+}
+
+.legend-content {
+    padding: 12px 16px;
+}
+
+.legend-section {
+    margin-bottom: 16px;
+}
+
+.legend-section:last-child {
+    margin-bottom: 0;
+}
+
+.legend-section h4 {
+    margin: 0 0 8px 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    transition: background 0.2s;
+}
+
+.legend-item.mode-highlight {
+    background: #f0f9ff;
+    padding: 8px;
+    border-radius: 4px;
+    margin: -2px 0;
+}
+
+.legend-item.active {
+    font-weight: 600;
+}
+
+.legend-icon {
+    font-size: 16px;
+    width: 20px;
+    text-align: center;
+}
+
+.legend-line {
+    width: 30px;
+    height: 3px;
+    border-radius: 2px;
+}
+
+.legend-marker {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: bold;
+    flex-shrink: 0;
+}
+
+.legend-marker.start {
+    font-size: 16px;
+    background: none !important;
+}
+
+.legend-label {
+    font-size: 13px;
+    color: #333;
+    flex: 1;
+}
+
+.legend-actions {
+    padding-top: 8px;
+    border-top: 1px solid #e0e0e0;
+}
+
+.legend-actions small {
+    font-size: 11px;
+    color: #666;
+    line-height: 1.4;
+}
+
+/* ===========================
+   MAP INFO PANEL
+   =========================== */
+
+#map-info-panel {
+    position: absolute;
+    top: 80px;
+    left: 20px;
+    width: 340px;
+    max-height: calc(100vh - 120px);
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+    overflow: hidden;
+    z-index: 1000;
+}
+
+.info-panel-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.info-panel-empty {
+    padding: 40px 20px;
+    text-align: center;
+    color: #666;
+}
+
+.empty-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+}
+
+.empty-text {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.empty-hint {
+    font-size: 13px;
+    color: #999;
+}
+
+.info-panel-header {
+    padding: 16px;
+    border-bottom: 1px solid #e0e0e0;
+    background: #f8f9fa;
+}
+
+.info-panel-header h3 {
+    margin: 0 0 8px 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #333;
+}
+
+.info-panel-mode {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #666;
+}
+
+.mode-icon {
+    font-size: 16px;
+}
+
+.info-panel-summary {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    padding: 16px;
+    border-bottom: 1px solid #e0e0e0;
+    background: #fafafa;
+}
+
+.summary-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+.summary-icon {
+    font-size: 24px;
+    margin-bottom: 4px;
+}
+
+.summary-content {
+    display: flex;
+    flex-direction: column;
+}
+
+.summary-label {
+    font-size: 11px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+}
+
+.summary-value {
+    font-size: 16px;
+    font-weight: 600;
+    color: #333;
+}
+
+.info-panel-section {
+    padding: 16px;
+    border-bottom: 1px solid #e0e0e0;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.section-title {
+    margin: 0 0 12px 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Segments List */
+.segments-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.segment-item {
+    display: flex;
+    gap: 12px;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    transition: all 0.2s;
+    cursor: pointer;
+}
+
+.segment-item:hover {
+    background: #e9ecef;
+    transform: translateX(2px);
+}
+
+.segment-number {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: bold;
+    color: white;
+    flex-shrink: 0;
+}
+
+.segment-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.segment-route {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #333;
+}
+
+.segment-arrow {
+    color: #999;
+    font-size: 12px;
+}
+
+.segment-from,
+.segment-to {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.segment-details {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #666;
+}
+
+.segment-icon {
+    font-size: 14px;
+}
+
+/* Places List */
+.places-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.place-item {
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    outline: none;
+}
+
+.place-item:hover {
+    background: #e9ecef;
+}
+
+.place-item:focus {
+    box-shadow: 0 0 0 2px #2E86DE;
+}
+
+.place-item.active {
+    background: #e3f2fd;
+    border-left: 3px solid #2E86DE;
+    padding-left: 9px;
+}
+
+.place-marker {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: bold;
+    color: white;
+    flex-shrink: 0;
+}
+
+.place-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.place-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: #333;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.place-address {
+    font-size: 12px;
+    color: #666;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.place-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.btn-icon {
+    background: none;
+    border: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 16px;
+    transition: background 0.2s;
+}
+
+.btn-icon:hover {
+    background: rgba(0, 0, 0, 0.1);
+}
+
+/* ===========================
+   MARKER BALLOONS
+   =========================== */
+
+.marker-balloon {
+    padding: 8px 0;
+}
+
+.marker-address {
+    margin: 4px 0;
+    font-size: 13px;
+    color: #666;
+}
+
+.marker-order {
+    margin: 4px 0;
+    font-size: 12px;
+    color: #999;
+}
+
+.btn-center {
+    margin-top: 8px;
+    padding: 6px 12px;
+    background: #2E86DE;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background 0.2s;
+}
+
+.btn-center:hover {
+    background: #1976D2;
+}
+
+.segment-balloon {
+    padding: 8px;
+}
+
+.segment-balloon strong {
+    color: #333;
+}
+
+.segment-balloon span {
+    display: block;
+    margin-top: 4px;
+    font-size: 12px;
+    color: #666;
+}
+
+/* ===========================
+   RESPONSIVE
+   =========================== */
+
+@media (max-width: 768px) {
+    #map-legend {
+        top: 10px;
+        right: 10px;
+        max-width: 240px;
+    }
+    
+    #map-info-panel {
+        left: 10px;
+        width: 300px;
+        max-height: calc(100vh - 100px);
+    }
+    
+    .info-panel-summary {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        padding: 12px;
+    }
+    
+    .summary-value {
+        font-size: 14px;
+    }
+}
+
+@media (max-width: 480px) {
+    #map-legend {
+        position: fixed;
+        top: auto;
+        bottom: 20px;
+        right: 10px;
+        left: 10px;
+        max-width: none;
+    }
+    
+    #map-info-panel {
+        position: fixed;
+        bottom: 80px;
+        left: 10px;
+        right: 10px;
+        width: auto;
+        max-height: 50vh;
+    }
+}
+
 /* Map Controls - Расширенные стили для альтернативных мест */
 
 .alternatives-panel {
