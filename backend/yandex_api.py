@@ -1,6 +1,6 @@
 """
 Yandex Maps API - ИСПРАВЛЕННАЯ ВЕРСИЯ
-Правильный поиск мест через Geocoder API
+Использует Suggest API для поиска организаций и Geocoder для точных координат
 """
 
 import aiohttp
@@ -17,22 +17,27 @@ load_dotenv()
 # ============================================================================
 # MODULE-LEVEL VARIABLES
 # ============================================================================
-YANDEX_API_KEY = os.getenv("YANDEX_API_KEY")
+YANDEX_API_KEY = os.getenv("YANDEX_API_KEY")  # Для Geocoder и Routing
+YANDEX_SUGGEST_API_KEY = os.getenv("YANDEX_SUGGEST_API_KEY")  # Для Suggest
 MAX_POINTS_FOR_MATRIX = 10
 
 
 class YandexStaticRouter:
     """
     Yandex Maps API Wrapper
-    ИСПРАВЛЕНО: Правильный поиск организаций через Geocoder API
+    ИСПРАВЛЕНО: Правильный поиск организаций через Suggest API + Geocoder
     """
     
     GEOCODER_URL = "https://geocode-maps.yandex.ru/1.x/"
+    SUGGEST_URL = "https://suggest-maps.yandex.ru/v1/suggest"
     
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, suggest_key: str = None):
         self.api_key = api_key
+        self.suggest_key = suggest_key or YANDEX_SUGGEST_API_KEY
         self.session = None
-        logger.info(f"[YandexAPI] Initialized with key: {api_key[:10]}...")
+        logger.info(f"[YandexAPI] Initialized with Geocoder key: {api_key[:10]}...")
+        if self.suggest_key:
+            logger.info(f"[YandexAPI] Suggest key: {self.suggest_key[:10]}...")
         
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create aiohttp session"""
@@ -57,11 +62,77 @@ class YandexStaticRouter:
             await self.session.close()
             logger.info("[YandexAPI] Session closed")
     
+    async def _get_city_name(self, center: List[float]) -> str:
+        """Определяет название города по координатам"""
+        try:
+            session = await self._get_session()
+            params = {
+                "apikey": self.api_key,
+                "geocode": f"{center[0]},{center[1]}",
+                "format": "json",
+                "kind": "locality",
+                "results": 1
+            }
+            
+            async with session.get(self.GEOCODER_URL, params=params, timeout=aiohttp.ClientTimeout(total=5)) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    members = data.get("response", {}).get("GeoObjectCollection", {}).get("featureMember", [])
+                    if members:
+                        city = members[0].get("GeoObject", {}).get("name", "")
+                        logger.info(f"[YandexAPI] ✅ City detected: {city}")
+                        return city
+        except Exception as e:
+            logger.error(f"[YandexAPI] City detection failed: {e}")
+        
+        logger.warning("[YandexAPI] ⚠️ City detection failed")
+        return ""
+    
+    async def _geocode_smart(self, name: str, address: str, city: str) -> Optional[Tuple[List[float], str]]:
+        """Умное геокодирование с несколькими стратегиями"""
+        session = await self._get_session()
+        
+        # Стратегии геокодирования (по приоритету)
+        strategies = []
+        if city and address:
+            strategies.append((f"{address}, {city}", "address+city"))
+        if city and name and address:
+            strategies.append((f"{name}, {address}, {city}", "full"))
+        if city and name:
+            strategies.append((f"{name} {city}", "name+city"))
+        if address:
+            strategies.append((f"{address}", "address_only"))
+        
+        for query, method in strategies:
+            params = {
+                "apikey": self.api_key,
+                "geocode": query,
+                "format": "json",
+                "results": 1
+            }
+            
+            try:
+                async with session.get(self.GEOCODER_URL, params=params, timeout=aiohttp.ClientTimeout(total=3)) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        members = data.get("response", {}).get("GeoObjectCollection", {}).get("featureMember", [])
+                        if members:
+                            geo_obj = members[0].get("GeoObject", {})
+                            pos = geo_obj.get("Point", {}).get("pos", "")
+                            if pos:
+                                lon, lat = map(float, pos.split())
+                                logger.debug(f"  ✅ '{method}': {query[:60]}")
+                                return ([lon, lat], method)
+            except:
+                continue
+        
+        return None
+    
     async def search_places(self, center_coords: List[float], categories: List[str], 
                            radius_m: int = 3000) -> List[Dict]:
         """
-        🔍 Поиск мест через Geocoder API
-        ПРАВИЛЬНАЯ ВЕРСИЯ - поиск организаций по категориям
+        🔍 Поиск мест через Suggest API + Geocoder
+        ПРАВИЛЬНАЯ ВЕРСИЯ - использует два API для точного поиска
         
         Args:
             center_coords: [longitude, latitude] - центр поиска
@@ -69,106 +140,103 @@ class YandexStaticRouter:
             radius_m: радиус поиска в метрах
             
         Returns:
-            List[Dict] с найденными местами
+            List[Dict]: Массив мест с координатами
+            Каждое место: {name, coords, address, category, distance, ...}
         """
         try:
+            if not self.suggest_key:
+                logger.error("[YandexAPI] ❌ YANDEX_SUGGEST_API_KEY not configured!")
+                return []
+            
             session = await self._get_session()
             
-            # Маппинг категорий на русском языке
-            category_mapping = {
-                'кафе': 'кафе',
-                'ресторан': 'ресторан',
-                'парк': 'парк',
-                'музей': 'музей',
-                'памятник': 'памятник',
-                'бар': 'бар',
-                'магазин': 'магазин',
-                'торговый центр': 'торговый центр',
-                'сквер': 'сквер',
-                'театр': 'театр',
-                'кино': 'кинотеатр',
-                'спорт': 'спортивный комплекс',
-                'пляж': 'пляж'
-            }
+            # Шаг 1: Определяем город для точного геокодирования
+            city = await self._get_city_name(center_coords)
+            if not city:
+                logger.warning("[YandexAPI] ⚠️ Continuing without city name")
             
             all_places = []
             
+            # Шаг 2: Для каждой категории ищем места
             for category in categories:
-                search_text = category_mapping.get(category.lower(), category)
+                logger.info(f"[YandexAPI] 🔍 Searching '{category}' near {center_coords}")
                 
-                # ✅ ПРАВИЛЬНЫЙ ЗАПРОС К GEOCODER API
-                params = {
-                    'apikey': self.api_key,
-                    'geocode': search_text,  # Категория на русском
-                    'format': 'json',
-                    'll': f"{center_coords[0]},{center_coords[1]}",  # Центр поиска
-                    'spn': f"{radius_m},{radius_m}",  # Область в градусах
-                    'rspn': 1,  # Учитывать регион
-                    'results': 50,  # Побольше результатов
-                    'lang': 'ru_RU'
+                # Suggest API для поиска организаций
+                suggest_params = {
+                    "apikey": self.suggest_key,
+                    "text": category,
+                    "ll": f"{center_coords[0]},{center_coords[1]}",
+                    "results": 10,  # По 10 мест на категорию
+                    "types": "biz",
+                    "lang": "ru_RU"
                 }
                 
-                logger.info(f"[YandexAPI] Searching '{search_text}' near {center_coords}, radius={radius_m}m")
-                
                 try:
-                    async with session.get(self.GEOCODER_URL, params=params) as response:
+                    async with session.get(self.SUGGEST_URL, params=suggest_params) as response:
                         if response.status != 200:
-                            error_text = await response.text()
-                            logger.warning(f"[YandexAPI] Geocoder error {response.status}: {error_text[:200]}")
+                            logger.error(f"[YandexAPI] Suggest API error: {response.status}")
                             continue
                         
                         data = await response.json()
-                        members = data.get('response', {}).get('GeoObjectCollection', {}).get('featureMember', [])
+                        suggest_results = data.get("results", [])
+                        logger.info(f"[YandexAPI] 📝 Suggest returned {len(suggest_results)} results for '{category}'")
                         
-                        logger.info(f"[YandexAPI] Found {len(members)} results for '{search_text}'")
+                        if not suggest_results:
+                            continue
                         
-                        for member in members:
-                            try:
-                                geo_obj = member.get('GeoObject', {})
-                                
-                                # Название места
-                                name = geo_obj.get('name', search_text)
-                                
-                                # Адрес
-                                meta = geo_obj.get('metaDataProperty', {}).get('GeocoderMetaData', {})
-                                address = meta.get('text', meta.get('Address', {}).get('formatted', ''))
-                                
-                                # Координаты
-                                point = geo_obj.get('Point', {})
-                                pos = point.get('pos', '')
-                                if not pos:
-                                    continue
-                                
-                                lon, lat = map(float, pos.split())
-                                coords = [lon, lat]
-                                
-                                # Расстояние от центра
-                                distance = self._haversine_distance(center_coords, coords)
-                                
-                                # Фильтруем по радиусу
-                                if distance > radius_m:
-                                    continue
-                                
-                                # Описание (kind объекта)
-                                description = meta.get('kind', '')
-                                
-                                place = {
-                                    'name': name,
-                                    'coords': coords,
-                                    'address': address,
-                                    'description': description,
-                                    'category': category,
-                                    'distance': round(distance, 1)
-                                }
-                                
-                                all_places.append(place)
-                                
-                            except Exception as e:
-                                logger.error(f"[YandexAPI] Error parsing result: {e}")
+                        # Шаг 3: Для каждого результата получаем точные координаты
+                        for i, result in enumerate(suggest_results, 1):
+                            title = result.get("title", {})
+                            subtitle = result.get("subtitle", {})
+                            
+                            name = title.get("text", "") if isinstance(title, dict) else str(title)
+                            subtitle_text = subtitle.get("text", "") if isinstance(subtitle, dict) else str(subtitle)
+                            distance_data = result.get("distance", {})
+                            
+                            # Парсим категорию и адрес из subtitle
+                            place_category = ""
+                            address = ""
+                            if "·" in subtitle_text:
+                                parts = subtitle_text.split("·")
+                                place_category = parts[0].strip()
+                                address = parts[1].strip() if len(parts) > 1 else ""
+                            else:
+                                address = subtitle_text
+                            
+                            logger.debug(f"  {i}. {name} - {address}")
+                            
+                            # Геокодируем для получения точных координат
+                            result_coords = await self._geocode_smart(name, address, city)
+                            if not result_coords:
+                                logger.warning(f"  ⚠️ No coords for {name}")
                                 continue
-                                
+                            
+                            coords, method = result_coords
+                            
+                            # Рассчитываем реальное расстояние
+                            actual_distance = self._haversine_distance(center_coords, coords)
+                            
+                            # Фильтруем по радиусу
+                            if actual_distance > radius_m:
+                                logger.debug(f"  ⚠️ {name} too far: {actual_distance:.0f}m > {radius_m}m")
+                                continue
+                            
+                            # Формируем объект места
+                            place = {
+                                "name": name,
+                                "coords": coords,  # ✅ МАССИВ КООРДИНАТ [lon, lat]
+                                "address": address,
+                                "category": place_category or category,
+                                "distance": round(actual_distance, 1),
+                                "distance_text": distance_data.get("text", f"{int(actual_distance)}m"),
+                                "coords_source": f"Geocoder ({method})"
+                            }
+                            
+                            all_places.append(place)
+                            logger.info(f"  ✅ {i}. {name[:40]} - {coords} ({method})")
+                            
                 except Exception as request_error:
-                    logger.error(f"[YandexAPI] Request error for '{search_text}': {request_error}")
+                    logger.error(f"[YandexAPI] Request error for '{category}': {request_error}")
                     continue
             
             # Удаляем дубликаты по координатам
@@ -185,7 +253,7 @@ class YandexStaticRouter:
             unique_places.sort(key=lambda p: p['distance'])
             
             logger.info(f"[YandexAPI] ✅ Total found: {len(unique_places)} unique places")
-            return unique_places[:10]  # Топ-10 ближайших
+            return unique_places  # Возвращаем массив мест с координатами
             
         except Exception as e:
             logger.error(f"[YandexAPI] ❌ Critical error in search_places: {str(e)}", exc_info=True)
