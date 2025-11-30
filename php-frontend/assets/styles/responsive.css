@@ -1,328 +1,348 @@
-/* ============================================
-   АДАПТИВНОСТЬ
-   ============================================ */
+/**
+ * Responsive Styles - МОБИЛЬНАЯ АДАПТАЦИЯ
+ * Карта занимает 80%+ экрана на телефоне
+ */
 
-@media (max-width: 1200px) {
-    .route-info-panel {
-        width: 340px;
-    }
-}
-
-@media (max-width: 992px) {
-    .route-info-panel {
-        width: 320px;
-        left: 10px;
-        top: 70px;
-        max-height: calc(100vh - 80px);
-    }
-    
-    .route-info-stats {
-        padding: 15px 20px;
-    }
-    
-    .route-stages-list {
-        padding: 15px 20px;
-    }
-}
-
+/* ====== ТЕЛЕФОНЫ (до 768px) ====== */
 @media (max-width: 768px) {
-    .route-modal-content {
-        width: 96%;
-        max-height: 95vh;
-        border-radius: 20px;
+    /* Navigation - компактная */
+    .navbar {
+        padding: 10px 15px;
     }
-
-    .modal-header {
-        padding: 20px 25px;
-    }
-
-    .modal-header h2 {
-        font-size: 22px;
-    }
-
-    .modal-body {
-        padding: 25px;
-    }
-
-    .route-type-selector {
-        padding: 20px 25px;
-        gap: 12px;
-    }
-
-    .route-type-btn {
-        padding: 16px;
-        gap: 12px;
-    }
-
-    .type-icon {
-        font-size: 30px;
-    }
-
-    .type-title {
-        font-size: 15px;
-    }
-
-    .type-desc {
-        font-size: 12px;
-    }
-
-    .categories-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
-
-    .transport-mode-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
-
-    .modal-footer {
+    
+    .nav-links {
         flex-direction: column;
-        gap: 12px;
-        padding: 20px 25px;
-    }
-
-    .btn-primary,
-    .btn-secondary {
-        width: 100%;
-        justify-content: center;
-    }
-
-    .notification {
-        right: 15px;
-        top: 15px;
-        max-width: calc(100vw - 30px);
-    }
-
-    .route-info-panel {
-        width: calc(100% - 20px);
-        left: 10px;
-        right: 10px;
-        max-width: 400px;
-    }
-
-    .activity-type-selector {
-        grid-template-columns: 1fr;
-    }
-    
-    .activity-modal-content {
-        width: 95%;
-        max-height: 90vh;
-    }
-    
-    .timeline-item {
-        flex-wrap: wrap;
-    }
-    
-    .timeline-item-remove {
-        width: 28px;
-        height: 28px;
-        font-size: 18px;
-    }
-    
-    .category-grid-compact {
-        grid-template-columns: 1fr;
-    }
-    
-    .walk-style-selector {
-        gap: 10px;
-    }
-    
-    .style-card {
-        padding: 12px;
-    }
-    
-    .style-icon {
-        font-size: 28px;
-        min-width: 35px;
-    }
-}
-
-@media (max-width: 480px) {
-    .modal-header h2 {
-        font-size: 20px;
-    }
-
-    .section-header h3 {
-        font-size: 17px;
-    }
-
-    .categories-grid,
-    .transport-mode-grid {
-        gap: 10px;
-    }
-
-    .category-card,
-    .transport-card {
-        padding: 14px 10px;
-    }
-
-    .cat-icon,
-    .transport-icon {
-        font-size: 28px;
-    }
-
-    .route-info-panel {
+        position: fixed;
         top: 60px;
-        max-height: calc(100vh - 70px);
+        right: -100%;
+        width: 250px;
+        height: calc(100vh - 60px);
+        background: white;
+        box-shadow: -2px 0 10px rgba(0,0,0,0.1);
+        transition: right 0.3s ease;
+        padding: 20px;
+        z-index: 1000;
     }
     
-    .route-info-header {
-        padding: 15px 20px;
+    .nav-links.active {
+        right: 0;
     }
     
-    .route-info-stats {
-        padding: 12px 15px;
+    /* Hamburger menu button */
+    .mobile-menu-toggle {
+        display: block;
+        background: none;
+        border: none;
+        font-size: 24px;
+        cursor: pointer;
+    }
+    
+    /* Map page - карта на весь экран */
+    .map-page-container {
+        flex-direction: column;
+        height: 100vh;
+        overflow: hidden;
+    }
+    
+    #map {
+        width: 100% !important;
+        height: 85vh !important; /* 85% экрана для карты */
+        position: relative;
+    }
+    
+    /* Legend - компактная, скрываемая */
+    #map-legend {
+        position: fixed;
+        top: auto;
+        bottom: 15vh; /* Над нижней панелью */
+        left: 10px;
+        right: auto;
+        max-width: 180px;
+        max-height: 40vh;
+        overflow-y: auto;
+        font-size: 12px;
+        padding: 10px;
+        z-index: 100;
+        opacity: 0.95;
+    }
+    
+    #map-legend.collapsed {
+        width: 40px;
+        height: 40px;
+        padding: 8px;
+        overflow: hidden;
+    }
+    
+    #map-legend.collapsed::before {
+        content: '🗺️';
+        font-size: 24px;
+    }
+    
+    #map-legend.collapsed * {
+        display: none;
+    }
+    
+    /* Info panel - нижняя выдвижная панель */
+    #map-info-panel {
+        position: fixed;
+        top: auto;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        width: 100% !important;
+        height: 15vh; /* 15% экрана */
+        max-height: 50vh;
+        border-radius: 20px 20px 0 0;
+        box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+        transition: height 0.3s ease;
+        overflow-y: auto;
+        z-index: 200;
+    }
+    
+    #map-info-panel.expanded {
+        height: 70vh;
+    }
+    
+    #map-info-panel .drag-handle {
+        display: block;
+        width: 40px;
+        height: 4px;
+        background: #ccc;
+        border-radius: 2px;
+        margin: 10px auto 15px;
+        cursor: grab;
+    }
+    
+    /* Floating action button - больше и удобнее */
+    .floating-action-btn {
+        bottom: calc(15vh + 20px); /* Над панелью */
+        right: 15px;
+        padding: 16px 24px;
+        font-size: 16px;
+        box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4);
+    }
+    
+    .floating-action-btn .fab-text {
+        display: none;
+    }
+    
+    .floating-action-btn .fab-icon {
+        font-size: 28px;
+    }
+    
+    /* Modals - на весь экран */
+    .modal {
+        padding: 0;
+    }
+    
+    .modal-content {
+        width: 100%;
+        height: 100vh;
+        max-width: 100%;
+        max-height: 100vh;
+        border-radius: 0;
+        margin: 0;
+    }
+    
+    .modal-header {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: white;
+        border-bottom: 1px solid #e0e0e0;
+    }
+    
+    .modal-body {
+        height: calc(100vh - 140px);
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .modal-footer {
+        position: sticky;
+        bottom: 0;
+        background: white;
+        border-top: 1px solid #e0e0e0;
+    }
+    
+    /* Route type buttons - stack vertically */
+    .route-type-buttons {
+        flex-direction: column;
         gap: 10px;
     }
     
-    .route-stages-list {
-        padding: 12px 15px;
-    }
-    
-    .stage-card {
-        padding: 12px;
-    }
-    
-    .stage-icon {
-        font-size: 24px;
-        min-width: 32px;
-    }
-    
-    .slider-btn {
-        width: 32px;
-        height: 32px;
-        font-size: 18px;
-    }
-
-    .timeline-container {
+    .route-type-btn {
+        width: 100%;
         padding: 15px;
     }
     
+    /* Form groups - больше padding */
+    .form-group {
+        margin-bottom: 20px;
+    }
+    
+    .form-group input,
+    .form-group select {
+        font-size: 16px; /* Prevent zoom on focus */
+        padding: 12px;
+    }
+    
+    /* Transport mode selector */
+    .transport-mode-selector {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .transport-option {
+        min-width: 80px;
+        padding: 12px 8px;
+        font-size: 12px;
+    }
+    
+    /* Activities timeline */
+    .activities-timeline {
+        max-height: 40vh;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
     .timeline-item {
         padding: 12px;
-    }
-    
-    .timeline-item-icon {
-        font-size: 24px;
-        min-width: 35px;
-    }
-    
-    .activity-modal-body {
-        padding: 20px;
-    }
-    
-    .time-selector-compact input {
-        width: 70px;
-        font-size: 14px;
-    }
-
-    .option-card {
-        padding: 14px;
         font-size: 14px;
     }
     
-    .option-icon {
-        font-size: 24px;
+    /* Place markers */
+    .place-marker {
+        width: 36px !important;
+        height: 36px !important;
+        font-size: 14px !important;
+    }
+    
+    /* Tooltips - larger */
+    .tooltip, .hint {
+        font-size: 14px;
+        padding: 8px 12px;
     }
 }
 
-@media (max-width: 768px) {
-    .navbar .container {
-        padding: 15px 20px;
-        flex-wrap: wrap;
-    }
-
-    .nav-links {
-        width: 100%;
-        justify-content: center;
-        margin-top: 15px;
-        gap: 15px;
-        flex-wrap: wrap;
-    }
-
-    .nav-links a {
-        font-size: 14px;
-        padding: 6px 12px;
-    }
-
-    .floating-action-btn {
-        bottom: 20px;
-        right: 20px;
-        padding: 15px 25px;
-        font-size: 15px;
-    }
-
-    .fab-text {
-        display: none;
-    }
-
-    .route-info-panel {
-        left: 15px;
-        right: 15px;
-        width: auto;
-        top: 80px;
-    }
-
-    .map-page-container {
-        height: calc(100vh - 100px);
-    }
-
-    .form-wrapper {
-        padding: 40px 30px;
-        margin: 30px 20px;
-        max-width: 100%;
-    }
-
-    .form-wrapper h2 {
-        font-size: 28px;
-    }
-
-    .route-action-buttons {
-        flex-wrap: wrap;
-    }
-
-    .route-action-buttons .btn {
-        flex: 1 1 100%;
-    }
-}
-
+/* ====== ОЧЕНЬ МАЛЕНЬКИЕ ТЕЛЕФОНЫ (до 480px) ====== */
 @media (max-width: 480px) {
-    .logo {
+    #map {
+        height: 88vh !important; /* Еще больше места для карты */
+    }
+    
+    #map-legend {
+        font-size: 11px;
+        padding: 8px;
+        max-width: 160px;
+    }
+    
+    #map-info-panel {
+        height: 12vh;
+        font-size: 13px;
+    }
+    
+    .floating-action-btn {
+        padding: 14px 20px;
+        bottom: calc(12vh + 15px);
+    }
+    
+    /* Модальные окна - еще компактнее */
+    .modal-header h2 {
         font-size: 18px;
     }
-
-    .logo-icon {
-        font-size: 24px;
+    
+    .modal-body {
+        padding: 15px;
     }
+    
+    /* Кнопки - больше для удобного нажатия */
+    .btn, button {
+        min-height: 44px;
+        padding: 12px 20px;
+        font-size: 15px;
+    }
+    
+    /* Input fields */
+    input, select, textarea {
+        font-size: 16px !important;
+        min-height: 44px;
+    }
+}
 
+/* ====== ПЛАНШЕТЫ (768px - 1024px) ====== */
+@media (min-width: 769px) and (max-width: 1024px) {
+    #map {
+        height: 75vh !important;
+    }
+    
+    #map-legend {
+        max-width: 220px;
+    }
+    
+    #map-info-panel {
+        width: 100%;
+        max-width: 400px;
+        height: auto;
+        max-height: 60vh;
+    }
+    
+    .modal-content {
+        width: 90%;
+        max-width: 600px;
+    }
+}
+
+/* ====== LANDSCAPE MODE (телефоны горизонтально) ====== */
+@media (max-height: 500px) and (orientation: landscape) {
+    #map {
+        height: 100vh !important;
+    }
+    
+    #map-legend {
+        display: none; /* Прячем в landscape */
+    }
+    
+    #map-info-panel {
+        height: 100vh;
+        width: 300px;
+        right: 0;
+        bottom: 0;
+        left: auto;
+        border-radius: 0;
+    }
+    
     .floating-action-btn {
-        width: 56px;
-        height: 56px;
-        padding: 0;
-        border-radius: 50%;
-        justify-content: center;
+        bottom: 20px;
+        right: 320px;
     }
+}
 
-    .fab-icon {
-        font-size: 28px;
+/* ====== TOUCH DEVICES ====== */
+@media (hover: none) and (pointer: coarse) {
+    /* Увеличиваем все кликабельные элементы */
+    button, a, .clickable {
+        min-width: 44px;
+        min-height: 44px;
     }
-
-    .route-info-panel {
-        max-height: calc(100vh - 100px);
+    
+    /* Убираем hover effects */
+    *:hover {
+        transform: none !important;
     }
-
-    .form-wrapper {
-        padding: 30px 20px;
-        margin: 20px 15px;
-        border-radius: 20px;
+    
+    /* Active states instead */
+    *:active {
+        opacity: 0.7;
+        transform: scale(0.98);
     }
+}
 
-    .form-wrapper h2 {
-        font-size: 24px;
-    }
-
-    .btn-primary,
-    .yandex-btn {
-        padding: 12px;
-        font-size: 14px;
+/* ====== ACCESSIBILITY ====== */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
     }
 }
