@@ -2,6 +2,7 @@
  * Route Builder - ИСПРАВЛЕННАЯ ВЕРСИЯ
  * Поддержка индивидуальных transport_mode для каждого места
  * Обработка "Закончить в интересном месте"
+ * FIX: Начальная точка ВСЕГДА отправляется на бэкенд!
  */
 
 window.RouteModalBuilder = {
@@ -40,6 +41,16 @@ window.RouteModalBuilder = {
             return;
         }
 
+        // ✅ КРИТИЧЕСКАЯ ПРОВЕРКА: начальная точка должна быть с реальными координатами!
+        const firstPlace = places[0];
+        if (!firstPlace.coordinates || 
+            firstPlace.coordinates.length !== 2 || 
+            (firstPlace.coordinates[0] === 0 && firstPlace.coordinates[1] === 0)) {
+            this.modal.showNotification('❌ Начальная точка не указана! Укажите стартовую точку на карте.', 'error');
+            console.error('[RouteModalBuilder] ❌ Start point missing or invalid:', firstPlace);
+            return;
+        }
+
         // 2. Показываем загрузку
         this.modal.showLoading(true);
 
@@ -65,16 +76,19 @@ window.RouteModalBuilder = {
             // SMART MODE
             const startCoords = this.getCoordsFromInput('smartStartPoint');
             
-            // ✅ 1. Стартовая точка (всегда первая)
-            if (startCoords) {
-                places.push({ 
-                    name: 'Старт', 
-                    coordinates: startCoords, 
-                    type: 'must_visit',
-                    transport_mode: 'pedestrian'  // Старт не имеет входящего транспорта
-                });
-                console.log('[RouteModalBuilder] ✅ Added start point:', startCoords);
+            // ✅ 1. Стартовая точка (всегда первая) - КРИТИЧЕСКАЯ!
+            if (!startCoords) {
+                console.error('[RouteModalBuilder] ❌ CRITICAL: No start coordinates!');
+                return [];  // Возвращаем пустой массив - покажется ошибка
             }
+            
+            places.push({ 
+                name: 'Старт', 
+                coordinates: startCoords, 
+                type: 'must_visit',
+                transport_mode: 'pedestrian'  // Старт не имеет входящего транспорта
+            });
+            console.log('[RouteModalBuilder] ✅ Added start point:', startCoords);
             
             // ✅ 2. Активности с индивидуальными transport_mode
             this.modal.activities.forEach((act, idx) => {
@@ -92,7 +106,7 @@ window.RouteModalBuilder = {
                         console.log(`[RouteModalBuilder] ✅ Added place: ${act.name}, mode=${transport}`);
                         
                     } else if (act.category) {
-                        // Категорийное место
+                        // Категорийное место - бэкенд найдет координаты РЯДОМ со СТАРТОМ!
                         places.push({
                             name: act.category,
                             coordinates: [0, 0],  // Бэкенд найдет координаты
@@ -143,20 +157,29 @@ window.RouteModalBuilder = {
             } else if (routeEndType === 'smart') {
                 // ✅ НОВАЯ ЛОГИКА: Закончить в интересном месте
                 // Отправляем специальную категорию - бэкенд найдет интересное место
+                const interestingCategories = ['музей', 'парк', 'памятник', 'сквер'];
+                const randomCategory = interestingCategories[Math.floor(Math.random() * interestingCategories.length)];
+                
                 places.push({
                     name: 'Интересное место',
                     coordinates: [0, 0],
                     type: 'must_visit',
-                    category: 'музей',  // Можно сделать случайный выбор из [музей, парк, памятник]
+                    category: randomCategory,
                     transport_mode: 'pedestrian'
                 });
-                console.log('[RouteModalBuilder] ✅ Added smart ending (interesting place)');
+                console.log(`[RouteModalBuilder] ✅ Added smart ending (${randomCategory})`);
             }
             
         } else {
             // SIMPLE MODE
             const startCoords = this.getCoordsFromInput('simpleStartPoint');
             const endCoords = this.getCoordsFromInput('simpleEndPoint');
+            
+            // ✅ КРИТИЧЕСКАЯ ПРОВЕРКА
+            if (!startCoords) {
+                console.error('[RouteModalBuilder] ❌ SIMPLE MODE: No start coordinates!');
+                return [];
+            }
             
             // Определяем глобальный режим для Simple Mode
             let globalMode = 'pedestrian';
@@ -167,14 +190,13 @@ window.RouteModalBuilder = {
                 if (globalMode === 'public_transport') globalMode = 'masstransit';
             }
             
-            if (startCoords) {
-                places.push({ 
-                    name: 'Начало', 
-                    coordinates: startCoords, 
-                    type: 'must_visit',
-                    transport_mode: globalMode
-                });
-            }
+            places.push({ 
+                name: 'Начало', 
+                coordinates: startCoords, 
+                type: 'must_visit',
+                transport_mode: globalMode
+            });
+            console.log('[RouteModalBuilder] ✅ SIMPLE: Added start:', startCoords);
             
             // Промежуточные точки
             const waypoints = document.querySelectorAll('.waypoint-input');
@@ -197,6 +219,7 @@ window.RouteModalBuilder = {
                     type: 'must_visit',
                     transport_mode: globalMode
                 });
+                console.log('[RouteModalBuilder] ✅ SIMPLE: Added end:', endCoords);
             }
         }
 
