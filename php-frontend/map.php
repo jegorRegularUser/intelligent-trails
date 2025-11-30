@@ -26,7 +26,7 @@
             <span class="fab-text">Построить маршрут</span>
         </button>
 
-        <!-- СТАРАЯ ПАНЕЛЬ (можно оставить для совместимости) -->
+        <!-- ПАНЕЛЬ ИНФОРМАЦИИ О МАРШРУТЕ -->
         <div class="route-info-panel" id="routeInfoPanel" style="display: none;">
             <div class="route-info-header">
                 <h3>📊 Ваша прогулка</h3>
@@ -48,10 +48,12 @@
     <script src="assets/js/route-modal/route-modal-builder.js"></script>
     <script src="assets/js/route-modal/route-modal-core.js"></script>
 
-    <!-- Map Scripts  -->
+    <!-- Map Scripts -->
     <script src="assets/js/map/map-legend.js"></script>
     <script src="assets/js/map/map-place-markers.js"></script>
     <script src="assets/js/map/map-info-panel.js"></script>
+    <!-- ✅ НОВЫЙ ФАЙЛ ДЛЯ АЛЬТЕРНАТИВНЫХ МЕСТ -->
+    <script src="assets/js/map/map-alternatives.js"></script>
     <script src="assets/js/map/map-variants.js"></script>
     <script src="assets/js/map/map-simple-route.js"></script>
     <script src="assets/js/map/map-smart-walk.js"></script>
