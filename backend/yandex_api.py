@@ -1,6 +1,7 @@
 """
 Yandex Maps API - ИСПРАВЛЕННАЯ ВЕРСИЯ
-Использует Suggest API для поиска организаций и Geocoder для точных координат
+✅ РАБОЧИЙ КОД из test_geoguesser.py - Suggest API + Geocoder
+Теперь находит места в Нижнем Новгороде!
 """
 
 import aiohttp
@@ -25,7 +26,7 @@ MAX_POINTS_FOR_MATRIX = 10
 class YandexStaticRouter:
     """
     Yandex Maps API Wrapper
-    ИСПРАВЛЕНО: Правильный поиск организаций через Suggest API + Geocoder
+    ✅ ИСПРАВЛЕНО: РАБОЧИЕ ФУНКЦИИ ИЗ test_geoguesser.py
     """
     
     GEOCODER_URL = "https://geocode-maps.yandex.ru/1.x/"
@@ -62,77 +63,94 @@ class YandexStaticRouter:
             await self.session.close()
             logger.info("[YandexAPI] Session closed")
     
+    # ✅ РАБОЧАЯ ФУНКЦИЯ ИЗ test_geoguesser.py
     async def _get_city_name(self, center: List[float]) -> str:
-        """Определяет название города по координатам"""
+        """Определяет название города - ИСПОЛЬЗУЕТ YANDEX_API_KEY"""
+        url = self.GEOCODER_URL
+
+        params = {
+            "apikey": self.api_key,  # ← ROUTING/GEOCODER ключ
+            "geocode": f"{center[0]},{center[1]}",
+            "format": "json",
+            "kind": "locality",
+            "results": 1
+        }
+
+        logger.debug(f"Getting city name for {center}")
+
         try:
             session = await self._get_session()
-            params = {
-                "apikey": self.api_key,
-                "geocode": f"{center[0]},{center[1]}",
-                "format": "json",
-                "kind": "locality",
-                "results": 1
-            }
-            
-            async with session.get(self.GEOCODER_URL, params=params, timeout=aiohttp.ClientTimeout(total=5)) as response:
+            async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=3)) as response:
                 if response.status == 200:
                     data = await response.json()
                     members = data.get("response", {}).get("GeoObjectCollection", {}).get("featureMember", [])
+
                     if members:
                         city = members[0].get("GeoObject", {}).get("name", "")
-                        logger.info(f"[YandexAPI] ✅ City detected: {city}")
+                        logger.info(f"✅ City detected: {city}")
                         return city
+                else:
+                    logger.error(f"Geocoder error {response.status}")
         except Exception as e:
-            logger.error(f"[YandexAPI] City detection failed: {e}")
-        
-        logger.warning("[YandexAPI] ⚠️ City detection failed")
+            logger.error(f"City detection failed: {e}")
+
+        logger.warning("⚠️  City detection failed")
         return ""
     
+    # ✅ РАБОЧАЯ ФУНКЦИЯ ИЗ test_geoguesser.py
     async def _geocode_smart(self, name: str, address: str, city: str) -> Optional[Tuple[List[float], str]]:
-        """Умное геокодирование с несколькими стратегиями"""
-        session = await self._get_session()
-        
-        # Стратегии геокодирования (по приоритету)
+        """Умное геокодирование - ИСПОЛЬЗУЕТ YANDEX_API_KEY"""
+        url = self.GEOCODER_URL
+
+        # Стратегии (по приоритету)
         strategies = []
+
         if city and address:
             strategies.append((f"{address}, {city}", "address+city"))
+
         if city and name and address:
             strategies.append((f"{name}, {address}, {city}", "full"))
+
         if city and name:
             strategies.append((f"{name} {city}", "name+city"))
+
         if address:
             strategies.append((f"{address}", "address_only"))
-        
+
         for query, method in strategies:
             params = {
-                "apikey": self.api_key,
+                "apikey": self.api_key,  # ← ROUTING/GEOCODER ключ
                 "geocode": query,
                 "format": "json",
                 "results": 1
             }
-            
+
             try:
-                async with session.get(self.GEOCODER_URL, params=params, timeout=aiohttp.ClientTimeout(total=3)) as response:
+                session = await self._get_session()
+                async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=3)) as response:
                     if response.status == 200:
                         data = await response.json()
                         members = data.get("response", {}).get("GeoObjectCollection", {}).get("featureMember", [])
+
                         if members:
                             geo_obj = members[0].get("GeoObject", {})
                             pos = geo_obj.get("Point", {}).get("pos", "")
+
                             if pos:
                                 lon, lat = map(float, pos.split())
-                                logger.debug(f"  ✅ '{method}': {query[:60]}")
+                                logger.debug(f"       ✅ '{method}': {query[:60]}")
                                 return ([lon, lat], method)
             except:
                 continue
-        
+
         return None
     
+    # ✅ ОСНОВНАЯ ФУНКЦИЯ - РАБОЧАЯ ИЗ test_geoguesser.py
     async def search_places(self, center_coords: List[float], categories: List[str], 
                            radius_m: int = 3000) -> List[Dict]:
         """
         🔍 Поиск мест через Suggest API + Geocoder
-        ПРАВИЛЬНАЯ ВЕРСИЯ - использует два API для точного поиска
+        ✅ РАБОЧАЯ ВЕРСИЯ - использует два API для точного поиска
         
         Args:
             center_coords: [longitude, latitude] - центр поиска
@@ -150,12 +168,14 @@ class YandexStaticRouter:
             
             session = await self._get_session()
             
+            all_places = []
+            
             # Шаг 1: Определяем город для точного геокодирования
             city = await self._get_city_name(center_coords)
-            if not city:
+            if city:
+                logger.info(f"[YandexAPI] ✅ City: {city}")
+            else:
                 logger.warning("[YandexAPI] ⚠️ Continuing without city name")
-            
-            all_places = []
             
             # Шаг 2: Для каждой категории ищем места
             for category in categories:
@@ -182,10 +202,13 @@ class YandexStaticRouter:
                         logger.info(f"[YandexAPI] 📝 Suggest returned {len(suggest_results)} results for '{category}'")
                         
                         if not suggest_results:
+                            logger.warning(f"[YandexAPI] ⚠️ No suggest results for '{category}'")
                             continue
                         
                         # Шаг 3: Для каждого результата получаем точные координаты
-                        for i, result in enumerate(suggest_results, 1):
+                        category_places = []
+                        
+                        for i, result in enumerate(suggest_results[:5], 1):  # Берем топ-5
                             title = result.get("title", {})
                             subtitle = result.get("subtitle", {})
                             
@@ -208,7 +231,7 @@ class YandexStaticRouter:
                             # Геокодируем для получения точных координат
                             result_coords = await self._geocode_smart(name, address, city)
                             if not result_coords:
-                                logger.warning(f"  ⚠️ No coords for {name}")
+                                logger.debug(f"  ⚠️ No coords for {name}")
                                 continue
                             
                             coords, method = result_coords
@@ -232,8 +255,17 @@ class YandexStaticRouter:
                                 "coords_source": f"Geocoder ({method})"
                             }
                             
-                            all_places.append(place)
-                            logger.info(f"  ✅ {i}. {name[:40]} - {coords} ({method})")
+                            category_places.append(place)
+                            logger.info(f"  ✅ {i}. {name[:40]} - {coords} ({method}) - {actual_distance:.0f}m")
+                        
+                        # Добавляем топ-1 место для категории (ближайшее)
+                        if category_places:
+                            category_places.sort(key=lambda p: p['distance'])
+                            best_place = category_places[0]
+                            all_places.append(best_place)
+                            logger.info(f"[YandexAPI] ✅ Selected best '{category}': {best_place['name']} at {best_place['coords']}")
+                        else:
+                            logger.warning(f"[YandexAPI] ⚠️ No valid places found for '{category}'")
                             
                 except Exception as request_error:
                     logger.error(f"[YandexAPI] Request error for '{category}': {request_error}")
@@ -259,6 +291,7 @@ class YandexStaticRouter:
             logger.error(f"[YandexAPI] ❌ Critical error in search_places: {str(e)}", exc_info=True)
             return []
     
+    # Остальные функции (маршруты, геокодирование)
     async def get_route(self, origin: List[float], destination: List[float], 
                        mode: str = "pedestrian") -> Optional[Dict]:
         """
@@ -448,7 +481,7 @@ YandexMapsAPI = YandexStaticRouter
 
 
 # ============================================================================
-# MODULE-LEVEL FUNCTIONS
+# MODULE-LEVEL FUNCTIONS (должны работать как в test_geoguesser.py)
 # ============================================================================
 
 def calculate_geo_distance(coord1: List[float], coord2: List[float]) -> float:
@@ -467,12 +500,12 @@ def calculate_geo_distance(coord1: List[float], coord2: List[float]) -> float:
 
 
 async def search_places(center_coords: List[float], categories: List[str], radius_m: int = 3000) -> List[Dict]:
-    """Поиск мест - module-level функция"""
-    if not YANDEX_API_KEY:
-        logger.warning("[search_places] No API key")
+    """Поиск мест - module-level функция (ТОЧНО КАК В test_geoguesser.py)"""
+    if not YANDEX_API_KEY or not YANDEX_SUGGEST_API_KEY:
+        logger.warning("[search_places] Missing API keys")
         return []
     
-    api = YandexStaticRouter(YANDEX_API_KEY)
+    api = YandexStaticRouter(YANDEX_API_KEY, YANDEX_SUGGEST_API_KEY)
     try:
         return await api.search_places(center_coords, categories, radius_m)
     finally:
