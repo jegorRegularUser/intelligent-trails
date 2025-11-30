@@ -1,6 +1,6 @@
 /**
  * Route Modal Template
- * ИСПРАВЛЕННАЯ ВЕРСИЯ с 3-м вариантом завершения и селектом транспорта для мест
+ * ИСПРАВЛЕНО: Добавлены кнопки "Выбрать на карте" для начальной и конечной точек
  */
 
 window.RouteModalTemplate = {
@@ -64,13 +64,27 @@ window.RouteModalTemplate = {
         </div>
 
         <div class="input-group">
-          <input 
-            type="text" 
-            id="smartStartPoint" 
-            class="location-input" 
-            placeholder="Например: Москва, Красная площадь"
-            autocomplete="off"
-          />
+          <div style="display: flex; gap: 10px;">
+            <input 
+              type="text" 
+              id="smartStartPoint" 
+              class="location-input" 
+              placeholder="Например: Москва, Красная площадь"
+              autocomplete="off"
+              style="flex: 1;"
+            />
+            <button 
+              id="pickStartPointBtn" 
+              class="map-picker-btn" 
+              type="button"
+              title="Выбрать на карте"
+            >
+              🗺️
+            </button>
+          </div>
+          <small style="color: #666; margin-top: 5px; display: block;">
+            💡 Введите адрес или кликните 🗺️ чтобы выбрать на карте
+          </small>
         </div>
 
         <div class="section-header" style="margin-top: 25px;">
@@ -137,13 +151,24 @@ window.RouteModalTemplate = {
         </div>
 
         <div class="input-group" id="smartEndPointGroup" style="display: none; margin-top: 15px;">
-          <input 
-            type="text" 
-            id="smartEndPoint" 
-            class="location-input" 
-            placeholder="Точка финиша"
-            autocomplete="off"
-          />
+          <div style="display: flex; gap: 10px;">
+            <input 
+              type="text" 
+              id="smartEndPoint" 
+              class="location-input" 
+              placeholder="Точка финиша"
+              autocomplete="off"
+              style="flex: 1;"
+            />
+            <button 
+              id="pickEndPointBtn" 
+              class="map-picker-btn" 
+              type="button"
+              title="Выбрать на карте"
+            >
+              🗺️
+            </button>
+          </div>
         </div>
       </div>
     `;
