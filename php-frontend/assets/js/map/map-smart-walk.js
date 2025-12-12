@@ -60,21 +60,29 @@ class MapSmartWalk {
             const mode = toPlace.transport_mode || 'pedestrian';
             
             console.log(`[MapSmartWalk] Segment ${segmentIndex + 1}: ${fromPlace.name} -> ${toPlace.name}`);
-            console.log(`  Transport mode: ${mode}`);
+            console.log(`  Transport mode FROM toPlace.transport_mode: "${mode}"`);
             console.log(`  From [lat,lon]: ${fromCoords}, To [lat,lon]: ${toCoords}`);
             
             const yandexMode = this.convertModeToYandex(mode);
-            console.log(`  Yandex routing mode: ${yandexMode}`);
+            console.log(`  Converted Yandex mode: "${yandexMode}"`);
             
             const routeOptions = {
-                mapStateAutoApply: false,
-                routingMode: yandexMode,
-                avoidTrafficJams: false
+                mapStateAutoApply: false
             };
             
-            if (yandexMode === 'masstransit') {
+            if (yandexMode === 'auto') {
+                routeOptions.avoidTrafficJams = false;
+                routeOptions.routingMode = 'auto';
+            } else if (yandexMode === 'pedestrian') {
+                routeOptions.routingMode = 'pedestrian';
+            } else if (yandexMode === 'masstransit') {
+                routeOptions.routingMode = 'masstransit';
                 routeOptions.transferPenalty = 60;
+            } else if (yandexMode === 'bicycle') {
+                routeOptions.routingMode = 'bicycle';
             }
+            
+            console.log(`  ✓ Route options:`, routeOptions);
             
             const route = await ymaps.route([fromCoords, toCoords], routeOptions);
             
@@ -134,7 +142,7 @@ class MapSmartWalk {
                 window.EventBus?.emit('segment:clicked', segmentData);
             });
             
-            console.log(`  ✓ Segment ${segmentIndex + 1} drawn successfully`);
+            console.log(`  ✓ Segment ${segmentIndex + 1} drawn successfully with mode "${yandexMode}"`);
             
         } catch (error) {
             console.error(`[MapSmartWalk] Error building segment ${segmentIndex}:`, error);
@@ -181,7 +189,7 @@ class MapSmartWalk {
     }
     
     getStrokeWidth(mode, isOverlapping, segmentIndex) {
-        const baseWidth = (mode === 'auto' || mode === 'driving') ? 5 : 6;
+        const baseWidth = (mode === 'auto') ? 5 : 6;
         return isOverlapping ? baseWidth - 1 : baseWidth;
     }
     
@@ -197,7 +205,7 @@ class MapSmartWalk {
             const patterns = ['5 5', '10 5', '2 8', '8 4'];
             return patterns[segmentIndex % patterns.length];
         }
-        return (mode === 'auto' || mode === 'driving') ? 'solid' : '5 5';
+        return (mode === 'auto') ? 'solid' : '5 5';
     }
     
     drawFallbackLine(fromCoords, toCoords, mode, segmentIndex) {
@@ -265,7 +273,6 @@ class MapSmartWalk {
         const baseColors = {
             'pedestrian': ['#2E86DE', '#3D95E8', '#4CA4F2'],
             'auto': ['#EE5A6F', '#F26B7E', '#F67C8D'],
-            'driving': ['#EE5A6F', '#F26B7E', '#F67C8D'],
             'masstransit': ['#26de81', '#3AE891', '#4EF2A1'],
             'bicycle': ['#FFA502', '#FFB220', '#FFBF3E']
         };
@@ -278,7 +285,6 @@ class MapSmartWalk {
         const icons = {
             'pedestrian': '🚶',
             'auto': '🚗',
-            'driving': '🚗',
             'masstransit': '🚌',
             'bicycle': '🚴'
         };
@@ -289,7 +295,6 @@ class MapSmartWalk {
         const names = {
             'pedestrian': 'Пешком',
             'auto': 'На машине',
-            'driving': 'На машине',
             'masstransit': 'Общественный транспорт',
             'bicycle': 'На велосипеде'
         };
