@@ -20,6 +20,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-shrink: 0;
 }
 
 .route-info-header h3 {
@@ -41,6 +42,7 @@
     align-items: center;
     justify-content: center;
     transition: all 0.2s;
+    flex-shrink: 0;
 }
 
 .close-panel-btn:hover {
@@ -55,6 +57,7 @@
     display: flex;
     gap: 20px;
     justify-content: space-around;
+    flex-shrink: 0;
 }
 
 .route-stat {
@@ -84,8 +87,27 @@
 .route-stages-list {
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 16px 20px;
     min-height: 0;
+}
+
+.route-stages-list::-webkit-scrollbar {
+    width: 8px;
+}
+
+.route-stages-list::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 10px;
+}
+
+.route-stages-list::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 10px;
+}
+
+.route-stages-list::-webkit-scrollbar-thumb:hover {
+    background: #555;
 }
 
 .route-stage {
@@ -124,6 +146,7 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
+    min-width: 0;
 }
 
 .stage-name {
@@ -133,6 +156,7 @@
     display: flex;
     align-items: center;
     gap: 6px;
+    word-wrap: break-word;
 }
 
 .stage-category {
@@ -152,6 +176,7 @@
     display: flex;
     align-items: flex-start;
     gap: 4px;
+    word-wrap: break-word;
 }
 
 .stage-distance {
