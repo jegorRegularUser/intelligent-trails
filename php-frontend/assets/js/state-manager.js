@@ -1,8 +1,3 @@
-/**
- * State Manager - Centralized state management for Intelligent Trails
- * Handles current route, places, mode, and UI state
- */
-
 class StateManager {
     constructor() {
         this.state = {
@@ -13,54 +8,41 @@ class StateManager {
             selectedPlaceIndex: null,
             isLoading: false,
             error: null,
-            mapCenter: [37.6173, 55.7539], // Default to Moscow
-            mapZoom: 12
+            mapCenter: [37.6173, 55.7539],
+            mapZoom: 12,
+            places_by_category: null,
+            start_point: null,
+            return_to_start: false
         };
         
         this.listeners = {};
         
-        // Load from localStorage if available
         this.loadFromStorage();
     }
     
-    /**
-     * Get current state
-     */
     getState() {
         return { ...this.state };
     }
     
-    /**
-     * Get specific state property
-     */
     get(key) {
         return this.state[key];
     }
     
-    /**
-     * Set state and notify listeners
-     */
     setState(updates) {
         const oldState = { ...this.state };
         
-        // Update state
         this.state = {
             ...this.state,
             ...updates
         };
         
-        // Save to localStorage
         this.saveToStorage();
         
-        // Notify listeners
         this.notifyListeners(oldState, this.state);
         
         console.log('[StateManager] State updated:', updates);
     }
     
-    /**
-     * Subscribe to state changes
-     */
     subscribe(listener) {
         const id = Date.now() + Math.random();
         this.listeners[id] = listener;
@@ -70,9 +52,6 @@ class StateManager {
         };
     }
     
-    /**
-     * Notify all listeners
-     */
     notifyListeners(oldState, newState) {
         Object.values(this.listeners).forEach(listener => {
             try {
@@ -83,9 +62,6 @@ class StateManager {
         });
     }
     
-    /**
-     * Set current route data
-     */
     setRouteData(routeData) {
         this.setState({
             routeData: routeData,
@@ -94,13 +70,9 @@ class StateManager {
             currentRoute: routeData
         });
         
-        // Emit route:updated event
         window.EventBus?.emit('route:updated', routeData);
     }
     
-    /**
-     * Update a specific place
-     */
     updatePlace(placeIndex, newPlaceData) {
         const places = [...this.state.places];
         
@@ -112,7 +84,6 @@ class StateManager {
             
             this.setState({ places });
             
-            // Emit place:changed event
             window.EventBus?.emit('place:changed', {
                 index: placeIndex,
                 place: places[placeIndex]
@@ -124,14 +95,10 @@ class StateManager {
         return false;
     }
     
-    /**
-     * Set routing mode
-     */
     setMode(mode) {
         if (['pedestrian', 'driving', 'masstransit'].includes(mode)) {
             this.setState({ mode });
             
-            // Emit mode:changed event
             window.EventBus?.emit('mode:changed', mode);
             
             return true;
@@ -141,29 +108,19 @@ class StateManager {
         return false;
     }
     
-    /**
-     * Select a place
-     */
     selectPlace(placeIndex) {
         this.setState({ selectedPlaceIndex: placeIndex });
         
-        // Emit place:selected event
         window.EventBus?.emit('place:selected', {
             index: placeIndex,
             place: this.state.places[placeIndex]
         });
     }
     
-    /**
-     * Set loading state
-     */
     setLoading(isLoading) {
         this.setState({ isLoading });
     }
     
-    /**
-     * Set error state
-     */
     setError(error) {
         this.setState({ error });
         
@@ -172,16 +129,10 @@ class StateManager {
         }
     }
     
-    /**
-     * Clear error
-     */
     clearError() {
         this.setState({ error: null });
     }
     
-    /**
-     * Set map view
-     */
     setMapView(center, zoom) {
         this.setState({
             mapCenter: center,
@@ -189,9 +140,6 @@ class StateManager {
         });
     }
     
-    /**
-     * Reset state
-     */
     reset() {
         this.state = {
             currentRoute: null,
@@ -202,7 +150,10 @@ class StateManager {
             isLoading: false,
             error: null,
             mapCenter: [37.6173, 55.7539],
-            mapZoom: 12
+            mapZoom: 12,
+            places_by_category: null,
+            start_point: null,
+            return_to_start: false
         };
         
         this.saveToStorage();
@@ -211,9 +162,6 @@ class StateManager {
         console.log('[StateManager] State reset');
     }
     
-    /**
-     * Save state to localStorage
-     */
     saveToStorage() {
         try {
             const stateToSave = {
@@ -221,7 +169,10 @@ class StateManager {
                 places: this.state.places,
                 mode: this.state.mode,
                 mapCenter: this.state.mapCenter,
-                mapZoom: this.state.mapZoom
+                mapZoom: this.state.mapZoom,
+                places_by_category: this.state.places_by_category,
+                start_point: this.state.start_point,
+                return_to_start: this.state.return_to_start
             };
             
             localStorage.setItem('intelligentTrails_state', JSON.stringify(stateToSave));
@@ -230,9 +181,6 @@ class StateManager {
         }
     }
     
-    /**
-     * Load state from localStorage
-     */
     loadFromStorage() {
         try {
             const saved = localStorage.getItem('intelligentTrails_state');
@@ -252,9 +200,6 @@ class StateManager {
         }
     }
     
-    /**
-     * Clear localStorage
-     */
     clearStorage() {
         try {
             localStorage.removeItem('intelligentTrails_state');
@@ -265,7 +210,6 @@ class StateManager {
     }
 }
 
-// Create global instance
 window.StateManager = new StateManager();
 
 console.log('[StateManager] Initialized');

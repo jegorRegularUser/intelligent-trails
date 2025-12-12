@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="assets/style.css">
     <link rel="stylesheet" href="assets/modal-styles.css">
     <link rel="stylesheet" href="assets/styles/map-controls.css">
+    <link rel="stylesheet" href="assets/styles/route-info-panel.css">
     <script src="https://api-maps.yandex.ru/2.1/?lang=ru_RU&apikey=7637c9ce-fc0e-4f1d-a6e2-2d6e85cf7193&suggest_apikey=1019e534-8f99-42e2-85b2-d0c7ed9ccca2"></script>
 </head>
 
@@ -16,7 +17,6 @@
 
     <main class="map-page-container">
         <div id="map">
-            <!-- НОВЫЕ КОНТЕЙНЕРЫ -->
             <div id="map-legend"></div>
             <div id="map-info-panel"></div>
         </div>
@@ -26,7 +26,6 @@
             <span class="fab-text">Построить маршрут</span>
         </button>
 
-        <!-- ПАНЕЛЬ ИНФОРМАЦИИ О МАРШРУТЕ -->
         <div class="route-info-panel" id="routeInfoPanel" style="display: none;">
             <div class="route-info-header">
                 <h3>📊 Ваша прогулка</h3>
@@ -40,7 +39,6 @@
     <script src="assets/js/event-bus.js"></script>
     <script src="assets/js/state-manager.js"></script>
 
-    <!-- Route Modal Scripts -->
     <script src="assets/js/route-modal/route-modal-template.js"></script>
     <script src="assets/js/route-modal/route-modal-yandex.js"></script>
     <script src="assets/js/route-modal/route-modal-waypoints.js"></script>
@@ -48,14 +46,10 @@
     <script src="assets/js/route-modal/route-modal-builder.js"></script>
     <script src="assets/js/route-modal/route-modal-core.js"></script>
 
-    <!-- Map Scripts -->
     <script src="assets/js/map/map-legend.js"></script>
     <script src="assets/js/map/map-place-markers.js"></script>
     <script src="assets/js/map/map-info-panel.js"></script>
-    <!-- ✅ НОВЫЙ ФАЙЛ ДЛЯ АЛЬТЕРНАТИВНЫХ МЕСТ -->
-    <script src="assets/js/map/map-alternatives.js"></script>
-    <script src="assets/js/map/map-variants.js"></script>
-    <script src="assets/js/map/map-simple-route.js"></script>
+    <script src="assets/js/map/map-route-builder.js"></script>
     <script src="assets/js/map/map-smart-walk.js"></script>
     <script src="assets/js/map/map-core.js"></script>
 
