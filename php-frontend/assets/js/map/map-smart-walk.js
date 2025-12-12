@@ -5,6 +5,7 @@ class MapSmartWalk {
         this.currentRouteData = null;
         this.isBuilding = false;
         this.yandexRoutes = [];
+        this.pathGeometries = new Map();
         
         if (!this.map) {
             console.error('[MapSmartWalk] Map instance required');
@@ -26,6 +27,7 @@ class MapSmartWalk {
         console.log('[MapSmartWalk] Visualizing route with Yandex routing...', routeData);
         
         this.clearRouteLines();
+        this.pathGeometries.clear();
         
         if (!routeData || !routeData.places || routeData.places.length < 2) {
             console.warn('[MapSmartWalk] Not enough places to build route');
@@ -71,7 +73,7 @@ class MapSmartWalk {
             
             if (!firstPath) {
                 console.warn(`[MapSmartWalk] No path found for segment ${segmentIndex}`);
-                this.drawFallbackLine(fromCoords, toCoords, mode);
+                this.drawFallbackLine(fromCoords, toCoords, mode, segmentIndex);
                 return;
             }
             
@@ -81,22 +83,29 @@ class MapSmartWalk {
             
             console.log(`  Distance: ${(distance / 1000).toFixed(2)} km, Time: ${(duration / 60).toFixed(0)} min`);
             
+            const geometryCoords = geometry.getCoordinates();
+            const isOverlapping = this.checkPathOverlap(geometryCoords);
+            const offsetCoords = isOverlapping ? this.applyPathOffset(geometryCoords, segmentIndex) : geometryCoords;
+            
             const polyline = new ymaps.Polyline(
-                geometry.getCoordinates(),
+                offsetCoords,
                 {
                     balloonContent: this.createSimpleBalloon(fromPlace, toPlace, distance, duration, mode),
                     hintContent: `${fromPlace.name} → ${toPlace.name}`
                 },
                 {
                     strokeColor: this.getModeColor(mode, segmentIndex),
-                    strokeWidth: 6,
-                    strokeOpacity: 0.7 + (segmentIndex * 0.05),
-                    strokeStyle: this.getModeStyle(mode)
+                    strokeWidth: this.getStrokeWidth(mode, isOverlapping, segmentIndex),
+                    strokeOpacity: this.getStrokeOpacity(isOverlapping, segmentIndex),
+                    strokeStyle: this.getModeStyle(mode, isOverlapping, segmentIndex),
+                    zIndex: 100 + segmentIndex
                 }
             );
             
             this.map.geoObjects.add(polyline);
             this.routeLines.push(polyline);
+            
+            this.pathGeometries.set(segmentIndex, geometryCoords);
             
             polyline.events.add('click', () => {
                 console.log(`[MapSmartWalk] Segment ${segmentIndex} clicked`);
@@ -110,15 +119,80 @@ class MapSmartWalk {
                 });
             });
             
+            window.EventBus?.emit('segment:data', {
+                index: segmentIndex,
+                distance: distance,
+                duration: duration,
+                mode: mode
+            });
+            
             console.log(`  Segment ${segmentIndex + 1} drawn successfully`);
             
         } catch (error) {
             console.error(`[MapSmartWalk] Error building segment ${segmentIndex}:`, error);
-            this.drawFallbackLine(fromPlace.coordinates, toPlace.coordinates, fromPlace.transport_mode || 'pedestrian');
+            this.drawFallbackLine(fromPlace.coordinates, toPlace.coordinates, fromPlace.transport_mode || 'pedestrian', segmentIndex);
         }
     }
     
-    drawFallbackLine(fromCoords, toCoords, mode) {
+    checkPathOverlap(newPath) {
+        for (let [index, existingPath] of this.pathGeometries.entries()) {
+            if (this.pathsAreSimilar(newPath, existingPath)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    pathsAreSimilar(path1, path2, threshold = 0.001) {
+        const samples = Math.min(5, Math.min(path1.length, path2.length));
+        let matches = 0;
+        
+        for (let i = 0; i < samples; i++) {
+            const idx1 = Math.floor((i / samples) * path1.length);
+            const idx2 = Math.floor((i / samples) * path2.length);
+            
+            const dist = Math.sqrt(
+                Math.pow(path1[idx1][0] - path2[idx2][0], 2) +
+                Math.pow(path1[idx1][1] - path2[idx2][1], 2)
+            );
+            
+            if (dist < threshold) matches++;
+        }
+        
+        return matches >= samples * 0.6;
+    }
+    
+    applyPathOffset(coords, segmentIndex) {
+        const offsetDistance = 0.0001 * (1 + (segmentIndex % 3) * 0.5);
+        const angle = (segmentIndex % 4) * (Math.PI / 2);
+        
+        return coords.map(coord => [
+            coord[0] + Math.cos(angle) * offsetDistance,
+            coord[1] + Math.sin(angle) * offsetDistance
+        ]);
+    }
+    
+    getStrokeWidth(mode, isOverlapping, segmentIndex) {
+        const baseWidth = (mode === 'auto' || mode === 'driving') ? 5 : 6;
+        return isOverlapping ? baseWidth - 1 : baseWidth;
+    }
+    
+    getStrokeOpacity(isOverlapping, segmentIndex) {
+        if (isOverlapping) {
+            return 0.6 + (segmentIndex % 2) * 0.2;
+        }
+        return 0.7 + (segmentIndex * 0.03);
+    }
+    
+    getModeStyle(mode, isOverlapping, segmentIndex) {
+        if (isOverlapping) {
+            const patterns = ['5 5', '10 5', '2 8', '8 4'];
+            return patterns[segmentIndex % patterns.length];
+        }
+        return (mode === 'auto' || mode === 'driving') ? 'solid' : '5 5';
+    }
+    
+    drawFallbackLine(fromCoords, toCoords, mode, segmentIndex) {
         console.warn('[MapSmartWalk] Using fallback straight line');
         
         const polyline = new ymaps.Polyline(
@@ -130,7 +204,8 @@ class MapSmartWalk {
                 strokeColor: '#FF6B6B',
                 strokeWidth: 3,
                 strokeOpacity: 0.6,
-                strokeStyle: 'dot'
+                strokeStyle: 'dot',
+                zIndex: 100 + segmentIndex
             }
         );
         
@@ -189,10 +264,6 @@ class MapSmartWalk {
         
         const colors = baseColors[mode] || baseColors['pedestrian'];
         return colors[segmentIndex % colors.length];
-    }
-    
-    getModeStyle(mode) {
-        return (mode === 'auto' || mode === 'driving') ? 'solid' : '5 5';
     }
     
     getModeIcon(mode) {

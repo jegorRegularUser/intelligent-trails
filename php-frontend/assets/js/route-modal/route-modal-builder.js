@@ -41,7 +41,7 @@ window.RouteModalBuilder = {
                 return;
             }
 
-            this.handleSuccess(data.start_point_yandex, placesData, data.return_to_start);
+            this.handleSuccess(data.start_point_yandex, placesData, data.return_to_start, data.activities);
 
         } catch (error) {
             console.error('[RouteModalBuilder] Error:', error);
@@ -73,10 +73,15 @@ window.RouteModalBuilder = {
         console.log('[RouteModalBuilder] Start point for backend [lon,lat]:', startCoordsBackend);
 
         const categories = [];
+        const activitiesWithTransport = [];
 
         this.modal.activities.forEach((act) => {
             if (act.type === 'place' && act.category) {
                 categories.push(act.category);
+                activitiesWithTransport.push({
+                    ...act,
+                    transport_mode: act.transport_mode || 'pedestrian'
+                });
             }
         });
 
@@ -93,7 +98,8 @@ window.RouteModalBuilder = {
             start_point_yandex: startCoordsYandex,
             categories: categories,
             return_to_start: return_to_start,
-            radius_m: 5000
+            radius_m: 5000,
+            activities: activitiesWithTransport
         };
     },
 
@@ -145,7 +151,7 @@ window.RouteModalBuilder = {
         return result;
     },
 
-    handleSuccess(startPointYandex, placesData, returnToStart) {
+    handleSuccess(startPointYandex, placesData, returnToStart, activities) {
         console.log('[RouteModalBuilder] Places found successfully');
         console.log('[RouteModalBuilder] Converting backend places [lon,lat] to Yandex format [lat,lon]...');
         
@@ -165,12 +171,13 @@ window.RouteModalBuilder = {
             window.StateManager.setState({
                 places_by_category: convertedPlacesData,
                 start_point: startPointYandex,
-                return_to_start: returnToStart
+                return_to_start: returnToStart,
+                activities: activities
             });
         }
 
         if (window.MapRouteBuilder) {
-            window.MapRouteBuilder.buildRoute(startPointYandex, convertedPlacesData, returnToStart);
+            window.MapRouteBuilder.buildRoute(startPointYandex, convertedPlacesData, returnToStart, activities);
         } else {
             console.error('[RouteModalBuilder] MapRouteBuilder not found');
         }

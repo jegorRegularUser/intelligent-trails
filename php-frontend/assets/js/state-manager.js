@@ -12,7 +12,9 @@ class StateManager {
             mapZoom: 12,
             places_by_category: null,
             start_point: null,
-            return_to_start: false
+            return_to_start: false,
+            transport_mode: 'pedestrian',
+            activities: []
         };
         
         this.listeners = {};
@@ -140,6 +142,30 @@ class StateManager {
         });
     }
     
+    setTransportMode(mode) {
+        this.setState({ transport_mode: mode });
+    }
+    
+    setActivities(activities) {
+        this.setState({ activities: activities });
+    }
+    
+    addActivity(activity) {
+        const activities = [...this.state.activities, activity];
+        this.setState({ activities: activities });
+    }
+    
+    removeActivity(index) {
+        const activities = this.state.activities.filter((_, i) => i !== index);
+        this.setState({ activities: activities });
+    }
+    
+    updateActivity(index, updates) {
+        const activities = [...this.state.activities];
+        activities[index] = { ...activities[index], ...updates };
+        this.setState({ activities: activities });
+    }
+    
     reset() {
         this.state = {
             currentRoute: null,
@@ -153,7 +179,9 @@ class StateManager {
             mapZoom: 12,
             places_by_category: null,
             start_point: null,
-            return_to_start: false
+            return_to_start: false,
+            transport_mode: 'pedestrian',
+            activities: []
         };
         
         this.saveToStorage();
@@ -172,7 +200,9 @@ class StateManager {
                 mapZoom: this.state.mapZoom,
                 places_by_category: this.state.places_by_category,
                 start_point: this.state.start_point,
-                return_to_start: this.state.return_to_start
+                return_to_start: this.state.return_to_start,
+                transport_mode: this.state.transport_mode,
+                activities: this.state.activities
             };
             
             localStorage.setItem('intelligentTrails_state', JSON.stringify(stateToSave));
