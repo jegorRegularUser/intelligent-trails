@@ -1,7 +1,3 @@
-/**
- * Route Modal Core - FIXED & FULL VERSION
- * Preserves all legacy functionality + fixes initialization crashes
- */
 class RouteModal {
   constructor() {
     this.modal = null;
@@ -15,7 +11,6 @@ class RouteModal {
     this.draggedElement = null;
     this.editingActivityIndex = null;
 
-    // Ждем загрузки DOM или Ymaps
     if (document.readyState === "loading") {
        document.addEventListener("DOMContentLoaded", () => this.preInit());
     } else {
@@ -27,7 +22,6 @@ class RouteModal {
     if (typeof ymaps !== "undefined" && ymaps.ready) {
       ymaps.ready(() => this.init());
     } else {
-      // Fallback если ymaps долго грузится
       this.init();
     }
   }
@@ -40,10 +34,8 @@ class RouteModal {
   }
 
   createModal() {
-    // Проверка наличия шаблонизатора
     if (window.RouteModalTemplate) {
         const modalHTML = window.RouteModalTemplate.getHTML();
-        // Проверка чтобы не дублировать модалку
         if (!document.getElementById("routeModal")) {
             document.body.insertAdjacentHTML("beforeend", modalHTML);
         }
@@ -56,11 +48,22 @@ class RouteModal {
   attachEventListeners() {
     if (!this.modal) return;
 
+    const openBtn = document.getElementById("openRouteModal");
+    if (openBtn) openBtn.addEventListener("click", () => this.open());
+
     const closeBtn = document.getElementById("closeModal");
     if (closeBtn) closeBtn.addEventListener("click", () => this.close());
 
     const cancelBtn = document.getElementById("cancelRoute");
     if (cancelBtn) cancelBtn.addEventListener("click", () => this.close());
+
+    const closePanelBtn = document.getElementById("closeRouteInfo");
+    if (closePanelBtn) {
+        closePanelBtn.addEventListener("click", () => {
+            const panel = document.getElementById("routeInfoPanel");
+            if (panel) panel.style.display = "none";
+        });
+    }
 
     this.modal.addEventListener("click", (e) => {
       if (e.target === this.modal) this.close();
@@ -79,8 +82,6 @@ class RouteModal {
       });
     });
 
-    // --- ВАЖНОЕ ИСПРАВЛЕНИЕ: Безопасная инициализация модулей ---
-    
     if (window.RouteModalActivities && typeof window.RouteModalActivities.init === 'function') {
         window.RouteModalActivities.init(this);
     } else {
@@ -93,12 +94,10 @@ class RouteModal {
         console.warn('[RouteModal] Waypoints module missing');
     }
 
-    // Поддержка и старого Builder, и нового RouteBuilder
     if (window.RouteModalBuilder && typeof window.RouteModalBuilder.init === 'function') {
         window.RouteModalBuilder.init(this);
     } else if (window.RouteBuilder && typeof window.RouteBuilder.init === 'function') {
-        // Если используется новый билдер, просто инициализируем его
-        // Он сам найдет кнопку
+        window.RouteBuilder.init(this);
     }
 
     if (window.RouteModalYandex && typeof window.RouteModalYandex.init === 'function') {
@@ -223,5 +222,4 @@ class RouteModal {
   }
 }
 
-// Инициализация
 window.routeModal = new RouteModal();

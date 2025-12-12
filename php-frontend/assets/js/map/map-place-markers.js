@@ -1,11 +1,3 @@
-/**
- * Map Place Markers Component
- * Manages interactive markers for places on the map
- * - Creates numbered markers for each place
- * - Shows popups with place information
- * - Handles click events to navigate to places
- */
-
 class MapPlaceMarkers {
     constructor(map) {
         this.map = map;
@@ -23,21 +15,18 @@ class MapPlaceMarkers {
     }
     
     init() {
-        // Subscribe to route updates
         window.EventBus?.on('route:updated', (routeData) => {
             if (routeData && routeData.places) {
                 this.setPlaces(routeData.places);
             }
         });
         
-        // Subscribe to place selection
         window.EventBus?.on('place:selected', (data) => {
             if (data && data.place) {
                 this.focusOnPlace(data.index);
             }
         });
         
-        // Subscribe to place changes
         window.EventBus?.on('place:changed', (data) => {
             if (data) {
                 this.updateMarker(data.index, data.place);
@@ -45,9 +34,6 @@ class MapPlaceMarkers {
         });
     }
     
-    /**
-     * Set places and create markers
-     */
     setPlaces(places) {
         this.places = places;
         this.clearMarkers();
@@ -55,9 +41,6 @@ class MapPlaceMarkers {
         console.log(`[MapPlaceMarkers] Created ${places.length} markers`);
     }
     
-    /**
-     * Clear all markers from map
-     */
     clearMarkers() {
         this.markers.forEach(marker => {
             this.map.geoObjects.remove(marker);
@@ -66,30 +49,50 @@ class MapPlaceMarkers {
         this.popups = [];
     }
     
-    /**
-     * Create markers for all places
-     */
     createMarkers() {
+        const coordsMap = new Map();
+        
         this.places.forEach((place, index) => {
-            this.createMarker(place, index);
+            const key = `${place.coordinates[0].toFixed(5)},${place.coordinates[1].toFixed(5)}`;
+            
+            if (coordsMap.has(key)) {
+                coordsMap.get(key).push(index);
+            } else {
+                coordsMap.set(key, [index]);
+            }
         });
         
-        // Fit map to show all markers
+        this.places.forEach((place, index) => {
+            const key = `${place.coordinates[0].toFixed(5)},${place.coordinates[1].toFixed(5)}`;
+            const overlapping = coordsMap.get(key);
+            const offsetIndex = overlapping.indexOf(index);
+            
+            this.createMarker(place, index, offsetIndex, overlapping.length);
+        });
+        
         if (this.markers.length > 0) {
             this.fitBounds();
         }
     }
     
-    /**
-     * Create a single marker
-     */
-    createMarker(place, index) {
-        const coords = place.coordinates;
-        const markerColor = place.marker?.color || '#2E86DE';
-        const markerNumber = place.marker?.number || (index + 1);
-        const isStart = index === 0;
+    createMarker(place, index, offsetIndex, totalOverlapping) {
+        let coords = [...place.coordinates];
         
-        // Create placemark with custom icon
+        if (totalOverlapping > 1) {
+            const angle = (Math.PI * 2 * offsetIndex) / totalOverlapping;
+            const offsetDistance = 0.0002;
+            coords[0] += Math.cos(angle) * offsetDistance;
+            coords[1] += Math.sin(angle) * offsetDistance;
+        }
+        
+        const markerColor = this.getMarkerColor(place, index);
+        const markerNumber = index + 1;
+        const isStart = place.type === 'start';
+        const isEnd = place.type === 'end';
+        
+        const iconSize = isStart || isEnd ? [50, 50] : [40, 40];
+        const iconOffset = isStart || isEnd ? [-25, -50] : [-20, -40];
+        
         const placemark = new ymaps.Placemark(
             coords,
             {
@@ -97,27 +100,25 @@ class MapPlaceMarkers {
                 balloonContentBody: `
                     <div class="marker-balloon">
                         ${place.address ? `<p class="marker-address">${place.address}</p>` : ''}
-                        <p class="marker-order">Место #${markerNumber}</p>
+                        <p class="marker-order">Точка #${markerNumber}</p>
                         <button onclick="window.MapPlaceMarkersInstance.centerOnPlace(${index})" class="btn-center">
                             📍 Центрировать
                         </button>
                     </div>
                 `,
-                balloonContentFooter: `<small>Тип: ${place.type === 'must_visit' ? 'Обязательное' : 'Опциональное'}</small>`,
                 hintContent: place.name
             },
             {
-                preset: isStart ? 'islands#greenCircleDotIcon' : 'islands#blueCircleDotIcon',
                 iconLayout: 'default#imageWithContent',
-                iconImageHref: this.createMarkerSVG(markerNumber, markerColor, isStart),
-                iconImageSize: [40, 40],
-                iconImageOffset: [-20, -40],
+                iconImageHref: this.createMarkerSVG(markerNumber, markerColor, isStart, isEnd),
+                iconImageSize: iconSize,
+                iconImageOffset: iconOffset,
                 iconContentOffset: [0, 0],
-                hideIconOnBalloonOpen: false
+                hideIconOnBalloonOpen: false,
+                zIndex: isStart || isEnd ? 1000 : 500 + index
             }
         );
         
-        // Click handler
         placemark.events.add('click', () => {
             console.log(`[MapPlaceMarkers] Marker clicked: ${place.name}`);
             window.StateManager?.selectPlace(index);
@@ -128,39 +129,47 @@ class MapPlaceMarkers {
         this.markers.push(placemark);
     }
     
-    /**
-     * Create SVG marker icon
-     */
-    createMarkerSVG(number, color, isStart) {
+    getMarkerColor(place, index) {
+        if (place.type === 'start') return '#4CAF50';
+        if (place.type === 'end') return '#FF5722';
+        
+        const colors = ['#2E86DE', '#764BA2', '#F857A6', '#FFA502', '#26de81'];
+        return colors[index % colors.length];
+    }
+    
+    createMarkerSVG(number, color, isStart, isEnd) {
+        const emoji = isStart ? '🏁' : isEnd ? '🏁' : number;
+        const size = isStart || isEnd ? 50 : 40;
+        const radius = isStart || isEnd ? 22 : 18;
+        const fontSize = isStart || isEnd ? 20 : 16;
+        
         const svg = `
-            <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">
-                <circle cx="20" cy="20" r="18" fill="${color}" stroke="white" stroke-width="3"/>
-                <text x="20" y="26" font-size="16" font-weight="bold" fill="white" text-anchor="middle">
-                    ${isStart ? '🏁' : number}
+            <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+                <circle cx="${size/2}" cy="${size/2}" r="${radius}" fill="${color}" stroke="white" stroke-width="3"/>
+                ${isStart || isEnd ? 
+                    `<circle cx="${size/2}" cy="${size/2}" r="${radius-3}" fill="none" stroke="white" stroke-width="1" stroke-dasharray="2,2"/>` 
+                    : ''}
+                <text x="${size/2}" y="${size/2 + fontSize/3}" font-size="${fontSize}" font-weight="bold" fill="white" text-anchor="middle">
+                    ${emoji}
                 </text>
             </svg>
         `;
         return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
     }
     
-    /**
-     * Update existing marker
-     */
     updateMarker(index, place) {
         if (index < 0 || index >= this.markers.length) return;
         
         const marker = this.markers[index];
         
-        // Update marker position
         marker.geometry.setCoordinates(place.coordinates);
         
-        // Update balloon content
         marker.properties.set({
             balloonContentHeader: `<strong>${place.name}</strong>`,
             balloonContentBody: `
                 <div class="marker-balloon">
                     ${place.address ? `<p class="marker-address">${place.address}</p>` : ''}
-                    <p class="marker-order">Место #${index + 1}</p>
+                    <p class="marker-order">Точка #${index + 1}</p>
                     <button onclick="window.MapPlaceMarkersInstance.centerOnPlace(${index})" class="btn-center">
                         📍 Центрировать
                     </button>
@@ -172,22 +181,17 @@ class MapPlaceMarkers {
         console.log(`[MapPlaceMarkers] Updated marker ${index}`);
     }
     
-    /**
-     * Focus on a specific place (zoom and center)
-     */
     focusOnPlace(index) {
         if (index < 0 || index >= this.markers.length) return;
         
         const marker = this.markers[index];
         const coords = marker.geometry.getCoordinates();
         
-        // Smooth pan and zoom
         this.map.setCenter(coords, 15, {
             duration: 500,
             checkZoomRange: true
         });
         
-        // Open balloon
         setTimeout(() => {
             marker.balloon.open();
         }, 600);
@@ -195,9 +199,6 @@ class MapPlaceMarkers {
         console.log(`[MapPlaceMarkers] Focused on place ${index}`);
     }
     
-    /**
-     * Center map on place (without zoom change)
-     */
     centerOnPlace(index) {
         if (index < 0 || index >= this.markers.length) return;
         
@@ -211,9 +212,6 @@ class MapPlaceMarkers {
         console.log(`[MapPlaceMarkers] Centered on place ${index}`);
     }
     
-    /**
-     * Fit map bounds to show all markers
-     */
     fitBounds() {
         if (this.markers.length === 0) return;
         
@@ -228,48 +226,38 @@ class MapPlaceMarkers {
         }
     }
     
-    /**
-     * Highlight a specific marker
-     */
     highlightMarker(index) {
         if (index < 0 || index >= this.markers.length) return;
         
-        // Reset all markers
         this.markers.forEach((marker, i) => {
             const place = this.places[i];
-            const color = place.marker?.color || '#2E86DE';
-            const number = place.marker?.number || (i + 1);
+            const color = this.getMarkerColor(place, i);
+            const number = i + 1;
+            const isStart = place.type === 'start';
+            const isEnd = place.type === 'end';
             
-            marker.options.set('iconImageHref', this.createMarkerSVG(number, color, i === 0));
+            marker.options.set('iconImageHref', this.createMarkerSVG(number, color, isStart, isEnd));
         });
         
-        // Highlight selected marker
         const place = this.places[index];
-        const number = place.marker?.number || (index + 1);
-        const highlightColor = '#FF6B6B'; // Red highlight
+        const number = index + 1;
+        const highlightColor = '#FF6B6B';
         
         this.markers[index].options.set(
             'iconImageHref', 
-            this.createMarkerSVG(number, highlightColor, index === 0)
+            this.createMarkerSVG(number, highlightColor, false, false)
         );
     }
     
-    /**
-     * Get marker by index
-     */
     getMarker(index) {
         return this.markers[index];
     }
     
-    /**
-     * Get all markers
-     */
     getMarkers() {
         return this.markers;
     }
 }
 
-// Will be initialized after map is ready
 window.MapPlaceMarkers = MapPlaceMarkers;
 
 console.log('[MapPlaceMarkers] Class loaded');
