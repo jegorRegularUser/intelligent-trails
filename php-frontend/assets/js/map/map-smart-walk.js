@@ -6,6 +6,7 @@ class MapSmartWalk {
         this.isBuilding = false;
         this.yandexRoutes = [];
         this.pathGeometries = new Map();
+        this.segmentDataArray = [];
         
         if (!this.map) {
             console.error('[MapSmartWalk] Map instance required');
@@ -28,6 +29,7 @@ class MapSmartWalk {
         
         this.clearRouteLines();
         this.pathGeometries.clear();
+        this.segmentDataArray = [];
         
         if (!routeData || !routeData.places || routeData.places.length < 2) {
             console.warn('[MapSmartWalk] Not enough places to build route');
@@ -41,7 +43,12 @@ class MapSmartWalk {
             await this.drawSegmentWithYandex(places[i], places[i + 1], i);
         }
         
-        setTimeout(() => this.fitMapToRoute(), 500);
+        setTimeout(() => {
+            this.fitMapToRoute();
+            if (window.MapRouteBuilder) {
+                window.MapRouteBuilder.updateSegmentData(this.segmentDataArray);
+            }
+        }, 500);
         
         console.log('[MapSmartWalk] Route visualization complete');
     }
@@ -52,19 +59,24 @@ class MapSmartWalk {
             const toCoords = toPlace.coordinates;
             const mode = toPlace.transport_mode || 'pedestrian';
             
-            console.log(`[MapSmartWalk] Segment ${segmentIndex + 1}: ${fromPlace.name} -> ${toPlace.name} (${mode})`);
+            console.log(`[MapSmartWalk] Segment ${segmentIndex + 1}: ${fromPlace.name} -> ${toPlace.name}`);
+            console.log(`  Transport mode: ${mode}`);
             console.log(`  From [lat,lon]: ${fromCoords}, To [lat,lon]: ${toCoords}`);
             
             const yandexMode = this.convertModeToYandex(mode);
+            console.log(`  Yandex routing mode: ${yandexMode}`);
             
-            const route = await ymaps.route(
-                [fromCoords, toCoords],
-                {
-                    mapStateAutoApply: false,
-                    routingMode: yandexMode,
-                    avoidTrafficJams: false
-                }
-            );
+            const routeOptions = {
+                mapStateAutoApply: false,
+                routingMode: yandexMode,
+                avoidTrafficJams: false
+            };
+            
+            if (yandexMode === 'masstransit') {
+                routeOptions.transferPenalty = 60;
+            }
+            
+            const route = await ymaps.route([fromCoords, toCoords], routeOptions);
             
             this.yandexRoutes.push(route);
             
@@ -81,7 +93,17 @@ class MapSmartWalk {
             const distance = firstPath.getLength();
             const duration = firstPath.getTime();
             
-            console.log(`  Distance: ${(distance / 1000).toFixed(2)} km, Time: ${(duration / 60).toFixed(0)} min`);
+            console.log(`  ✓ Distance: ${(distance / 1000).toFixed(2)} km, Time: ${(duration / 60).toFixed(0)} min`);
+            
+            const segmentData = {
+                index: segmentIndex,
+                distance: distance,
+                duration: duration,
+                mode: mode,
+                fromPlace: fromPlace.name,
+                toPlace: toPlace.name
+            };
+            this.segmentDataArray.push(segmentData);
             
             const geometryCoords = geometry.getCoordinates();
             const isOverlapping = this.checkPathOverlap(geometryCoords);
@@ -109,24 +131,10 @@ class MapSmartWalk {
             
             polyline.events.add('click', () => {
                 console.log(`[MapSmartWalk] Segment ${segmentIndex} clicked`);
-                window.EventBus?.emit('segment:clicked', { 
-                    index: segmentIndex, 
-                    from: fromPlace, 
-                    to: toPlace,
-                    distance: distance,
-                    duration: duration,
-                    mode: mode
-                });
+                window.EventBus?.emit('segment:clicked', segmentData);
             });
             
-            window.EventBus?.emit('segment:data', {
-                index: segmentIndex,
-                distance: distance,
-                duration: duration,
-                mode: mode
-            });
-            
-            console.log(`  Segment ${segmentIndex + 1} drawn successfully`);
+            console.log(`  ✓ Segment ${segmentIndex + 1} drawn successfully`);
             
         } catch (error) {
             console.error(`[MapSmartWalk] Error building segment ${segmentIndex}:`, error);
@@ -296,6 +304,7 @@ class MapSmartWalk {
         });
         this.routeLines = [];
         this.yandexRoutes = [];
+        this.segmentDataArray = [];
     }
     
     fitMapToRoute() {
@@ -337,6 +346,10 @@ class MapSmartWalk {
     
     getYandexRoutes() {
         return this.yandexRoutes;
+    }
+    
+    getSegmentData() {
+        return this.segmentDataArray;
     }
     
     formatDistance(meters) {

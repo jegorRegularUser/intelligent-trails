@@ -8,10 +8,6 @@ window.MapRouteBuilder = {
     init(mapInstance) {
         this.map = mapInstance;
         console.log('[MapRouteBuilder] Initialized');
-        
-        window.EventBus?.on('segment:data', (data) => {
-            this.segmentData.push(data);
-        });
     },
     
     async buildRoute(startPoint, placesByCategory, returnToStart, activities = []) {
@@ -154,45 +150,21 @@ window.MapRouteBuilder = {
         
         await this.geocodeAddresses(waypoints);
         
+        panel.style.display = 'flex';
+        
         setTimeout(() => {
+            const segmentData = window.MapSmartWalkInstance?.getSegmentData() || [];
+            this.segmentData = segmentData;
             this.updatePanelWithSegmentData(waypoints);
-        }, 1000);
-        
-        const statsDiv = document.getElementById('routeInfoStats');
-        const stagesDiv = document.getElementById('routeStagesList');
-        
-        if (statsDiv) {
-            const totalDistance = this.segmentData.reduce((sum, seg) => sum + (seg.distance || 0), 0);
-            const totalTime = this.segmentData.reduce((sum, seg) => sum + (seg.duration || 0), 0);
-            
-            statsDiv.innerHTML = `
-                <div class="route-stat">
-                    <span class="stat-icon">📍</span>
-                    <span class="stat-value">${waypoints.length}</span>
-                    <span class="stat-label">точек</span>
-                </div>
-                ${totalDistance > 0 ? `
-                <div class="route-stat">
-                    <span class="stat-icon">📏</span>
-                    <span class="stat-value">${(totalDistance / 1000).toFixed(1)}</span>
-                    <span class="stat-label">км</span>
-                </div>
-                ` : ''}
-                ${totalTime > 0 ? `
-                <div class="route-stat">
-                    <span class="stat-icon">⏱️</span>
-                    <span class="stat-value">${Math.round(totalTime / 60)}</span>
-                    <span class="stat-label">мин</span>
-                </div>
-                ` : ''}
-            `;
+        }, 1500);
+    },
+    
+    updateSegmentData(segmentDataArray) {
+        this.segmentData = segmentDataArray;
+        const state = window.StateManager?.getState();
+        if (state && state.route_data && state.route_data.places) {
+            this.updatePanelWithSegmentData(state.route_data.places);
         }
-        
-        if (stagesDiv) {
-            this.renderStages(stagesDiv, waypoints);
-        }
-        
-        panel.style.display = 'block';
     },
     
     async geocodeAddresses(waypoints) {
@@ -226,7 +198,36 @@ window.MapRouteBuilder = {
     },
     
     updatePanelWithSegmentData(waypoints) {
+        const statsDiv = document.getElementById('routeInfoStats');
         const stagesDiv = document.getElementById('routeStagesList');
+        
+        if (statsDiv) {
+            const totalDistance = this.segmentData.reduce((sum, seg) => sum + (seg.distance || 0), 0);
+            const totalTime = this.segmentData.reduce((sum, seg) => sum + (seg.duration || 0), 0);
+            
+            statsDiv.innerHTML = `
+                <div class="route-stat">
+                    <span class="stat-icon">📍</span>
+                    <span class="stat-value">${waypoints.length}</span>
+                    <span class="stat-label">точек</span>
+                </div>
+                ${totalDistance > 0 ? `
+                <div class="route-stat">
+                    <span class="stat-icon">📏</span>
+                    <span class="stat-value">${(totalDistance / 1000).toFixed(1)}</span>
+                    <span class="stat-label">км</span>
+                </div>
+                ` : ''}
+                ${totalTime > 0 ? `
+                <div class="route-stat">
+                    <span class="stat-icon">⏱️</span>
+                    <span class="stat-value">${Math.round(totalTime / 60)}</span>
+                    <span class="stat-label">мин</span>
+                </div>
+                ` : ''}
+            `;
+        }
+        
         if (stagesDiv) {
             this.renderStages(stagesDiv, waypoints);
         }
@@ -249,7 +250,7 @@ window.MapRouteBuilder = {
                     <button class="alt-btn" onclick="window.MapRouteBuilder.switchPlace('${point.category}', 'next')">→</button>
                 </div>` : '';
             
-            const segmentInfo = this.segmentData[index];
+            const segmentInfo = this.segmentData.find(s => s.index === index);
             const distanceInfo = segmentInfo && segmentInfo.distance ? 
                 `<div class="stage-distance">📏 ${this.formatDistance(segmentInfo.distance)}</div>` : '';
             const timeInfo = segmentInfo && segmentInfo.duration ? 
@@ -257,7 +258,7 @@ window.MapRouteBuilder = {
             const transportIcon = this.getTransportIcon(point.transport_mode);
             
             stagesHTML += `
-                <div class="route-stage" onclick="window.MapRouteBuilder.zoomToStage(${index})" style="cursor: pointer;">
+                <div class="route-stage" onclick="window.MapRouteBuilder.zoomToStage(${index})">
                     <div class="stage-number">${index + 1}</div>
                     <div class="stage-content">
                         <div class="stage-name">${icon} ${point.name}</div>
@@ -325,9 +326,11 @@ window.MapRouteBuilder = {
         const place = state.route_data.places[index];
         if (!place || !place.coordinates) return;
         
-        this.map.setCenter(place.coordinates, 16, {
-            duration: 500
-        });
+        if (this.map) {
+            this.map.setCenter(place.coordinates, 16, {
+                duration: 500
+            });
+        }
         
         document.querySelectorAll('.route-stage').forEach((el, i) => {
             if (i === index) {
@@ -336,6 +339,8 @@ window.MapRouteBuilder = {
                 el.style.backgroundColor = '';
             }
         });
+        
+        console.log(`[MapRouteBuilder] Zoomed to stage ${index}`);
     },
     
     async switchPlace(category, direction) {
