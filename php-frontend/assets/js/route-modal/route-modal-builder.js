@@ -2,7 +2,7 @@ window.RouteModalBuilder = {
     init(modalInstance) {
         this.modal = modalInstance;
         this.bindEvents();
-        console.log('[RouteModalBuilder] Initialized - NEW API');
+        console.log('[RouteModalBuilder] Initialized');
     },
 
     bindEvents() {
@@ -41,7 +41,7 @@ window.RouteModalBuilder = {
                 return;
             }
 
-            this.handleSuccess(data.start_point, placesData, data.return_to_start);
+            this.handleSuccess(data.start_point_yandex, placesData, data.return_to_start);
 
         } catch (error) {
             console.error('[RouteModalBuilder] Error:', error);
@@ -60,21 +60,23 @@ window.RouteModalBuilder = {
     },
 
     collectSmartData() {
-        const startCoords = this.getCoordsFromInput('smartStartPoint');
+        const startCoordsYandex = this.getCoordsFromInput('smartStartPoint');
         
-        if (!startCoords) {
+        if (!startCoordsYandex) {
             this.modal.showNotification('Укажите начальную точку', 'error');
             return null;
         }
 
-        console.log('[RouteModalBuilder] Start point:', startCoords);
+        console.log('[RouteModalBuilder] Start point [lat,lon]:', startCoordsYandex);
+
+        const startCoordsBackend = [startCoordsYandex[1], startCoordsYandex[0]];
+        console.log('[RouteModalBuilder] Start point for backend [lon,lat]:', startCoordsBackend);
 
         const categories = [];
 
         this.modal.activities.forEach((act) => {
             if (act.type === 'place' && act.category) {
                 categories.push(act.category);
-                console.log('[RouteModalBuilder] Added category:', act.category);
             }
         });
 
@@ -86,10 +88,9 @@ window.RouteModalBuilder = {
         const routeEndType = document.querySelector('input[name="routeEnd"]:checked')?.value;
         const return_to_start = routeEndType === 'return';
 
-        console.log('[RouteModalBuilder] Return to start:', return_to_start);
-
         return {
-            start_point: startCoords,
+            start_point: startCoordsBackend,
+            start_point_yandex: startCoordsYandex,
             categories: categories,
             return_to_start: return_to_start,
             radius_m: 5000
@@ -144,21 +145,32 @@ window.RouteModalBuilder = {
         return result;
     },
 
-    handleSuccess(startPoint, placesData, returnToStart) {
+    handleSuccess(startPointYandex, placesData, returnToStart) {
         console.log('[RouteModalBuilder] Places found successfully');
+        console.log('[RouteModalBuilder] Converting backend places [lon,lat] to Yandex format [lat,lon]...');
+        
+        const convertedPlacesData = {};
+        for (const [category, places] of Object.entries(placesData.places_by_category)) {
+            convertedPlacesData[category] = places.map(place => ({
+                ...place,
+                coords: [place.coords[1], place.coords[0]]
+            }));
+        }
+        
+        console.log('[RouteModalBuilder] Conversion complete');
         
         this.modal.close();
 
         if (window.StateManager) {
             window.StateManager.setState({
-                places_by_category: placesData.places_by_category,
-                start_point: startPoint,
+                places_by_category: convertedPlacesData,
+                start_point: startPointYandex,
                 return_to_start: returnToStart
             });
         }
 
         if (window.MapRouteBuilder) {
-            window.MapRouteBuilder.buildRoute(startPoint, placesData.places_by_category, returnToStart);
+            window.MapRouteBuilder.buildRoute(startPointYandex, convertedPlacesData, returnToStart);
         } else {
             console.error('[RouteModalBuilder] MapRouteBuilder not found');
         }
@@ -173,3 +185,4 @@ window.RouteModalBuilder = {
 
 window.RouteBuilder = window.RouteModalBuilder;
 
+console.log('[RouteModalBuilder] Module loaded');

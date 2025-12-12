@@ -186,11 +186,9 @@ class YandexStaticRouter:
                             name = title.get("text", "") if isinstance(title, dict) else str(title)
                             subtitle_text = subtitle.get("text", "") if isinstance(subtitle, dict) else str(subtitle)
                             
-                            place_category = category
                             address = ""
                             if "·" in subtitle_text:
                                 parts = subtitle_text.split("·")
-                                place_category = parts[0].strip()
                                 address = parts[1].strip() if len(parts) > 1 else subtitle_text
                             else:
                                 address = subtitle_text
@@ -210,7 +208,7 @@ class YandexStaticRouter:
                                 "name": name,
                                 "coords": coords,
                                 "address": address,
-                                "category": place_category,
+                                "category": category,
                                 "distance": round(distance_m),
                                 "distance_text": f"{int(distance_m)}м"
                             }

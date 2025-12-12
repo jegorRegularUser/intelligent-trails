@@ -1,7 +1,3 @@
-/**
- * Интеграция с Yandex Maps API: автоподсказки и геокодирование
- * ИСПРАВЛЕНО: Добавлена возможность установки начальной точки кликом на карту
- */
 window.RouteModalYandex = {
   modalInstance: null,
   startPointMarker: null,
@@ -28,7 +24,6 @@ window.RouteModalYandex = {
       new ymaps.SuggestView(input, { results: 5 });
     }
     
-    // ✅ Когда пользователь вводит адрес, геокодируем его
     input.addEventListener('blur', async () => {
       const address = input.value.trim();
       if (address && !input.dataset.coords) {
@@ -36,26 +31,21 @@ window.RouteModalYandex = {
           const coords = await this.geocodeAddress(address);
           if (coords) {
             input.dataset.coords = coords.join(',');
-            console.log(`[RouteModalYandex] ✅ Auto-geocoded ${inputId}:`, coords);
+            console.log(`[RouteModalYandex] Geocoded ${inputId}: [lat,lon] = ${coords}`);
             
-            // Добавляем визуальную индикацию
             if (inputId.includes('Start')) {
               input.style.borderColor = '#4CAF50';
               input.title = `Координаты: ${coords[0].toFixed(4)}, ${coords[1].toFixed(4)}`;
             }
           }
         } catch (error) {
-          console.error(`[RouteModalYandex] ✖️ Failed to geocode ${inputId}:`, error);
+          console.error(`[RouteModalYandex] Failed to geocode ${inputId}:`, error);
         }
       }
     });
   },
 
-  /**
-   * ✅ НОВОЕ: Настройка клика по карте для установки начальной точки
-   */
   setupMapClickHandler() {
-    // Подписываемся на события от кнопок "Выбрать на карте"
     const pickStartBtn = document.getElementById('pickStartPointBtn');
     const pickEndBtn = document.getElementById('pickEndPointBtn');
     
@@ -72,11 +62,8 @@ window.RouteModalYandex = {
     }
   },
 
-  /**
-   * Включает режим выбора точки на карте
-   */
   enableMapPicker(pointType) {
-    console.log(`[RouteModalYandex] 📍 Enabling map picker for ${pointType} point`);
+    console.log(`[RouteModalYandex] Enabling map picker for ${pointType} point`);
     
     if (!window.MapCore || !window.MapCore.map) {
       alert('Карта ещё не загрузилась');
@@ -85,15 +72,12 @@ window.RouteModalYandex = {
     
     const map = window.MapCore.map;
     
-    // Создаём одноразовый обработчик клика
     const clickHandler = async (e) => {
       const coords = e.get('coords');
-      console.log(`[RouteModalYandex] ✅ Map clicked at:`, coords);
+      console.log(`[RouteModalYandex] Map clicked at: [lat,lon] = ${coords}`);
       
-      // Получаем адрес через геокодер
       const address = await this.reverseGeocode(coords);
       
-      // Устанавливаем значение в инпут
       const inputId = pointType === 'start' ? 'smartStartPoint' : 'smartEndPoint';
       const input = document.getElementById(inputId);
       
@@ -103,10 +87,9 @@ window.RouteModalYandex = {
         input.style.borderColor = '#4CAF50';
         input.title = `Координаты: ${coords[0].toFixed(4)}, ${coords[1].toFixed(4)}`;
         
-        console.log(`[RouteModalYandex] ✅ ${inputId} set to:`, address, coords);
+        console.log(`[RouteModalYandex] ${inputId} set to: ${address}, coords: ${coords}`);
       }
       
-      // Добавляем маркер на карту
       if (this.startPointMarker) {
         map.geoObjects.remove(this.startPointMarker);
       }
@@ -121,23 +104,19 @@ window.RouteModalYandex = {
       
       map.geoObjects.add(this.startPointMarker);
       
-      // Отключаем обработчик
       map.events.remove('click', clickHandler);
       map.options.set('cursor', 'grab');
       
-      // Показываем уведомление
       if (this.modalInstance && this.modalInstance.showNotification) {
-        this.modalInstance.showNotification(`✅ ${pointType === 'start' ? 'Начальная' : 'Конечная'} точка установлена`, 'success');
+        this.modalInstance.showNotification(`${pointType === 'start' ? 'Начальная' : 'Конечная'} точка установлена`, 'success');
       }
     };
     
-    // Подписываемся на клик
     map.events.add('click', clickHandler);
     map.options.set('cursor', 'crosshair');
     
-    // Уведомление
     if (this.modalInstance && this.modalInstance.showNotification) {
-      this.modalInstance.showNotification(`📍 Кликните на карте, чтобы выбрать ${pointType === 'start' ? 'начальную' : 'конечную'} точку`, 'info');
+      this.modalInstance.showNotification(`Кликните на карте, чтобы выбрать ${pointType === 'start' ? 'начальную' : 'конечную'} точку`, 'info');
     }
   },
 
