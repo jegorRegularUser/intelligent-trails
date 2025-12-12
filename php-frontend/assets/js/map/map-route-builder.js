@@ -17,7 +17,7 @@ window.MapRouteBuilder = {
         
         this.placesData = placesByCategory;
         
-        const selectedPlaces = this.selectFirstPlaceFromEachCategory(placesByCategory);
+        const selectedPlaces = this.selectActivePlaces(placesByCategory);
         
         if (selectedPlaces.length === 0) {
             console.error('[MapRouteBuilder] No places selected');
@@ -58,25 +58,30 @@ window.MapRouteBuilder = {
         console.log('[MapRouteBuilder] Route built successfully');
     },
     
-    selectFirstPlaceFromEachCategory(placesByCategory) {
+    selectActivePlaces(placesByCategory) {
         const selected = [];
-        this.activePlaces = {};
+        
+        if (Object.keys(this.activePlaces).length === 0) {
+            for (const category in placesByCategory) {
+                this.activePlaces[category] = 0;
+            }
+        }
         
         for (const [category, places] of Object.entries(placesByCategory)) {
             if (places && places.length > 0) {
-                const firstPlace = places[0];
+                const activeIndex = this.activePlaces[category] || 0;
+                const selectedPlace = places[activeIndex];
+                
                 selected.push({
-                    name: firstPlace.name,
-                    coordinates: firstPlace.coords,
-                    address: firstPlace.address,
+                    name: selectedPlace.name,
+                    coordinates: selectedPlace.coords,
+                    address: selectedPlace.address,
                     category: category,
-                    distance: firstPlace.distance,
+                    distance: selectedPlace.distance,
                     transport_mode: 'pedestrian'
                 });
                 
-                this.activePlaces[category] = 0;
-                
-                console.log(`[MapRouteBuilder] Selected from ${category}: ${firstPlace.name}`);
+                console.log(`[MapRouteBuilder] Selected from ${category} [${activeIndex + 1}/${places.length}]: ${selectedPlace.name}`);
             }
         }
         
@@ -195,6 +200,7 @@ window.MapRouteBuilder = {
         this.activePlaces[category] = newIndex;
         
         console.log(`[MapRouteBuilder] Switched from index ${currentIndex} to ${newIndex}`);
+        console.log(`[MapRouteBuilder] New place: ${places[newIndex].name}`);
         
         const state = window.StateManager.getState();
         const startPoint = state.start_point;
