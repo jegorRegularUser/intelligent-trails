@@ -1,7 +1,7 @@
 class MapSmartWalk {
     constructor(map) {
         this.map = map;
-        this.routeLines = [];
+        this.multiRoutes = [];
         this.currentRouteData = null;
         this.segmentDataArray = [];
         
@@ -59,15 +59,22 @@ class MapSmartWalk {
         try {
             const routingMode = this.convertModeToYandex(mode);
             
-            // Создаем multiRoute для получения координат маршрута
+            // Создаем multiRoute - его и оставляем на карте!
             const multiRoute = new ymaps.multiRouter.MultiRoute({
                 referencePoints: [fromCoords, toCoords],
                 params: {
                     routingMode: routingMode
                 }
             }, {
-                boundsAutoApply: false
+                boundsAutoApply: false,
+                // Убираем только метки A и B
+                wayPointStartIconVisible: false,
+                wayPointFinishIconVisible: false
             });
+            
+            // Добавляем multiRoute на карту - он сам нарисует красивый маршрут
+            this.map.geoObjects.add(multiRoute);
+            this.multiRoutes.push(multiRoute);
             
             // Ждем построения маршрута
             await new Promise((resolve, reject) => {
@@ -86,7 +93,7 @@ class MapSmartWalk {
                 });
             });
             
-            // Получаем активный маршрут
+            // Получаем активный маршрут для сохранения данных
             const activeRoute = multiRoute.getActiveRoute();
             if (!activeRoute) {
                 console.warn(`[MapSmartWalk] No active route for segment ${segmentIndex}`);
@@ -99,21 +106,6 @@ class MapSmartWalk {
             
             console.log(`  ✓ Distance: ${(distance / 1000).toFixed(2)} km, Time: ${(duration / 60).toFixed(0)} min`);
             
-            // Получаем координаты
-            const geometry = activeRoute.geometry;
-            if (!geometry) {
-                console.warn(`[MapSmartWalk] No geometry for segment ${segmentIndex}`);
-                return;
-            }
-            
-            const coordinates = geometry.getCoordinates();
-            if (!coordinates || coordinates.length === 0) {
-                console.warn(`[MapSmartWalk] No coordinates found for segment ${segmentIndex}`);
-                return;
-            }
-            
-            console.log(`  ✓ Got ${coordinates.length} coordinate points`);
-            
             // Сохраняем данные сегмента
             const segmentData = {
                 index: segmentIndex,
@@ -125,61 +117,11 @@ class MapSmartWalk {
             };
             this.segmentDataArray.push(segmentData);
             
-            // Создаем свою полилинию
-            const polyline = new ymaps.Polyline(
-                coordinates,
-                {
-                    balloonContent: this.createBalloonContent(fromPlace, toPlace, distance, duration, mode),
-                    hintContent: `${fromPlace.name} → ${toPlace.name}`
-                },
-                {
-                    strokeColor: this.getModeColor(mode),
-                    strokeWidth: this.getStrokeWidth(mode),
-                    strokeOpacity: 0.7,
-                    strokeStyle: this.getModeStyle(mode),
-                    zIndex: 100 + segmentIndex
-                }
-            );
-            
-            this.map.geoObjects.add(polyline);
-            this.routeLines.push(polyline);
-            
-            polyline.events.add('click', () => {
-                window.EventBus?.emit('segment:clicked', segmentData);
-            });
-            
             console.log(`  ✓ Segment drawn successfully`);
             
         } catch (error) {
             console.error(`[MapSmartWalk] Error building segment ${segmentIndex}:`, error);
         }
-    }
-    
-    createBalloonContent(fromPlace, toPlace, distance, duration, mode) {
-        const icon = this.getModeIcon(mode);
-        const modeName = this.getModeName(mode);
-        
-        return `
-            <div style="padding: 10px; min-width: 250px;">
-                <div style="font-weight: 600; font-size: 16px; margin-bottom: 10px; color: #2c3e50;">
-                    ${fromPlace.name} → ${toPlace.name}
-                </div>
-                <div style="display: flex; flex-direction: column; gap: 8px; font-size: 14px;">
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <span style="font-size: 20px;">${icon}</span>
-                        <span style="color: #555;">${modeName}</span>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <span style="font-size: 18px;">📏</span>
-                        <span style="color: #555;">${this.formatDistance(distance)}</span>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <span style="font-size: 18px;">⏱️</span>
-                        <span style="color: #555;">${this.formatDuration(duration)}</span>
-                    </div>
-                </div>
-            </div>
-        `;
     }
     
     convertModeToYandex(mode) {
@@ -193,24 +135,6 @@ class MapSmartWalk {
             'bicycle': 'bicycle'
         };
         return mapping[mode] || 'pedestrian';
-    }
-    
-    getModeColor(mode) {
-        const colors = {
-            'pedestrian': '#2E86DE',
-            'auto': '#EE5A6F',
-            'masstransit': '#26de81',
-            'bicycle': '#FFA502'
-        };
-        return colors[mode] || '#2E86DE';
-    }
-    
-    getStrokeWidth(mode) {
-        return mode === 'auto' ? 5 : 6;
-    }
-    
-    getModeStyle(mode) {
-        return mode === 'auto' ? 'solid' : '5 5';
     }
     
     getModeIcon(mode) {
@@ -234,17 +158,17 @@ class MapSmartWalk {
     }
     
     clearRouteLines() {
-        console.log(`[MapSmartWalk] Clearing ${this.routeLines.length} routes`);
+        console.log(`[MapSmartWalk] Clearing ${this.multiRoutes.length} routes`);
         
-        this.routeLines.forEach(line => {
-            this.map.geoObjects.remove(line);
+        this.multiRoutes.forEach(route => {
+            this.map.geoObjects.remove(route);
         });
-        this.routeLines = [];
+        this.multiRoutes = [];
         this.segmentDataArray = [];
     }
     
     fitMapToRoute() {
-        if (this.routeLines.length === 0) {
+        if (this.multiRoutes.length === 0) {
             console.warn('[MapSmartWalk] No routes to fit');
             return;
         }
