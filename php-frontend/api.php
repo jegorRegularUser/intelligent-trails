@@ -1,9 +1,9 @@
 <?php
 require_once "config.php";
 
-// Включаем логирование ошибок
+// Включаем логирование ошибок ТОЛЬКО в файл
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', 0); // ВАЖНО: не выводим ошибки в браузер
 ini_set('log_errors', 1);
 ini_set('error_log', __DIR__ . '/api_errors.log');
 
@@ -25,7 +25,6 @@ function logDebug($message, $data = null) {
         $logMessage .= " | Data: " . json_encode($data, JSON_UNESCAPED_UNICODE);
     }
     error_log($logMessage);
-    echo json_encode(['log' => $message, 'data' => $data]) . "\n";
 }
 
 function callBackendAPI($endpoint, $method = 'GET', $data = null) {
