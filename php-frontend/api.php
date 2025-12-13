@@ -1,5 +1,5 @@
 <?php
-session_start();
+// НЕ СТАРТУЕМ СЕССИЮ ЗДЕСЬ - она уже стартует в config.php!
 require_once "config.php";
 
 error_reporting(E_ALL);
@@ -106,7 +106,6 @@ function saveRouteToDatabase($userId, $routeType, $routeData, $result) {
     
     error_log("[API] Saving: start=$startPoint, categories=$categories, places=$placesCount");
     
-    // ВАЖНО: 16 полей в INSERT = 16 параметров
     $stmt = $link->prepare("INSERT INTO saved_routes (
         user_id, route_name, route_type, start_point, end_point, categories, 
         time_limit, transport_mode, return_to_start, min_places_per_category,
@@ -118,25 +117,23 @@ function saveRouteToDatabase($userId, $routeType, $routeData, $result) {
         return null;
     }
     
-    // ВАЖНО: "isssssisisisdii" - 16 символов для 16 параметров
-    // i = integer, s = string, d = double
-    $stmt->bind_param("isssssisisssdii", 
-        $userId,              // i
-        $routeName,           // s
-        $routeType,           // s
-        $startPoint,          // s
-        $endPoint,            // s
-        $categories,          // s
-        $timeLimit,           // i
-        $transportMode,       // s
-        $returnToStart,       // i
-        $minPlacesPerCategory,// s
-        $pace,                // i - ОШИБКА БЫЛА ТУТ! pace это STRING, а не INT
-        $timeStrictness,      // s
-        $routeDataJson,       // d
-        $totalDistance,       // i
-        $totalTime,           // i
-        $placesCount          // i
+    $stmt->bind_param("isssssisisisdii", 
+        $userId,
+        $routeName,
+        $routeType,
+        $startPoint,
+        $endPoint,
+        $categories,
+        $timeLimit,
+        $transportMode,
+        $returnToStart,
+        $minPlacesPerCategory,
+        $pace,
+        $timeStrictness,
+        $routeDataJson,
+        $totalDistance,
+        $totalTime,
+        $placesCount
     );
     
     if (!$stmt->execute()) {
@@ -156,8 +153,6 @@ $action = $_GET['action'] ?? $_POST['action'] ?? '';
 
 error_log("[API] ====== NEW REQUEST ======");
 error_log("[API] Action: $action");
-error_log("[API] Method: " . $_SERVER['REQUEST_METHOD']);
-error_log("[API] Logged in: " . (isset($_SESSION["loggedin"]) && $_SESSION["loggedin"] ? 'YES' : 'NO'));
 
 switch ($action) {
     case 'rebuild_route_segment':
@@ -184,13 +179,11 @@ switch ($action) {
         error_log("[API] 🚶 Processing smart walk");
         
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            error_log("[API] ❌ Wrong method");
             echo json_encode(['success' => false, 'error' => 'Method not allowed']);
             exit;
         }
         
         $input = json_decode(file_get_contents('php://input'), true);
-        error_log("[API] Input: " . json_encode($input));
         
         $routeId = null;
         
