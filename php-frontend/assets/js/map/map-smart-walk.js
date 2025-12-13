@@ -61,135 +61,129 @@ async drawSegmentWithYandex(fromPlace, toPlace, segmentIndex) {
         
         console.log(`[MapSmartWalk] Segment ${segmentIndex + 1}: ${fromPlace.name} -> ${toPlace.name}`);
         console.log(`  Transport mode FROM toPlace.transport_mode: "${mode}"`);
-        console.log(`  From [lat,lon]: ${fromCoords}, To [lat,lon]: ${toCoords}`);
         
         const yandexMode = this.convertModeToYandex(mode);
-        console.log(`  Converted Yandex mode: "${yandexMode}"`);
+        console.log(`  Yandex mode: "${yandexMode}"`);
         
-        // ПРАВИЛЬНЫЙ способ для Yandex Maps API 2.1 - использовать multiRouter!
-        const multiRoute = new ymaps.multiRouter.MultiRoute({
-            referencePoints: [fromCoords, toCoords],
-            params: {
-                routingMode: yandexMode
-            }
-        }, {
-            boundsAutoApply: false,
-            wayPointVisible: false,
-            pinVisible: false
-        });
-        
-        console.log(`  ✓ Created multiRoute with mode: "${yandexMode}"`);
-        
-        // Ждем пока маршрут построится
-        await new Promise((resolve, reject) => {
-            multiRoute.model.events.add('requestsuccess', () => {
-                console.log(`  ✓ Route built successfully`);
-                resolve();
-            });
-            
-            multiRoute.model.events.add('requestfail', (error) => {
-                console.error(`  ✗ Route build failed:`, error);
-                reject(error);
-            });
-        });
-        
-        this.yandexRoutes.push(multiRoute);
-        
-        const routes = multiRoute.getRoutes();
-        if (routes.getLength() === 0) {
-            console.warn(`[MapSmartWalk] No routes found for segment ${segmentIndex}`);
-            this.drawFallbackLine(fromCoords, toCoords, mode, segmentIndex);
-            return;
-        }
-        
-        const activeRoute = multiRoute.getActiveRoute();
-        if (!activeRoute) {
-            console.warn(`[MapSmartWalk] No active route for segment ${segmentIndex}`);
-            this.drawFallbackLine(fromCoords, toCoords, mode, segmentIndex);
-            return;
-        }
-        
-        // ПРАВИЛЬНЫЙ способ получить distance и duration
-        const distance = activeRoute.properties.get('distance').value;
-        const duration = activeRoute.properties.get('duration').value;
-        
-        const speed = ((distance / 1000) / (duration / 3600)).toFixed(1);
-        console.log(`  ✓ Distance: ${(distance / 1000).toFixed(2)} km, Time: ${(duration / 60).toFixed(0)} min, Speed: ${speed} km/h`);
-        
-        const segmentData = {
-            index: segmentIndex,
-            distance: distance,
-            duration: duration,
-            mode: mode,
-            fromPlace: fromPlace.name,
-            toPlace: toPlace.name
-        };
-        this.segmentDataArray.push(segmentData);
-        
-        // ПРАВИЛЬНЫЙ способ получить координаты пути
-        const paths = activeRoute.getPaths();
-        if (paths.getLength() === 0) {
-            console.warn(`[MapSmartWalk] No paths in active route for segment ${segmentIndex}`);
-            this.drawFallbackLine(fromCoords, toCoords, mode, segmentIndex);
-            return;
-        }
-        
-        const firstPath = paths.get(0);
-        const segments = firstPath.getSegments();
-        
-        // Собираем все координаты из всех сегментов
-        let allCoords = [];
-        for (let i = 0; i < segments.getLength(); i++) {
-            const segment = segments.get(i);
-            const segmentCoords = segment.getCoordinates();
-            if (segmentCoords && segmentCoords.length > 0) {
-                allCoords = allCoords.concat(segmentCoords);
-            }
-        }
-        
-        if (allCoords.length === 0) {
-            console.warn(`[MapSmartWalk] No coordinates found for segment ${segmentIndex}`);
-            this.drawFallbackLine(fromCoords, toCoords, mode, segmentIndex);
-            return;
-        }
-        
-        console.log(`  ✓ Got ${allCoords.length} coordinate points`);
-        
-        const isOverlapping = this.checkPathOverlap(allCoords);
-        const offsetCoords = isOverlapping ? this.applyPathOffset(allCoords, segmentIndex) : allCoords;
-        
-        const polyline = new ymaps.Polyline(
-            offsetCoords,
+        // ДЛЯ YANDEX API 2.1 нужно передавать точки как объекты с type!
+        const points = [
             {
-                balloonContent: this.createSimpleBalloon(fromPlace, toPlace, distance, duration, mode),
-                hintContent: `${fromPlace.name} → ${toPlace.name}`
+                type: 'wayPoint',
+                point: fromCoords
             },
             {
-                strokeColor: this.getModeColor(mode, segmentIndex),
-                strokeWidth: this.getStrokeWidth(mode, isOverlapping, segmentIndex),
-                strokeOpacity: this.getStrokeOpacity(isOverlapping, segmentIndex),
-                strokeStyle: this.getModeStyle(mode, isOverlapping, segmentIndex),
-                zIndex: 100 + segmentIndex
+                type: 'wayPoint',
+                point: toCoords
             }
-        );
+        ];
         
-        this.map.geoObjects.add(polyline);
-        this.routeLines.push(polyline);
+        const routeOptions = {
+            mapStateAutoApply: false,
+            multiRoute: true
+        };
         
-        this.pathGeometries.set(segmentIndex, allCoords);
-        
-        polyline.events.add('click', () => {
-            console.log(`[MapSmartWalk] Segment ${segmentIndex} clicked`);
-            window.EventBus?.emit('segment:clicked', segmentData);
-        });
-        
-        console.log(`  ✓ Segment ${segmentIndex + 1} drawn successfully with mode "${yandexMode}"`);
+        //КРИТИЧНО! Для пешеходного режима используем специальный параметр
+        if (yandexMode === 'pedestrian') {
+            routeOptions.avoidTrafficJams = false;
+            // Используем pedestrian router
+            const route = await ymaps.route(points, {
+                ...routeOptions,
+                routingMode: 'pedestrian'
+            });
+            
+            await this.processRoute(route, fromPlace, toPlace, mode, segmentIndex, fromCoords, toCoords);
+            
+        } else if (yandexMode === 'auto') {
+            routeOptions.avoidTrafficJams = false;
+            
+            const route = await ymaps.route([fromCoords, toCoords], {
+                ...routeOptions,
+                routingMode: 'auto'
+            });
+            
+            await this.processRoute(route, fromPlace, toPlace, mode, segmentIndex, fromCoords, toCoords);
+            
+        } else {
+            // Для остальных режимов
+            const route = await ymaps.route([fromCoords, toCoords], {
+                ...routeOptions,
+                routingMode: yandexMode
+            });
+            
+            await this.processRoute(route, fromPlace, toPlace, mode, segmentIndex, fromCoords, toCoords);
+        }
         
     } catch (error) {
         console.error(`[MapSmartWalk] Error building segment ${segmentIndex}:`, error);
-        this.drawFallbackLine(fromPlace.coordinates, toPlace.coordinates, fromPlace.transport_mode || 'pedestrian', segmentIndex);
+        this.drawFallbackLine(fromPlace.coordinates, toPlace.coordinates, mode, segmentIndex);
     }
 }
+
+async processRoute(route, fromPlace, toPlace, mode, segmentIndex, fromCoords, toCoords) {
+    this.yandexRoutes.push(route);
+    
+    const paths = route.getPaths();
+    const firstPath = paths.get(0);
+    
+    if (!firstPath) {
+        console.warn(`[MapSmartWalk] No path found`);
+        this.drawFallbackLine(fromCoords, toCoords, mode, segmentIndex);
+        return;
+    }
+    
+    const geometry = firstPath.geometry;
+    const distance = firstPath.getLength();
+    const duration = firstPath.getTime();
+    
+    const speed = ((distance / 1000) / (duration / 3600)).toFixed(1);
+    console.log(`  ✓ Distance: ${(distance / 1000).toFixed(2)} km, Time: ${(duration / 60).toFixed(0)} min, Speed: ${speed} km/h`);
+    
+    if (mode === 'pedestrian' && parseFloat(speed) > 10) {
+        console.warn(`  ⚠️ Speed too high for pedestrian mode! Falling back to straight line.`);
+        this.drawFallbackLine(fromCoords, toCoords, mode, segmentIndex);
+        return;
+    }
+    
+    const segmentData = {
+        index: segmentIndex,
+        distance: distance,
+        duration: duration,
+        mode: mode,
+        fromPlace: fromPlace.name,
+        toPlace: toPlace.name
+    };
+    this.segmentDataArray.push(segmentData);
+    
+    const geometryCoords = geometry.getCoordinates();
+    const isOverlapping = this.checkPathOverlap(geometryCoords);
+    const offsetCoords = isOverlapping ? this.applyPathOffset(geometryCoords, segmentIndex) : geometryCoords;
+    
+    const polyline = new ymaps.Polyline(
+        offsetCoords,
+        {
+            balloonContent: this.createSimpleBalloon(fromPlace, toPlace, distance, duration, mode),
+            hintContent: `${fromPlace.name} → ${toPlace.name}`
+        },
+        {
+            strokeColor: this.getModeColor(mode, segmentIndex),
+            strokeWidth: this.getStrokeWidth(mode, isOverlapping, segmentIndex),
+            strokeOpacity: this.getStrokeOpacity(isOverlapping, segmentIndex),
+            strokeStyle: this.getModeStyle(mode, isOverlapping, segmentIndex),
+            zIndex: 100 + segmentIndex
+        }
+    );
+    
+    this.map.geoObjects.add(polyline);
+    this.routeLines.push(polyline);
+    this.pathGeometries.set(segmentIndex, geometryCoords);
+    
+    polyline.events.add('click', () => {
+        window.EventBus?.emit('segment:clicked', segmentData);
+    });
+    
+    console.log(`  ✓ Segment drawn with mode "${mode}"`);
+}
+
 
     checkPathOverlap(newPath) {
         for (let [index, existingPath] of this.pathGeometries.entries()) {
