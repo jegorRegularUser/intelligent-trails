@@ -5,6 +5,8 @@ class MapSmartWalk {
         this.currentRouteData = null;
         this.segmentDataArray = [];
         this.returnSegmentIndex = -1;
+        this.isLoadedRoute = false; // НОВОЕ: флаг загруженного маршрута
+        this.isSaving = false; // НОВОЕ: флаг процесса сохранения
         
         if (!this.map) {
             console.error('[MapSmartWalk] Map instance required');
@@ -16,18 +18,30 @@ class MapSmartWalk {
     }
     
     init() {
+        // Обработчик для НОВЫХ маршрутов
         window.EventBus?.on('route:updated', (routeData) => {
-            console.log('[MapSmartWalk] Route updated event received');
-            this.visualizeRoute(routeData);
+            console.log('[MapSmartWalk] Route updated event received (NEW route)');
+            this.visualizeRoute(routeData, false);
+        });
+        
+        // НОВОЕ: отдельный обработчик для ЗАГРУЖЕННЫХ маршрутов
+        window.EventBus?.on('route:loaded', (routeData) => {
+            console.log('[MapSmartWalk] Route loaded event received (LOADED route)');
+            this.visualizeRoute(routeData, true);
         });
     }
     
-    async visualizeRoute(routeData) {
-        console.log('[MapSmartWalk] Visualizing route...', routeData);
+    async visualizeRoute(routeData, isLoadedRoute = false) {
+        console.log('[MapSmartWalk] =========================================');
+        console.log('[MapSmartWalk] Visualizing route...');
+        console.log('[MapSmartWalk] Is loaded route:', isLoadedRoute);
+        console.log('[MapSmartWalk] Route data:', routeData);
         
         this.clearRouteLines();
         this.segmentDataArray = [];
         this.returnSegmentIndex = -1;
+        this.isLoadedRoute = isLoadedRoute; // НОВОЕ: сохраняем флаг
+        this.currentRouteData = routeData; // НОВОЕ: сохраняем данные маршрута
         
         if (!routeData || !routeData.places || routeData.places.length < 2) {
             console.warn('[MapSmartWalk] Not enough places to build route');
@@ -50,7 +64,7 @@ class MapSmartWalk {
             await this.drawSegment(places[i], places[i + 1], i, isReturnSegment);
         }
         
-        console.log('[MapSmartWalk] ⏳ Waiting 500ms before saving...');
+        console.log('[MapSmartWalk] ⏳ Waiting 500ms before post-route tasks...');
         
         setTimeout(() => {
             console.log('[MapSmartWalk] ✓ Timeout complete, executing post-route tasks');
@@ -61,51 +75,131 @@ class MapSmartWalk {
                 window.MapRouteBuilder.updateSegmentData(this.segmentDataArray);
             }
             
-            // ВАЖНО: После построения маршрута сохраняем его в БД
-            console.log('[MapSmartWalk] 📞 Calling saveRouteToDB...');
-            this.saveRouteToDB(routeData);
+            // ИЗМЕНЕНО: сохраняем только если это НЕ загруженный маршрут
+            if (!this.isLoadedRoute) {
+                console.log('[MapSmartWalk] 📞 This is a NEW route, calling saveRouteToDB...');
+                this.saveRouteToDB(routeData);
+            } else {
+                console.log('[MapSmartWalk] ⏭️ This is a LOADED route, skipping save');
+            }
         }, 500);
         
         console.log('[MapSmartWalk] Route visualization complete');
+        console.log('[MapSmartWalk] =========================================');
     }
     
     async saveRouteToDB(routeData) {
-        console.log('[MapSmartWalk] 💾 saveRouteToDB called');
-        console.log('[MapSmartWalk] Route data:', routeData);
-        
-        // Проверяем авторизацию через data-атрибут body
-        const bodyElement = document.querySelector('body');
-        const isLoggedIn = bodyElement && bodyElement.dataset.loggedIn === 'true';
-        
-        console.log('[MapSmartWalk] Body element:', bodyElement);
-        console.log('[MapSmartWalk] Body dataset:', bodyElement ? bodyElement.dataset : 'null');
-        console.log('[MapSmartWalk] data-logged-in:', bodyElement ? bodyElement.dataset.loggedIn : 'undefined');
-        console.log('[MapSmartWalk] isLoggedIn:', isLoggedIn);
-        
-        if (!isLoggedIn) {
-            console.log('[MapSmartWalk] ⚠️ User not logged in, skipping save');
+        // НОВОЕ: предотвращаем множественные вызовы
+        if (this.isSaving) {
+            console.log('[MapSmartWalk] ⚠️ Already saving, skipping duplicate call');
             return;
         }
         
-        console.log('[MapSmartWalk] ✓ User is logged in, proceeding with save');
+        this.isSaving = true;
+        console.log('[MapSmartWalk] 💾 ==== STARTING SAVE PROCESS ====');
         
         try {
-            // Собираем данные для сохранения
+            // Проверяем авторизацию через data-атрибут body
+            const bodyElement = document.querySelector('body');
+            const isLoggedIn = bodyElement && bodyElement.dataset.loggedIn === 'true';
+            
+            console.log('[MapSmartWalk] User logged in:', isLoggedIn);
+            
+            if (!isLoggedIn) {
+                console.log('[MapSmartWalk] ⚠️ User not logged in, skipping save');
+                return;
+            }
+            
+            console.log('[MapSmartWalk] ✓ User is logged in, proceeding with save');
+            
+            // ИЗМЕНЕНО: собираем ПОЛНЫЕ данные маршрута с координатами
+            const places = routeData.places.map(place => ({
+                name: place.name || 'Точка',
+                address: place.address || '',
+                coordinates: place.coordinates || [0, 0],
+                category: place.category || '',
+                transport_mode: place.transport_mode || 'pedestrian',
+                description: place.description || ''
+            }));
+            
+            // Собираем полные данные сегментов
+            const segments = this.segmentDataArray.map(seg => ({
+                index: seg.index,
+                fromPlace: seg.fromPlace,
+                toPlace: seg.toPlace,
+                distance: seg.distance,
+                duration: seg.duration,
+                mode: seg.mode,
+                isReturn: seg.isReturn || false
+            }));
+            
+            // Вычисляем суммарные значения
+            const totalDistance = this.segmentDataArray.reduce((sum, seg) => sum + (seg.distance || 0), 0);
+            const totalDuration = this.segmentDataArray.reduce((sum, seg) => sum + (seg.duration || 0), 0);
+            
             const saveData = {
+                // Основные точки
                 start_point: {
-                    name: routeData.places[0].name || 'Старт',
-                    coords: routeData.places[0].coordinates
+                    name: places[0].name,
+                    address: places[0].address,
+                    coords: places[0].coordinates
                 },
-                categories: this.extractCategories(routeData.places),
-                time_limit_minutes: this.calculateTotalTime(),
+                end_point: routeData.return_to_start ? {
+                    name: places[0].name,
+                    address: places[0].address,
+                    coords: places[0].coordinates
+                } : (places.length > 1 ? {
+                    name: places[places.length - 1].name,
+                    address: places[places.length - 1].address,
+                    coords: places[places.length - 1].coordinates
+                } : null),
+                
+                // Параметры маршрута
+                categories: this.extractCategories(places),
+                time_limit_minutes: Math.round(totalDuration / 60),
                 return_to_start: routeData.return_to_start || false,
-                mode: this.extractTransportMode(routeData.places),
-                places: routeData.places
+                mode: routeData.mode || this.extractTransportMode(places),
+                
+                // Полные данные
+                places: places,
+                segments: segments,
+                
+                // Статистика
+                summary: {
+                    total_distance: totalDistance,
+                    total_distance_km: (totalDistance / 1000).toFixed(2),
+                    total_duration: totalDuration,
+                    total_duration_minutes: Math.round(totalDuration / 60),
+                    number_of_places: places.length
+                },
+                
+                // Настройки
+                settings: routeData.settings || {
+                    pace: 'balanced',
+                    time_strictness: 5
+                }
             };
             
-            console.log('[MapSmartWalk] 📤 Sending to API:', saveData);
+            console.log('[MapSmartWalk] 📦 Prepared save data:', saveData);
+            
+            // Проверяем, не существует ли уже такой маршрут в localStorage
+            const savedRoutes = JSON.parse(localStorage.getItem('recently_saved_routes') || '[]');
+            const routeSignature = this.getRouteSignature(saveData);
+            
+            console.log('[MapSmartWalk] 🔍 Route signature:', routeSignature);
+            console.log('[MapSmartWalk] 🔍 Recently saved routes:', savedRoutes);
+            
+            // НОВОЕ: проверка на дубликаты
+            const isDuplicate = savedRoutes.some(sig => sig === routeSignature);
+            if (isDuplicate) {
+                console.log('[MapSmartWalk] ⚠️ Route already saved recently (found in localStorage), skipping duplicate');
+                return;
+            }
+            
+            console.log('[MapSmartWalk] ✓ No duplicate found, proceeding to API call');
             
             // Отправляем на сервер
+            console.log('[MapSmartWalk] 📤 Sending POST request to api.php?action=build_smart_walk');
             const response = await fetch('api.php?action=build_smart_walk', {
                 method: 'POST',
                 headers: {
@@ -115,7 +209,6 @@ class MapSmartWalk {
             });
             
             console.log('[MapSmartWalk] 📥 Response status:', response.status);
-            console.log('[MapSmartWalk] 📥 Response ok:', response.ok);
             
             const responseText = await response.text();
             console.log('[MapSmartWalk] 📥 Response text:', responseText);
@@ -125,28 +218,60 @@ class MapSmartWalk {
                 result = JSON.parse(responseText);
             } catch (e) {
                 console.error('[MapSmartWalk] ❌ Failed to parse JSON:', e);
-                console.error('[MapSmartWalk] ❌ Response was:', responseText);
                 throw new Error('Invalid JSON response: ' + responseText.substring(0, 100));
             }
             
             console.log('[MapSmartWalk] 📥 Parsed result:', result);
             
             if (result.success) {
-                console.log('[MapSmartWalk] ✅ Route saved successfully! ID:', result.route_id);
+                console.log('[MapSmartWalk] ✅ Route saved successfully!');
+                console.log('[MapSmartWalk] ✅ Route ID:', result.route_id);
                 console.log('[MapSmartWalk] ✅ Saved flag:', result.saved);
                 
-                // Показываем уведомление пользователю
-                if (window.routeModal) {
-                    window.routeModal.showNotification('Маршрут сохранен!', 'success');
+                // Добавляем сигнатуру маршрута в список сохраненных
+                savedRoutes.push(routeSignature);
+                // Храним только последние 10 сигнатур
+                if (savedRoutes.length > 10) {
+                    savedRoutes.shift();
                 }
+                localStorage.setItem('recently_saved_routes', JSON.stringify(savedRoutes));
+                console.log('[MapSmartWalk] ✓ Signature saved to localStorage');
+                
+                // Показываем уведомление пользователю
+                this.showNotification('✅ Маршрут успешно сохранен!', 'success');
             } else {
                 console.error('[MapSmartWalk] ❌ Failed to save route:', result.error);
+                this.showNotification('❌ Ошибка сохранения маршрута', 'error');
             }
             
         } catch (error) {
             console.error('[MapSmartWalk] ❌ Error saving route:', error);
             console.error('[MapSmartWalk] ❌ Error stack:', error.stack);
+            this.showNotification('❌ Ошибка сохранения маршрута', 'error');
+        } finally {
+            this.isSaving = false;
+            console.log('[MapSmartWalk] 💾 ==== SAVE PROCESS COMPLETE ====');
         }
+    }
+    
+    // НОВОЕ: создание уникальной сигнатуры маршрута для проверки дубликатов
+    getRouteSignature(routeData) {
+        const coords = routeData.places.map(p => p.coordinates.join(',')).join('|');
+        const categories = (routeData.categories || []).sort().join(',');
+        const mode = routeData.mode || 'pedestrian';
+        return `${coords}_${categories}_${mode}_${routeData.return_to_start}`;
+    }
+    
+    // НОВОЕ: показ уведомлений
+    showNotification(message, type = 'info') {
+        // Если есть routeModal, используем его
+        if (window.routeModal && typeof window.routeModal.showNotification === 'function') {
+            window.routeModal.showNotification(message, type);
+            return;
+        }
+        
+        // Иначе простой console.log
+        console.log(`[${type.toUpperCase()}] ${message}`);
     }
     
     extractCategories(places) {
@@ -160,15 +285,7 @@ class MapSmartWalk {
         return categories;
     }
     
-    calculateTotalTime() {
-        const totalSeconds = this.segmentDataArray.reduce((sum, seg) => sum + (seg.duration || 0), 0);
-        const totalMinutes = Math.round(totalSeconds / 60);
-        console.log('[MapSmartWalk] Total time:', totalMinutes, 'minutes');
-        return totalMinutes;
-    }
-    
     extractTransportMode(places) {
-        // Берем самый часто используемый транспорт
         const modes = {};
         places.forEach(place => {
             const mode = place.transport_mode || 'pedestrian';
@@ -316,6 +433,7 @@ class MapSmartWalk {
         this.multiRoutes = [];
         this.segmentDataArray = [];
         this.returnSegmentIndex = -1;
+        this.isLoadedRoute = false; // НОВОЕ: сбрасываем флаг
     }
     
     fitMapToRoute() {

@@ -64,7 +64,40 @@ function saveRouteToDatabase($userId, $routeType, $routeData, $result) {
     
     error_log("[API] saveRouteToDatabase called");
     error_log("[API] User ID: $userId, Type: $routeType");
-    error_log("[API] Route Data: " . json_encode($routeData));
+    
+    // НОВОЕ: Проверка на дубликаты - проверяем последний сохраненный маршрут
+    $checkStmt = $link->prepare("
+        SELECT id, created_at 
+        FROM saved_routes 
+        WHERE user_id = ? 
+        AND route_type = ?
+        AND start_point = ?
+        AND created_at > DATE_SUB(NOW(), INTERVAL 1 MINUTE)
+        ORDER BY created_at DESC 
+        LIMIT 1
+    ");
+    
+    $startPointCheck = '';
+    if (isset($routeData['start_point']['name'])) {
+        $startPointCheck = $routeData['start_point']['name'];
+    } elseif (isset($routeData['places'][0]['name'])) {
+        $startPointCheck = $routeData['places'][0]['name'];
+    }
+    
+    if ($checkStmt) {
+        $checkStmt->bind_param("iss", $userId, $routeType, $startPointCheck);
+        $checkStmt->execute();
+        $checkResult = $checkStmt->get_result();
+        
+        if ($checkResult->num_rows > 0) {
+            $existingRoute = $checkResult->fetch_assoc();
+            error_log("[API] ⚠️ Duplicate route detected! Existing ID: " . $existingRoute['id']);
+            error_log("[API] ⚠️ Existing route created at: " . $existingRoute['created_at']);
+            $checkStmt->close();
+            return $existingRoute['id']; // Возвращаем ID существующего маршрута
+        }
+        $checkStmt->close();
+    }
     
     // Значения по умолчанию
     $routeName = 'Маршрут ' . date('d.m.Y H:i');
