@@ -12,10 +12,6 @@ window.MapRouteBuilder = {
     
     async buildRoute(startPoint, placesByCategory, returnToStart, activities = []) {
         console.log('[MapRouteBuilder] Building route...');
-        console.log('Start:', startPoint);
-        console.log('Places by category:', placesByCategory);
-        console.log('Return to start:', returnToStart);
-        console.log('Activities:', activities);
         
         this.placesData = placesByCategory;
         this.segmentData = [];
@@ -24,20 +20,16 @@ window.MapRouteBuilder = {
         
         if (selectedPlaces.length === 0) {
             console.error('[MapRouteBuilder] No places selected');
-            if (window.routeModal) {
-                window.routeModal.showNotification('Не удалось выбрать места для маршрута', 'error');
-            }
             return;
         }
         
         const waypoints = this.buildWaypointsList(startPoint, selectedPlaces, returnToStart, activities);
         
-        console.log('[MapRouteBuilder] Waypoints:', waypoints);
-        
         const routeData = {
             places: waypoints,
             start_point: startPoint,
-            return_to_start: returnToStart
+            return_to_start: returnToStart,
+            activities: activities
         };
         
         if (window.StateManager) {
@@ -83,8 +75,6 @@ window.MapRouteBuilder = {
                     distance: selectedPlace.distance,
                     transport_mode: 'pedestrian'
                 });
-                
-                console.log(`[MapRouteBuilder] Selected from ${category} [${activeIndex + 1}/${places.length}]: ${selectedPlace.name}`);
             }
         }
         
@@ -104,7 +94,7 @@ window.MapRouteBuilder = {
             transport_mode: defaultTransport
         });
         
-        selectedPlaces.forEach((place, index) => {
+        selectedPlaces.forEach((place) => {
             let transportMode = defaultTransport;
             
             if (activities && activities.length > 0) {
@@ -153,7 +143,8 @@ window.MapRouteBuilder = {
         panel.style.display = 'flex';
         
         setTimeout(() => {
-            const segmentData = window.MapSmartWalkInstance?.getSegmentData() || [];
+            const segmentData = window.MapSmartWalkInstance?.getSegmentData() || 
+                               window.MapCore?.mapSmartWalk?.getSegmentData() || [];
             this.segmentData = segmentData;
             this.updatePanelWithSegmentData(waypoints);
         }, 1500);
@@ -205,6 +196,13 @@ window.MapRouteBuilder = {
             const totalDistance = this.segmentData.reduce((sum, seg) => sum + (seg.distance || 0), 0);
             const totalTime = this.segmentData.reduce((sum, seg) => sum + (seg.duration || 0), 0);
             
+            // Проверяем авторизацию
+            const isLoggedIn = document.body.dataset.loggedIn === 'true';
+            const saveButtonHTML = isLoggedIn ? 
+                `<button onclick="window.MapRouteBuilder.saveRoute()" class="save-route-btn" style="background: #4CAF50; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer; font-size: 14px; margin-top: 10px;">
+                    💾 Сохранить маршрут
+                </button>` : '';
+            
             statsDiv.innerHTML = `
                 <div class="route-stat">
                     <span class="stat-icon">📍</span>
@@ -225,11 +223,74 @@ window.MapRouteBuilder = {
                     <span class="stat-label">мин</span>
                 </div>
                 ` : ''}
+                <div style="width: 100%; text-align: center;">
+                    ${saveButtonHTML}
+                </div>
             `;
         }
         
         if (stagesDiv) {
             this.renderStages(stagesDiv, waypoints);
+        }
+    },
+    
+    async saveRoute() {
+        console.log('[MapRouteBuilder] 💾 Saving route...');
+        
+        const state = window.StateManager?.getState();
+        if (!state || !state.route_data) {
+            alert('Нет данных маршрута для сохранения');
+            return;
+        }
+        
+        const routeData = state.route_data;
+        const categories = [];
+        
+        routeData.places.forEach(place => {
+            if (place.category && !categories.includes(place.category)) {
+                categories.push(place.category);
+            }
+        });
+        
+        const totalTime = this.segmentData.reduce((sum, seg) => sum + (seg.duration || 0), 0);
+        const totalMinutes = Math.round(totalTime / 60);
+        
+        const saveData = {
+            start_point: {
+                name: routeData.places[0]?.name || 'Старт',
+                coords: routeData.start_point
+            },
+            categories: categories,
+            time_limit_minutes: totalMinutes || 60,
+            return_to_start: routeData.return_to_start || false,
+            mode: routeData.places[1]?.transport_mode || 'pedestrian',
+            places: routeData.places
+        };
+        
+        console.log('[MapRouteBuilder] Sending to API:', saveData);
+        
+        try {
+            const response = await fetch('api.php?action=build_smart_walk', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(saveData)
+            });
+            
+            const result = await response.json();
+            console.log('[MapRouteBuilder] Server response:', result);
+            
+            if (result.success && result.saved) {
+                alert('✅ Маршрут успешно сохранен!');
+            } else if (result.success && !result.saved) {
+                alert('⚠️ Маршрут построен, но не сохранен (требуется авторизация)');
+            } else {
+                alert('❌ Ошибка сохранения: ' + (result.error || 'Unknown error'));
+            }
+        } catch (error) {
+            console.error('[MapRouteBuilder] Error:', error);
+            alert('❌ Ошибка сохранения маршрута');
         }
     },
     
@@ -339,18 +400,11 @@ window.MapRouteBuilder = {
                 el.style.backgroundColor = '';
             }
         });
-        
-        console.log(`[MapRouteBuilder] Zoomed to stage ${index}`);
     },
     
     async switchPlace(category, direction) {
-        console.log(`[MapRouteBuilder] Switching place in category: ${category}, direction: ${direction}`);
-        
         const places = this.placesData[category];
-        if (!places || places.length <= 1) {
-            console.warn('[MapRouteBuilder] No alternatives available');
-            return;
-        }
+        if (!places || places.length <= 1) return;
         
         const currentIndex = this.activePlaces[category] || 0;
         let newIndex;
@@ -363,19 +417,12 @@ window.MapRouteBuilder = {
         
         this.activePlaces[category] = newIndex;
         
-        console.log(`[MapRouteBuilder] Switched from index ${currentIndex} to ${newIndex}`);
-        console.log(`[MapRouteBuilder] New place: ${places[newIndex].name}`);
-        
         const state = window.StateManager.getState();
         const startPoint = state.start_point;
         const returnToStart = state.return_to_start;
         const activities = state.activities;
         
         await this.buildRoute(startPoint, this.placesData, returnToStart, activities);
-        
-        if (window.routeModal) {
-            window.routeModal.showNotification(`Изменено место: ${places[newIndex].name}`, 'success');
-        }
     }
 };
 
