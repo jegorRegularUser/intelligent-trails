@@ -8,7 +8,11 @@
         const routeId = urlParams.get('load_route');
         
         if (routeId) {
-            loadSavedRoute(routeId);
+            console.log('[ROUTE LOADER] Found route_id in URL:', routeId);
+            // Даем время на инициализацию модулей
+            setTimeout(() => {
+                loadSavedRoute(routeId);
+            }, 500);
         }
     }
     
@@ -20,7 +24,7 @@
             .then(response => response.json())
             .then(result => {
                 if (result.success && result.data) {
-                    console.log('[ROUTE LOADER] Route loaded:', result);
+                    console.log('[ROUTE LOADER] Route loaded successfully:', result);
                     
                     // Восстанавливаем маршрут на карте в зависимости от типа
                     if (result.route_type === 'simple') {
@@ -50,7 +54,6 @@
         console.log('[ROUTE LOADER] Restoring simple route:', data);
         
         if (window.MapCore && window.MapCore.map) {
-            // Используем Yandex.Maps для построения маршрута
             const ymaps = window.ymaps;
             
             ymaps.route([data.start_point, data.end_point], {
@@ -59,7 +62,6 @@
             }).then(route => {
                 window.MapCore.map.geoObjects.add(route);
                 
-                // Показываем информацию о маршруте
                 if (window.RouteInfoPanel) {
                     const routeData = route.getWayPoints();
                     window.RouteInfoPanel.show({
@@ -92,10 +94,12 @@
     function restoreSmartWalk(data) {
         console.log('[ROUTE LOADER] Restoring smart walk:', data);
         
-        if (window.MapSmartWalk) {
-            window.MapSmartWalk.displayWalk(data);
+        // ИЗМЕНЕНО: используем специальное событие для загруженных маршрутов
+        if (window.EventBus) {
+            // Важно: используем событие route:loaded вместо route:updated
+            window.EventBus.emit('route:loaded', data);
         } else {
-            console.error('[ROUTE LOADER] MapSmartWalk not available');
+            console.error('[ROUTE LOADER] EventBus not available');
         }
     }
     
