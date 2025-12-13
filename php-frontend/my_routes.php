@@ -74,7 +74,7 @@ $order_by = match($sort_by) {
     'created_asc' => 'created_at ASC',
     'name_asc' => 'route_name ASC',
     'name_desc' => 'route_name DESC',
-    'last_used' => 'last_used_at DESC NULLS LAST',
+    'last_used' => 'last_used_at DESC',
     default => 'created_at DESC'
 };
 
@@ -127,404 +127,8 @@ if ($stmt = $link->prepare($stats_sql)) {
     <link rel="stylesheet" href="assets/style.css">
     <link rel="stylesheet" href="assets/landing-styles.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet">
-    <style>
-        .routes-container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 80px 20px 40px;
-            min-height: calc(100vh - 70px);
-        }
-        
-        .page-header {
-            margin-bottom: 40px;
-            text-align: center;
-        }
-        
-        .page-header h1 {
-            font-size: 36px;
-            margin-bottom: 10px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-        
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 40px;
-        }
-        
-        .stat-card {
-            background: white;
-            border-radius: 16px;
-            padding: 25px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            text-align: center;
-            border: 2px solid #f0f2f5;
-            transition: all 0.3s ease;
-        }
-        
-        .stat-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.15);
-            border-color: #667eea;
-        }
-        
-        .stat-card .stat-icon {
-            font-size: 32px;
-            margin-bottom: 10px;
-        }
-        
-        .stat-card .stat-value {
-            font-size: 28px;
-            font-weight: 700;
-            color: #1f2937;
-            margin-bottom: 5px;
-        }
-        
-        .stat-card .stat-label {
-            font-size: 14px;
-            color: #6b7280;
-        }
-        
-        .filters-section {
-            background: white;
-            border-radius: 16px;
-            padding: 25px;
-            margin-bottom: 30px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-        
-        .filters-row {
-            display: flex;
-            gap: 15px;
-            flex-wrap: wrap;
-            align-items: center;
-        }
-        
-        .filter-group {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
-        
-        .filter-group label {
-            font-weight: 600;
-            color: #374151;
-            font-size: 14px;
-        }
-        
-        .filter-select, .filter-checkbox {
-            padding: 8px 15px;
-            border: 2px solid #e5e7eb;
-            border-radius: 8px;
-            font-size: 14px;
-            transition: all 0.3s ease;
-        }
-        
-        .filter-select:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-        
-        .route-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-            gap: 25px;
-        }
-        
-        .route-card {
-            background: white;
-            border-radius: 16px;
-            padding: 25px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            border: 2px solid #f0f2f5;
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .route-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.15);
-            border-color: #667eea;
-        }
-        
-        .route-card.favorite {
-            border-color: #fbbf24;
-            background: linear-gradient(135deg, #fffbeb 0%, #ffffff 100%);
-        }
-        
-        .route-type-badge {
-            display: inline-block;
-            padding: 5px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
-            margin-bottom: 12px;
-        }
-        
-        .route-type-badge.simple {
-            background: #dbeafe;
-            color: #1e40af;
-        }
-        
-        .route-type-badge.smart {
-            background: #fce7f3;
-            color: #be185d;
-        }
-        
-        .route-type-badge.smart_walk {
-            background: #d1fae5;
-            color: #065f46;
-        }
-        
-        .route-title {
-            font-size: 20px;
-            font-weight: 700;
-            color: #1f2937;
-            margin-bottom: 12px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        
-        .favorite-star {
-            color: #fbbf24;
-            cursor: pointer;
-            font-size: 20px;
-        }
-        
-        .route-details {
-            margin-bottom: 15px;
-        }
-        
-        .route-detail-item {
-            display: flex;
-            align-items: flex-start;
-            gap: 10px;
-            margin-bottom: 8px;
-            font-size: 14px;
-            color: #4b5563;
-        }
-        
-        .route-detail-icon {
-            flex-shrink: 0;
-            width: 20px;
-            text-align: center;
-        }
-        
-        .route-stats {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
-            margin: 15px 0;
-            padding: 15px;
-            background: #f9fafb;
-            border-radius: 12px;
-        }
-        
-        .route-stat {
-            text-align: center;
-        }
-        
-        .route-stat-value {
-            font-size: 18px;
-            font-weight: 700;
-            color: #667eea;
-        }
-        
-        .route-stat-label {
-            font-size: 11px;
-            color: #6b7280;
-            margin-top: 2px;
-        }
-        
-        .route-meta {
-            font-size: 12px;
-            color: #9ca3af;
-            margin-top: 10px;
-            padding-top: 10px;
-            border-top: 1px solid #e5e7eb;
-        }
-        
-        .route-actions {
-            display: flex;
-            gap: 8px;
-            margin-top: 15px;
-            flex-wrap: wrap;
-        }
-        
-        .route-btn {
-            flex: 1;
-            padding: 10px 15px;
-            border: none;
-            border-radius: 8px;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-decoration: none;
-            text-align: center;
-            display: inline-block;
-        }
-        
-        .route-btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-        
-        .route-btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-        }
-        
-        .route-btn-secondary {
-            background: #f3f4f6;
-            color: #374151;
-        }
-        
-        .route-btn-secondary:hover {
-            background: #e5e7eb;
-        }
-        
-        .route-btn-danger {
-            background: #fee2e2;
-            color: #dc2626;
-        }
-        
-        .route-btn-danger:hover {
-            background: #fecaca;
-        }
-        
-        .empty-state {
-            text-align: center;
-            padding: 80px 20px;
-        }
-        
-        .empty-state-icon {
-            font-size: 80px;
-            margin-bottom: 20px;
-        }
-        
-        .empty-state h3 {
-            font-size: 24px;
-            color: #1f2937;
-            margin-bottom: 10px;
-        }
-        
-        .empty-state p {
-            color: #6b7280;
-            margin-bottom: 30px;
-        }
-        
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 10000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.5);
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .modal.active {
-            display: flex;
-        }
-        
-        .modal-content {
-            background: white;
-            border-radius: 16px;
-            padding: 30px;
-            max-width: 500px;
-            width: 90%;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-        }
-        
-        .modal-header {
-            margin-bottom: 20px;
-        }
-        
-        .modal-header h3 {
-            font-size: 24px;
-            color: #1f2937;
-        }
-        
-        .modal-body {
-            margin-bottom: 20px;
-        }
-        
-        .modal-footer {
-            display: flex;
-            gap: 10px;
-            justify-content: flex-end;
-        }
-        
-        .form-group {
-            margin-bottom: 15px;
-        }
-        
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: 600;
-            color: #374151;
-        }
-        
-        .form-group input {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #e5e7eb;
-            border-radius: 8px;
-            font-size: 14px;
-            box-sizing: border-box;
-        }
-        
-        .form-group input:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-        
-        .alert {
-            padding: 15px 20px;
-            border-radius: 12px;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        
-        .alert-success {
-            background: #d1fae5;
-            color: #065f46;
-            border: 2px solid #a7f3d0;
-        }
-        
-        .alert-info {
-            background: #dbeafe;
-            color: #1e40af;
-            border: 2px solid #bfdbfe;
-        }
-        
-        @media (max-width: 768px) {
-            .route-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .stats-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-            
-            .filters-row {
-                flex-direction: column;
-                align-items: stretch;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="assets/styles/my-routes.css">
+
 </head>
 <body>
     <?php require_once "components/navigation.php"; ?>
@@ -575,12 +179,12 @@ if ($stmt = $link->prepare($stats_sql)) {
         
         <!-- Фильтры -->
         <div class="filters-section">
-            <form method="GET" action="my_routes.php">
+            <form method="GET" action="my_routes.php" id="filterForm">
                 <div class="filters-row">
                     <div class="filter-group">
-                        <label for="type">Тип маршрута:</label>
-                        <select name="type" id="type" class="filter-select" onchange="this.form.submit()">
-                            <option value="all" <?php echo $filter_type === 'all' ? 'selected' : ''; ?>>Все</option>
+                        <label for="type">Тип маршрута</label>
+                        <select name="type" id="type" class="filter-select" onchange="document.getElementById('filterForm').submit()">
+                            <option value="all" <?php echo $filter_type === 'all' ? 'selected' : ''; ?>>Все типы</option>
                             <option value="simple" <?php echo $filter_type === 'simple' ? 'selected' : ''; ?>>Простые</option>
                             <option value="smart" <?php echo $filter_type === 'smart' ? 'selected' : ''; ?>>Умные</option>
                             <option value="smart_walk" <?php echo $filter_type === 'smart_walk' ? 'selected' : ''; ?>>Прогулки</option>
@@ -588,8 +192,8 @@ if ($stmt = $link->prepare($stats_sql)) {
                     </div>
                     
                     <div class="filter-group">
-                        <label for="sort">Сортировка:</label>
-                        <select name="sort" id="sort" class="filter-select" onchange="this.form.submit()">
+                        <label for="sort">Сортировка</label>
+                        <select name="sort" id="sort" class="filter-select" onchange="document.getElementById('filterForm').submit()">
                             <option value="created_desc" <?php echo $sort_by === 'created_desc' ? 'selected' : ''; ?>>Сначала новые</option>
                             <option value="created_asc" <?php echo $sort_by === 'created_asc' ? 'selected' : ''; ?>>Сначала старые</option>
                             <option value="name_asc" <?php echo $sort_by === 'name_asc' ? 'selected' : ''; ?>>По названию (А-Я)</option>
@@ -599,10 +203,11 @@ if ($stmt = $link->prepare($stats_sql)) {
                     </div>
                     
                     <div class="filter-group">
-                        <label>
-                            <input type="checkbox" name="favorite" value="1" <?php echo $filter_favorite ? 'checked' : ''; ?> onchange="this.form.submit()">
-                            Только избранные
-                        </label>
+                        <label>&nbsp;</label>
+                        <div class="checkbox-wrapper">
+                            <input type="checkbox" name="favorite" id="favorite" value="1" <?php echo $filter_favorite ? 'checked' : ''; ?> onchange="document.getElementById('filterForm').submit()">
+                            <label for="favorite">Только избранные</label>
+                        </div>
                     </div>
                 </div>
             </form>

@@ -62,7 +62,7 @@ function saveRouteToDatabase($userId, $routeType, $routeData, $result) {
     $categories = null;
     $timeLimit = null;
     $transportMode = 'pedestrian';
-    $returnToStart = false;
+    $returnToStart = 0;
     $minPlacesPerCategory = null;
     $pace = 'balanced';
     $timeStrictness = 5;
@@ -77,28 +77,25 @@ function saveRouteToDatabase($userId, $routeType, $routeData, $result) {
         $endPoint = $routeData['end_point'] ?? null;
         $transportMode = $routeData['mode'] ?? 'auto';
         
-        // Для простого маршрута Yandex возвращает расстояние и время в другом формате
-        // Нужно будет добавить логику извлечения из результата
-        
     } elseif ($routeType === 'smart') {
         $startPoint = $routeData['start_point']['name'] ?? 'Начало';
-        $endPoint = isset($routeData['end_point']) ? ($routeData['end_point']['name'] ?? null) : null;
+        $endPoint = isset($routeData['end_point']) && !empty($routeData['end_point']) ? ($routeData['end_point']['name'] ?? null) : null;
         $categories = json_encode($routeData['categories'] ?? []);
         $timeLimit = intval($routeData['time_limit_minutes'] ?? 60);
         $transportMode = $routeData['mode'] ?? 'pedestrian';
-        $returnToStart = boolval($routeData['return_to_start'] ?? false);
+        $returnToStart = $routeData['return_to_start'] ? 1 : 0;
         $minPlacesPerCategory = json_encode($routeData['min_places_per_category'] ?? new stdClass());
         $pace = $routeData['settings']['pace'] ?? 'balanced';
-        $timeStrictness = $routeData['settings']['time_strictness'] ?? 5;
+        $timeStrictness = intval($routeData['settings']['time_strictness'] ?? 5);
         
         // Извлекаем статистику из результата
         if (isset($result['total_distance'])) {
-            $totalDistance = $result['total_distance'];
+            $totalDistance = floatval($result['total_distance']);
         }
         if (isset($result['total_time'])) {
-            $totalTime = $result['total_time'];
+            $totalTime = intval($result['total_time']);
         }
-        if (isset($result['places'])) {
+        if (isset($result['places']) && is_array($result['places'])) {
             $placesCount = count($result['places']);
         }
         
@@ -106,12 +103,12 @@ function saveRouteToDatabase($userId, $routeType, $routeData, $result) {
         $startPoint = $routeData['start_point']['name'] ?? 'Начало';
         
         if (isset($result['total_distance'])) {
-            $totalDistance = $result['total_distance'];
+            $totalDistance = floatval($result['total_distance']);
         }
         if (isset($result['total_time'])) {
-            $totalTime = $result['total_time'];
+            $totalTime = intval($result['total_time']);
         }
-        if (isset($result['places'])) {
+        if (isset($result['places']) && is_array($result['places'])) {
             $placesCount = count($result['places']);
         }
     }
@@ -124,7 +121,7 @@ function saveRouteToDatabase($userId, $routeType, $routeData, $result) {
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())");
     
     if ($stmt) {
-        $stmt->bind_param("isssssisississiii", 
+        $stmt->bind_param("isssssisississdii", 
             $userId, $routeName, $routeType, $startPoint, $endPoint, $categories,
             $timeLimit, $transportMode, $returnToStart, $minPlacesPerCategory,
             $pace, $timeStrictness, $routeDataJson, $totalDistance, $totalTime, $placesCount
@@ -133,9 +130,16 @@ function saveRouteToDatabase($userId, $routeType, $routeData, $result) {
         $routeId = $stmt->insert_id;
         $stmt->close();
         
-        return $success ? $routeId : null;
+        if ($success) {
+            error_log("[API] Route saved successfully. ID: $routeId, Type: $routeType");
+            return $routeId;
+        } else {
+            error_log("[API] Failed to save route: " . $link->error);
+            return null;
+        }
     }
     
+    error_log("[API] Failed to prepare statement: " . $link->error);
     return null;
 }
 
@@ -177,20 +181,8 @@ switch ($action) {
             $routeId = null;
             if (isset($_SESSION["loggedin"]) && $_SESSION["loggedin"] === true) {
                 $userId = $_SESSION["id"];
-                
-                // Сохраняем в историю
-                $stmt = $link->prepare("INSERT INTO route_history (user_id, route_type, start_point, route_data, created_at) VALUES (?, ?, ?, ?, NOW())");
-                if ($stmt) {
-                    $routeType = 'smart_walk';
-                    $startName = $input['start_point']['name'];
-                    $routeJson = json_encode($result['data']);
-                    $stmt->bind_param("isss", $userId, $routeType, $startName, $routeJson);
-                    $stmt->execute();
-                    $stmt->close();
-                }
-                
-                // Сохраняем в saved_routes
                 $routeId = saveRouteToDatabase($userId, 'smart_walk', $input, $result['data']);
+                error_log("[API] Smart walk saved with route_id: " . ($routeId ?? 'null'));
             }
             
             echo json_encode([
@@ -253,24 +245,8 @@ switch ($action) {
             $routeId = null;
             if (isset($_SESSION["loggedin"]) && $_SESSION["loggedin"] === true) {
                 $userId = $_SESSION["id"];
-                
-                // Сохраняем в историю
-                $stmt = $link->prepare("INSERT INTO route_history (user_id, route_type, start_point, end_point, categories, time_limit, transport_mode, route_data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())");
-                if ($stmt) {
-                    $routeType = 'smart';
-                    $startName = $routeData['start_point']['name'];
-                    $endName = $routeData['end_point']['name'] ?? null;
-                    $categoriesJson = json_encode($routeData['categories']);
-                    $timeLimit = $routeData['time_limit_minutes'];
-                    $mode = $routeData['mode'];
-                    $routeJson = json_encode($result['data']);
-                    $stmt->bind_param("isssiiss", $userId, $routeType, $startName, $endName, $categoriesJson, $timeLimit, $mode, $routeJson);
-                    $stmt->execute();
-                    $stmt->close();
-                }
-                
-                // Сохраняем в saved_routes
                 $routeId = saveRouteToDatabase($userId, 'smart', $routeData, $result['data']);
+                error_log("[API] Smart route saved with route_id: " . ($routeId ?? 'null'));
             }
             
             echo json_encode([
@@ -307,21 +283,8 @@ switch ($action) {
         $routeId = null;
         if (isset($_SESSION["loggedin"]) && $_SESSION["loggedin"] === true) {
             $userId = $_SESSION["id"];
-            
-            // Сохраняем в историю
-            $stmt = $link->prepare("INSERT INTO route_history (user_id, route_type, start_point, end_point, transport_mode, created_at) VALUES (?, ?, ?, ?, ?, NOW())");
-            if ($stmt) {
-                $routeType = 'simple';
-                $startName = $input['start_point'];
-                $endName = $input['end_point'];
-                $mode = $input['mode'] ?? 'auto';
-                $stmt->bind_param("issss", $userId, $routeType, $startName, $endName, $mode);
-                $stmt->execute();
-                $stmt->close();
-            }
-            
-            // Сохраняем в saved_routes
             $routeId = saveRouteToDatabase($userId, 'simple', $input, $simpleRouteData);
+            error_log("[API] Simple route saved with route_id: " . ($routeId ?? 'null'));
         }
         
         echo json_encode([
