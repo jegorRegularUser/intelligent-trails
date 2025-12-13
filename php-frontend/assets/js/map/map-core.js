@@ -25,6 +25,8 @@ window.MapCore = {
     
     this.attachEventListeners();
     
+    this.checkForRouteToLoad();
+    
     console.log('[MapCore] Initialization complete');
   },
 
@@ -107,12 +109,57 @@ window.MapCore = {
 
   getMap() {
     return this.map;
+  },
+  // Проверка URL на параметр load_route
+checkForRouteToLoad() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const routeId = urlParams.get('load_route');
+  
+  if (routeId) {
+    console.log(`[MapCore] Found route_id in URL: ${routeId}, loading...`);
+    this.loadRoute(parseInt(routeId));
   }
+},
+
+async loadRoute(routeId) {
+  try {
+    const response = await fetch(`/api.php?action=load_route&route_id=${routeId}`);
+    const result = await response.json();
+    
+    if (result.success) {
+      console.log('[MapCore] Route loaded:', result);
+      
+      // Восстановление маршрута в зависимости от типа
+      if (result.route_type === 'smart_walk') {
+        if (this.mapSmartWalk) {
+          this.mapSmartWalk.visualizeRoute(result.data);
+        }
+      } else if (result.route_type === 'smart') {
+        // Добавить логику для smart route
+        console.log('[MapCore] Smart route restoration not implemented yet');
+      } else if (result.route_type === 'simple') {
+        // Добавить логику для simple route
+        console.log('[MapCore] Simple route restoration not implemented yet');
+      }
+      
+      // Очистить URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else {
+      console.error('[MapCore] Failed to load route:', result.error);
+      alert('Ошибка загрузки маршрута: ' + result.error);
+    }
+  } catch (error) {
+    console.error('[MapCore] Error loading route:', error);
+    alert('Ошибка при загрузке маршрута');
+  }
+}
+
 };
 
 ymaps.ready(() => {
   console.log('[MapCore] Yandex Maps ready, starting init...');
   window.MapCore.init();
 });
+
 
 console.log('[MapCore] Module loaded');

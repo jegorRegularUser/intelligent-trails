@@ -64,6 +64,7 @@ function saveRouteToDatabase($userId, $routeType, $routeData, $result) {
     
     error_log("[API] saveRouteToDatabase called");
     error_log("[API] User ID: $userId, Type: $routeType");
+    error_log("[API] Route Data: " . json_encode($routeData));
     
     // Значения по умолчанию
     $routeName = 'Маршрут ' . date('d.m.Y H:i');
@@ -82,27 +83,89 @@ function saveRouteToDatabase($userId, $routeType, $routeData, $result) {
     $placesCount = 0;
     
     // Извлекаем данные в зависимости от типа маршрута
-    if ($routeType === 'smart_walk') {
-        $startPoint = $routeData['start_point']['name'] ?? 'Начало';
+    if ($routeType === 'smart_walk' || $routeType === 'smart') {
+        // Начальная точка
+        if (isset($routeData['start_point']['name'])) {
+            $startPoint = $routeData['start_point']['name'];
+        } elseif (isset($routeData['start_point']['address'])) {
+            $startPoint = $routeData['start_point']['address'];
+        } elseif (isset($routeData['places'][0]['name'])) {
+            $startPoint = $routeData['places'][0]['name'];
+        }
         
+        // Конечная точка
+        if (isset($routeData['end_point']['name'])) {
+            $endPoint = $routeData['end_point']['name'];
+        } elseif (isset($routeData['end_point']['address'])) {
+            $endPoint = $routeData['end_point']['address'];
+        }
+        
+        // Категории
+        if (isset($routeData['categories']) && is_array($routeData['categories']) && count($routeData['categories']) > 0) {
+            $categories = json_encode($routeData['categories'], JSON_UNESCAPED_UNICODE);
+        }
+        
+        // Лимит времени
+        if (isset($routeData['time_limit_minutes'])) {
+            $timeLimit = intval($routeData['time_limit_minutes']);
+        }
+        
+        // Режим транспорта
+        if (isset($routeData['mode'])) {
+            $transportMode = $routeData['mode'];
+        }
+        
+        // Возврат к старту
+        if (isset($routeData['return_to_start'])) {
+            $returnToStart = $routeData['return_to_start'] ? 1 : 0;
+        }
+        
+        // Минимум мест на категорию
+        if (isset($routeData['min_places_per_category']) && is_array($routeData['min_places_per_category'])) {
+            $minPlacesPerCategory = json_encode($routeData['min_places_per_category'], JSON_UNESCAPED_UNICODE);
+        }
+        
+        // Настройки pace и time_strictness
+        if (isset($routeData['settings'])) {
+            $pace = $routeData['settings']['pace'] ?? 'balanced';
+            $timeStrictness = intval($routeData['settings']['time_strictness'] ?? 5);
+        } elseif (isset($routeData['pace'])) {
+            $pace = $routeData['pace'];
+        }
+        
+        if (isset($routeData['time_strictness'])) {
+            $timeStrictness = intval($routeData['time_strictness']);
+        }
+        
+        // Количество мест
         if (isset($routeData['places']) && is_array($routeData['places'])) {
             $placesCount = count($routeData['places']);
         }
         
-        if (isset($routeData['categories']) && is_array($routeData['categories'])) {
-            $categories = json_encode($routeData['categories']);
+        // Расстояние и время (если есть в результате)
+        if (isset($result['total_distance'])) {
+            $totalDistance = floatval($result['total_distance']);
         }
         
-        if (isset($routeData['time_limit_minutes'])) {
-            $timeLimit = intval($routeData['time_limit_minutes']);
+        if (isset($result['total_time'])) {
+            $totalTime = intval($result['total_time']);
+        }
+    } elseif ($routeType === 'simple') {
+        // Для простого маршрута
+        if (isset($routeData['start_point']['name'])) {
+            $startPoint = $routeData['start_point']['name'];
+        }
+        
+        if (isset($routeData['end_point']['name'])) {
+            $endPoint = $routeData['end_point']['name'];
         }
         
         if (isset($routeData['mode'])) {
             $transportMode = $routeData['mode'];
         }
         
-        if (isset($routeData['return_to_start'])) {
-            $returnToStart = $routeData['return_to_start'] ? 1 : 0;
+        if (isset($routeData['waypoints']) && is_array($routeData['waypoints'])) {
+            $placesCount = count($routeData['waypoints']) + 2; // старт + финиш
         }
     }
     
@@ -110,8 +173,13 @@ function saveRouteToDatabase($userId, $routeType, $routeData, $result) {
     error_log("[API] - Start: $startPoint");
     error_log("[API] - End: " . ($endPoint ?? 'null'));
     error_log("[API] - Categories: $categories");
-    error_log("[API] - Distance: " . ($totalDistance ?? 0));
-    error_log("[API] - Time: " . ($totalTime ?? 0));
+    error_log("[API] - Time limit: " . ($timeLimit ?? 'null'));
+    error_log("[API] - Transport: $transportMode");
+    error_log("[API] - Return to start: $returnToStart");
+    error_log("[API] - Pace: $pace");
+    error_log("[API] - Time strictness: $timeStrictness");
+    error_log("[API] - Distance: " . ($totalDistance ?? 'null'));
+    error_log("[API] - Time: " . ($totalTime ?? 'null'));
     error_log("[API] - Places: $placesCount");
     
     // Подготовка запроса - 16 полей
@@ -128,7 +196,7 @@ function saveRouteToDatabase($userId, $routeType, $routeData, $result) {
     
     error_log("[API] Statement prepared");
     
-    // КРИТИЧНО: 16 полей = 16 типов = 16 параметров
+    // КРИТИЧНО: 16 полей = 17 символов типов = 16 параметров
     // i=integer, s=string, d=double
     // Типы: i s s s s s i s i s s i s d i i
     $stmt->bind_param("isssssisisissdii", 
