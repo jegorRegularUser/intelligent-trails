@@ -25,20 +25,26 @@ window.RouteModalYandex = {
       new ymaps.SuggestView(input, { results: 5 });
     }
     
-    // Геокодирование при потере фокуса
+    // ТОЛЬКО при потере фокуса - чтобы дождаться выбора из подсказки!
     input.addEventListener('blur', async () => {
-      await this.handleInputChange(input, inputId);
+      // Задержка 300мс чтобы подсказка Яндекса успела применить выбор
+      setTimeout(async () => {
+        await this.handleInputChange(input, inputId);
+      }, 300);
     });
     
     // Геокодирование при нажатии Enter
     input.addEventListener('keydown', async (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
-        await this.handleInputChange(input, inputId);
+        // Небольшая задержка на случай если подсказка еще применяется
+        setTimeout(async () => {
+          await this.handleInputChange(input, inputId);
+        }, 100);
       }
     });
     
-    // Очистка координат при изменении текста
+    // Очистка координат при начале ввода
     input.addEventListener('input', () => {
       const currentValue = input.value.trim();
       const lastGeocoded = this.lastGeocodedAddress[inputId];
@@ -48,12 +54,15 @@ window.RouteModalYandex = {
         delete input.dataset.coords;
         input.style.borderColor = '';
         input.title = '';
+        console.log(`[RouteModalYandex] Cleared coords for ${inputId} (text changed)`);
       }
     });
   },
 
   async handleInputChange(input, inputId) {
     const address = input.value.trim();
+    
+    console.log(`[RouteModalYandex] handleInputChange for ${inputId}: "${address}"`);
     
     if (!address) {
       delete input.dataset.coords;
@@ -66,7 +75,7 @@ window.RouteModalYandex = {
     // Проверяем, нужно ли геокодировать
     const lastGeocoded = this.lastGeocodedAddress[inputId];
     if (address === lastGeocoded && input.dataset.coords) {
-      console.log(`[RouteModalYandex] Skipping geocoding for ${inputId} - already geocoded`);
+      console.log(`[RouteModalYandex] Skipping geocoding for ${inputId} - already geocoded this address`);
       return;
     }
     
