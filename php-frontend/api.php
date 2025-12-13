@@ -117,7 +117,7 @@ function saveRouteToDatabase($userId, $routeType, $routeData, $result) {
         return null;
     }
     
-    $stmt->bind_param("isssssisisisdii", 
+    $stmt->bind_param("isssssisisssdii", 
         $userId,
         $routeName,
         $routeType,
