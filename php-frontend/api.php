@@ -120,7 +120,7 @@ function saveRouteToDatabase($userId, $routeType, $routeData, $result) {
     
     // ВАЖНО: "isssssisisisdii" - 16 символов для 16 параметров
     // i = integer, s = string, d = double
-    $stmt->bind_param("isssssisisisdii", 
+    $stmt->bind_param("isssssisisssdii", 
         $userId,              // i
         $routeName,           // s
         $routeType,           // s
