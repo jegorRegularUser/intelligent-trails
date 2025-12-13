@@ -50,13 +50,19 @@ class MapSmartWalk {
             await this.drawSegment(places[i], places[i + 1], i, isReturnSegment);
         }
         
+        console.log('[MapSmartWalk] ⏳ Waiting 500ms before saving...');
+        
         setTimeout(() => {
+            console.log('[MapSmartWalk] ✓ Timeout complete, executing post-route tasks');
+            
             this.fitMapToRoute();
+            
             if (window.MapRouteBuilder) {
                 window.MapRouteBuilder.updateSegmentData(this.segmentDataArray);
             }
             
             // ВАЖНО: После построения маршрута сохраняем его в БД
+            console.log('[MapSmartWalk] 📞 Calling saveRouteToDB...');
             this.saveRouteToDB(routeData);
         }, 500);
         
@@ -64,14 +70,24 @@ class MapSmartWalk {
     }
     
     async saveRouteToDB(routeData) {
-        console.log('[MapSmartWalk] 💾 Saving route to database...', routeData);
+        console.log('[MapSmartWalk] 💾 saveRouteToDB called');
+        console.log('[MapSmartWalk] Route data:', routeData);
         
-        // Проверяем авторизацию
-        const userLoggedIn = document.body.dataset.loggedIn === 'true';
-        if (!userLoggedIn) {
+        // Проверяем авторизацию через data-атрибут body
+        const bodyElement = document.querySelector('body');
+        const isLoggedIn = bodyElement && bodyElement.dataset.loggedIn === 'true';
+        
+        console.log('[MapSmartWalk] Body element:', bodyElement);
+        console.log('[MapSmartWalk] Body dataset:', bodyElement ? bodyElement.dataset : 'null');
+        console.log('[MapSmartWalk] data-logged-in:', bodyElement ? bodyElement.dataset.loggedIn : 'undefined');
+        console.log('[MapSmartWalk] isLoggedIn:', isLoggedIn);
+        
+        if (!isLoggedIn) {
             console.log('[MapSmartWalk] ⚠️ User not logged in, skipping save');
             return;
         }
+        
+        console.log('[MapSmartWalk] ✓ User is logged in, proceeding with save');
         
         try {
             // Собираем данные для сохранения
@@ -98,12 +114,28 @@ class MapSmartWalk {
                 body: JSON.stringify(saveData)
             });
             
-            const result = await response.json();
-            console.log('[MapSmartWalk] 📥 Server response:', result);
+            console.log('[MapSmartWalk] 📥 Response status:', response.status);
+            console.log('[MapSmartWalk] 📥 Response ok:', response.ok);
+            
+            const responseText = await response.text();
+            console.log('[MapSmartWalk] 📥 Response text:', responseText);
+            
+            let result;
+            try {
+                result = JSON.parse(responseText);
+            } catch (e) {
+                console.error('[MapSmartWalk] ❌ Failed to parse JSON:', e);
+                console.error('[MapSmartWalk] ❌ Response was:', responseText);
+                throw new Error('Invalid JSON response: ' + responseText.substring(0, 100));
+            }
+            
+            console.log('[MapSmartWalk] 📥 Parsed result:', result);
             
             if (result.success) {
                 console.log('[MapSmartWalk] ✅ Route saved successfully! ID:', result.route_id);
-                // Можно показать уведомление пользователю
+                console.log('[MapSmartWalk] ✅ Saved flag:', result.saved);
+                
+                // Показываем уведомление пользователю
                 if (window.routeModal) {
                     window.routeModal.showNotification('Маршрут сохранен!', 'success');
                 }
@@ -113,6 +145,7 @@ class MapSmartWalk {
             
         } catch (error) {
             console.error('[MapSmartWalk] ❌ Error saving route:', error);
+            console.error('[MapSmartWalk] ❌ Error stack:', error.stack);
         }
     }
     

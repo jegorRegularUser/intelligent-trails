@@ -12,8 +12,7 @@
     <script src="https://api-maps.yandex.ru/2.1/?lang=ru_RU&apikey=7637c9ce-fc0e-4f1d-a6e2-2d6e85cf7193&suggest_apikey=1019e534-8f99-42e2-85b2-d0c7ed9ccca2"></script>
 </head>
 
-
-<body  <?php if(isset($_SESSION["loggedin"]) && $_SESSION["loggedin"] === true) echo 'data-logged-in="true"'; ?>>
+<body <?php if(isset($_SESSION["loggedin"]) && $_SESSION["loggedin"] === true): ?>data-logged-in="true"<?php endif; ?>>
     <?php require_once "components/navigation.php"; ?>
 
     <main class="map-page-container">
@@ -39,8 +38,6 @@
 
     <script src="assets/js/event-bus.js"></script>
     <script src="assets/js/state-manager.js"></script>
-    <script src="assets/js/route-loader.js"></script>
-
 
     <script src="assets/js/route-modal/route-modal-template.js"></script>
     <script src="assets/js/route-modal/route-modal-yandex.js"></script>
@@ -49,7 +46,6 @@
     <script src="assets/js/route-modal/route-modal-builder.js"></script>
     <script src="assets/js/route-modal/route-modal-core.js"></script>
 
-    <script src="assets/js/map/map-legend.js"></script>
     <script src="assets/js/map/map-place-markers.js"></script>
     <script src="assets/js/map/map-info-panel.js"></script>
     <script src="assets/js/map/map-route-builder.js"></script>
@@ -67,5 +63,16 @@
         }
     });
     </script>
+    
+    <?php if(isset($_SESSION["loggedin"]) && $_SESSION["loggedin"] === true): ?>
+    <script>
+        console.log('[MAP.PHP] User is logged in, body data-logged-in should be set');
+        console.log('[MAP.PHP] Body dataset:', document.body.dataset);
+    </script>
+    <?php else: ?>
+    <script>
+        console.log('[MAP.PHP] User is NOT logged in');
+    </script>
+    <?php endif; ?>
 </body>
 </html>
