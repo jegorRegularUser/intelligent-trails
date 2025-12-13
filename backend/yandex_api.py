@@ -70,10 +70,11 @@ class YandexStaticRouter:
                         
                         for city_name, city_coords in RUSSIAN_CITIES.items():
                             if city_name in name or city_name in description:
-                                logger.info(f"Corrected location: {name} -> {city_coords}")
+                                logger.info(f"Detected city: {city_name} but keeping original coords: {coordinates}")
                                 return {
                                     "name": city_name.title(),
-                                    "coordinates": city_coords,
+                                    "coordinates": coordinates,
+                                    "city_center": city_coords,
                                     "is_russian": True
                                 }
                     
