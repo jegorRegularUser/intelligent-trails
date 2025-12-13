@@ -38,6 +38,8 @@
 
     <script src="assets/js/event-bus.js"></script>
     <script src="assets/js/state-manager.js"></script>
+    <script src="assets/js/route-loader.js"></script>
+
 
     <script src="assets/js/route-modal/route-modal-template.js"></script>
     <script src="assets/js/route-modal/route-modal-yandex.js"></script>
