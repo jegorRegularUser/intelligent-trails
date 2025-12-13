@@ -1,8 +1,3 @@
-/**
- * Route Modal Template
- * ИСПРАВЛЕНО: Добавлены кнопки "Выбрать на карте" для начальной и конечной точек
- */
-
 window.RouteModalTemplate = {
   getHTML() {
     return `
@@ -126,7 +121,15 @@ window.RouteModalTemplate = {
           </div>
           
           <label class="radio-option">
-            <input type="radio" name="routeEnd" value="return" checked />
+            <input type="radio" name="routeEnd" value="last" checked />
+            <div class="option-card">
+              <span class="option-icon">🎯</span>
+              <span>Закончить в последней точке интереса</span>
+            </div>
+          </label>
+          
+          <label class="radio-option">
+            <input type="radio" name="routeEnd" value="return" />
             <div class="option-card">
               <span class="option-icon">🔄</span>
               <span>Вернуться к началу</span>
@@ -136,16 +139,8 @@ window.RouteModalTemplate = {
           <label class="radio-option">
             <input type="radio" name="routeEnd" value="custom" />
             <div class="option-card">
-              <span class="option-icon">🎯</span>
+              <span class="option-icon">📍</span>
               <span>Закончить в другом месте</span>
-            </div>
-          </label>
-          
-          <label class="radio-option">
-            <input type="radio" name="routeEnd" value="smart" />
-            <div class="option-card">
-              <span class="option-icon">🤖</span>
-              <span>Закончить в интересном месте</span>
             </div>
           </label>
         </div>

@@ -103,7 +103,7 @@ window.RouteModalBuilder = {
         }
 
         const routeEndType = document.querySelector('input[name="routeEnd"]:checked')?.value;
-        const return_to_start = routeEndType === 'return';
+        const return_to_start = (routeEndType === 'return');
 
         return {
             start_point: startCoordsBackend,

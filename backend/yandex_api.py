@@ -150,9 +150,7 @@ class YandexStaticRouter:
             
             location_info = await self._get_corrected_location(center_coords)
             corrected_coords = location_info['coordinates']
-            
-            logger.info(f"Corrected location: {location_info['name']} at {corrected_coords}")
-            
+                        
             for category in categories:
                 logger.info(f"Searching '{category}' near {corrected_coords}")
                 

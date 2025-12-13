@@ -4,6 +4,7 @@ class MapSmartWalk {
         this.multiRoutes = [];
         this.currentRouteData = null;
         this.segmentDataArray = [];
+        this.returnSegmentIndex = -1;
         
         if (!this.map) {
             console.error('[MapSmartWalk] Map instance required');
@@ -26,6 +27,7 @@ class MapSmartWalk {
         
         this.clearRouteLines();
         this.segmentDataArray = [];
+        this.returnSegmentIndex = -1;
         
         if (!routeData || !routeData.places || routeData.places.length < 2) {
             console.warn('[MapSmartWalk] Not enough places to build route');
@@ -35,8 +37,17 @@ class MapSmartWalk {
         const places = routeData.places;
         console.log(`[MapSmartWalk] Building route through ${places.length} places`);
         
+        const lastPlaceIsStart = routeData.return_to_start && 
+            places[0].coordinates[0] === places[places.length - 1].coordinates[0] &&
+            places[0].coordinates[1] === places[places.length - 1].coordinates[1];
+        
+        if (lastPlaceIsStart) {
+            this.returnSegmentIndex = places.length - 2;
+        }
+        
         for (let i = 0; i < places.length - 1; i++) {
-            await this.drawSegment(places[i], places[i + 1], i);
+            const isReturnSegment = (i === this.returnSegmentIndex);
+            await this.drawSegment(places[i], places[i + 1], i, isReturnSegment);
         }
         
         setTimeout(() => {
@@ -49,25 +60,18 @@ class MapSmartWalk {
         console.log('[MapSmartWalk] Route visualization complete');
     }
     
-    async drawSegment(fromPlace, toPlace, segmentIndex) {
+    async drawSegment(fromPlace, toPlace, segmentIndex, isReturnSegment = false) {
         const mode = toPlace.transport_mode || 'pedestrian';
         const fromCoords = fromPlace.coordinates;
         const toCoords = toPlace.coordinates;
         
-        console.log(`[MapSmartWalk] Segment ${segmentIndex + 1}: ${fromPlace.name} -> ${toPlace.name} (${mode})`);
+        console.log(`[MapSmartWalk] Segment ${segmentIndex + 1}: ${fromPlace.name} -> ${toPlace.name} (${mode})${isReturnSegment ? ' [RETURN]' : ''}`);
         
         try {
             const routingMode = this.convertModeToYandex(mode);
             
-            // Создаем multiRoute с максимальным скрытием меток
-            const multiRoute = new ymaps.multiRouter.MultiRoute({
-                referencePoints: [fromCoords, toCoords],
-                params: {
-                    routingMode: routingMode
-                }
-            }, {
+            const routeOptions = {
                 boundsAutoApply: false,
-                // Все возможные варианты скрытия меток wayPoint
                 wayPointVisible: false,
                 wayPointStartVisible: false,
                 wayPointFinishVisible: false,
@@ -75,14 +79,28 @@ class MapSmartWalk {
                 wayPointFinishIconVisible: false,
                 wayPointIconVisible: false,
                 pinVisible: false,
-                viaPointVisible: false
-            });
+                viaPointVisible: false,
+                routeActiveStrokeWidth: 5,
+                routeActiveStrokeStyle: 'solid'
+            };
             
-            // Добавляем на карту
+            if (isReturnSegment) {
+                routeOptions.routeActiveStrokeColor = '#FF6B6B';
+                routeOptions.routeActiveStrokeStyle = 'shortdash';
+            } else {
+                routeOptions.routeActiveStrokeColor = '#4A90E2';
+            }
+            
+            const multiRoute = new ymaps.multiRouter.MultiRoute({
+                referencePoints: [fromCoords, toCoords],
+                params: {
+                    routingMode: routingMode
+                }
+            }, routeOptions);
+            
             this.map.geoObjects.add(multiRoute);
             this.multiRoutes.push(multiRoute);
             
-            // Ждем построения маршрута
             await new Promise((resolve, reject) => {
                 const timeout = setTimeout(() => {
                     reject(new Error('Timeout'));
@@ -99,27 +117,25 @@ class MapSmartWalk {
                 });
             });
             
-            // Получаем активный маршрут для сохранения данных
             const activeRoute = multiRoute.getActiveRoute();
             if (!activeRoute) {
                 console.warn(`[MapSmartWalk] No active route for segment ${segmentIndex}`);
                 return;
             }
             
-            // Получаем данные маршрута
             const distance = activeRoute.properties.get('distance').value;
             const duration = activeRoute.properties.get('duration').value;
             
             console.log(`  ✓ Distance: ${(distance / 1000).toFixed(2)} km, Time: ${(duration / 60).toFixed(0)} min`);
             
-            // Сохраняем данные сегмента
             const segmentData = {
                 index: segmentIndex,
                 distance: distance,
                 duration: duration,
                 mode: mode,
                 fromPlace: fromPlace.name,
-                toPlace: toPlace.name
+                toPlace: toPlace.name,
+                isReturn: isReturnSegment
             };
             this.segmentDataArray.push(segmentData);
             
@@ -171,6 +187,7 @@ class MapSmartWalk {
         });
         this.multiRoutes = [];
         this.segmentDataArray = [];
+        this.returnSegmentIndex = -1;
     }
     
     fitMapToRoute() {
