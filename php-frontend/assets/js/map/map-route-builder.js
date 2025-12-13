@@ -263,10 +263,12 @@ window.MapRouteBuilder = {
                 `
                     : ""
                 }
-                <div style="width: 100%; text-align: center;">
-                    ${saveButtonHTML}
-                </div>
+                
             `;
+
+            // <div style="width: 100%; text-align: center;">
+            //         ${saveButtonHTML}
+            //      </div>
     }
 
     if (stagesDiv) {
