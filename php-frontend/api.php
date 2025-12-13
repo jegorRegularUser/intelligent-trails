@@ -65,6 +65,7 @@ function saveRouteToDatabase($userId, $routeType, $routeData, $result) {
     error_log("[API] saveRouteToDatabase called");
     error_log("[API] User ID: $userId, Type: $routeType");
     
+    // Значения по умолчанию
     $routeName = 'Маршрут ' . date('d.m.Y H:i');
     $startPoint = '';
     $endPoint = null;
@@ -80,6 +81,7 @@ function saveRouteToDatabase($userId, $routeType, $routeData, $result) {
     $totalTime = null;
     $placesCount = 0;
     
+    // Извлекаем данные в зависимости от типа маршрута
     if ($routeType === 'smart_walk') {
         $startPoint = $routeData['start_point']['name'] ?? 'Начало';
         
@@ -104,8 +106,15 @@ function saveRouteToDatabase($userId, $routeType, $routeData, $result) {
         }
     }
     
-    error_log("[API] Saving: start=$startPoint, categories=$categories, places=$placesCount");
+    error_log("[API] Extracted data:");
+    error_log("[API] - Start: $startPoint");
+    error_log("[API] - End: " . ($endPoint ?? 'null'));
+    error_log("[API] - Categories: $categories");
+    error_log("[API] - Distance: " . ($totalDistance ?? 0));
+    error_log("[API] - Time: " . ($totalTime ?? 0));
+    error_log("[API] - Places: $placesCount");
     
+    // Подготовка запроса - 16 полей
     $stmt = $link->prepare("INSERT INTO saved_routes (
         user_id, route_name, route_type, start_point, end_point, categories, 
         time_limit, transport_mode, return_to_start, min_places_per_category,
@@ -117,23 +126,28 @@ function saveRouteToDatabase($userId, $routeType, $routeData, $result) {
         return null;
     }
     
-    $stmt->bind_param("isssssisisssdii", 
-        $userId,
-        $routeName,
-        $routeType,
-        $startPoint,
-        $endPoint,
-        $categories,
-        $timeLimit,
-        $transportMode,
-        $returnToStart,
-        $minPlacesPerCategory,
-        $pace,
-        $timeStrictness,
-        $routeDataJson,
-        $totalDistance,
-        $totalTime,
-        $placesCount
+    error_log("[API] Statement prepared");
+    
+    // КРИТИЧНО: 16 полей = 16 типов = 16 параметров
+    // i=integer, s=string, d=double
+    // Типы: i s s s s s i s i s s i s d i i
+    $stmt->bind_param("isssssisisissdii", 
+        $userId,              // i - INT
+        $routeName,           // s - VARCHAR
+        $routeType,           // s - VARCHAR
+        $startPoint,          // s - VARCHAR
+        $endPoint,            // s - VARCHAR (nullable)
+        $categories,          // s - JSON/TEXT
+        $timeLimit,           // i - INT (nullable)
+        $transportMode,       // s - VARCHAR
+        $returnToStart,       // i - TINYINT
+        $minPlacesPerCategory,// s - JSON/TEXT
+        $pace,                // s - VARCHAR
+        $timeStrictness,      // i - INT
+        $routeDataJson,       // s - JSON/TEXT
+        $totalDistance,       // d - DOUBLE (nullable)
+        $totalTime,           // i - INT (nullable)
+        $placesCount          // i - INT
     );
     
     if (!$stmt->execute()) {
