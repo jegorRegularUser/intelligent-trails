@@ -12,7 +12,8 @@
     <script src="https://api-maps.yandex.ru/2.1/?lang=ru_RU&apikey=***REMOVED-YANDEX-MAPS-KEY***&suggest_apikey=***REMOVED-YANDEX-SUGGEST-KEY***"></script>
 </head>
 
-<body>
+
+<body  <?php if(isset($_SESSION["loggedin"]) && $_SESSION["loggedin"] === true) echo 'data-logged-in="true"'; ?>>
     <?php require_once "components/navigation.php"; ?>
 
     <main class="map-page-container">

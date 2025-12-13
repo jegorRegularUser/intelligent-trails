@@ -135,7 +135,7 @@ if ($stmt = $link->prepare($stats_sql)) {
     
     <div class="routes-container">
         <div class="page-header">
-            <h1>🗺️ Мои маршруты</h1>
+            <h1> Мои маршруты</h1>
             <p style="color: #6b7280;">Управляйте вашими сохраненными маршрутами</p>
         </div>
         

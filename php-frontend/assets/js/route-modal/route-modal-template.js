@@ -59,26 +59,16 @@ window.RouteModalTemplate = {
         </div>
 
         <div class="input-group">
-          <div style="display: flex; gap: 10px;">
-            <input 
-              type="text" 
-              id="smartStartPoint" 
-              class="location-input" 
-              placeholder="Например: Москва, Красная площадь"
-              autocomplete="off"
-              style="flex: 1;"
-            />
-            <button 
-              id="pickStartPointBtn" 
-              class="map-picker-btn" 
-              type="button"
-              title="Выбрать на карте"
-            >
-              🗺️
-            </button>
-          </div>
+          <input 
+            type="text" 
+            id="smartStartPoint" 
+            class="location-input" 
+            placeholder="Например: Москва, Красная площадь"
+            autocomplete="off"
+            style="width: 100%;"
+          />
           <small style="color: #666; margin-top: 5px; display: block;">
-            💡 Введите адрес или кликните 🗺️ чтобы выбрать на карте
+            💡 Введите адрес и выберите из выпадающего списка
           </small>
         </div>
 
@@ -146,24 +136,17 @@ window.RouteModalTemplate = {
         </div>
 
         <div class="input-group" id="smartEndPointGroup" style="display: none; margin-top: 15px;">
-          <div style="display: flex; gap: 10px;">
-            <input 
-              type="text" 
-              id="smartEndPoint" 
-              class="location-input" 
-              placeholder="Точка финиша"
-              autocomplete="off"
-              style="flex: 1;"
-            />
-            <button 
-              id="pickEndPointBtn" 
-              class="map-picker-btn" 
-              type="button"
-              title="Выбрать на карте"
-            >
-              🗺️
-            </button>
-          </div>
+          <input 
+            type="text" 
+            id="smartEndPoint" 
+            class="location-input" 
+            placeholder="Точка финиша"
+            autocomplete="off"
+            style="width: 100%;"
+          />
+          <small style="color: #666; margin-top: 5px; display: block;">
+            💡 Введите адрес и выберите из списка
+          </small>
         </div>
       </div>
     `;

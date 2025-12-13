@@ -1,6 +1,12 @@
 <?php
 require_once "config.php";
 
+// Включаем логирование ошибок
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+ini_set('log_errors', 1);
+ini_set('error_log', __DIR__ . '/api_errors.log');
+
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
@@ -12,6 +18,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 define('BACKEND_API_URL', 'https://intelligent-trails.onrender.com');
+
+function logDebug($message, $data = null) {
+    $logMessage = "[" . date('Y-m-d H:i:s') . "] " . $message;
+    if ($data !== null) {
+        $logMessage .= " | Data: " . json_encode($data, JSON_UNESCAPED_UNICODE);
+    }
+    error_log($logMessage);
+    echo json_encode(['log' => $message, 'data' => $data]) . "\n";
+}
 
 function callBackendAPI($endpoint, $method = 'GET', $data = null) {
     $url = BACKEND_API_URL . $endpoint;
@@ -55,6 +70,11 @@ function callBackendAPI($endpoint, $method = 'GET', $data = null) {
 
 function saveRouteToDatabase($userId, $routeType, $routeData, $result) {
     global $link;
+    
+    error_log("[API] 💾 Starting saveRouteToDatabase");
+    error_log("[API] User ID: $userId");
+    error_log("[API] Route Type: $routeType");
+    error_log("[API] Route Data: " . json_encode($routeData, JSON_UNESCAPED_UNICODE));
     
     $routeName = 'Маршрут ' . date('d.m.Y H:i');
     $startPoint = '';
@@ -102,16 +122,48 @@ function saveRouteToDatabase($userId, $routeType, $routeData, $result) {
     } elseif ($routeType === 'smart_walk') {
         $startPoint = $routeData['start_point']['name'] ?? 'Начало';
         
-        if (isset($result['total_distance'])) {
-            $totalDistance = floatval($result['total_distance']);
+        // Для smart_walk результат уже содержит данные о маршруте
+        if (isset($routeData['places']) && is_array($routeData['places'])) {
+            $placesCount = count($routeData['places']);
+            
+            // Вычисляем общее расстояние и время если есть данные
+            $totalDistance = 0;
+            $totalTime = 0;
+            
+            // Данные должны быть в сегментах (если они есть)
+            foreach ($routeData['places'] as $place) {
+                if (isset($place['distance'])) {
+                    $totalDistance += floatval($place['distance']);
+                }
+                if (isset($place['duration'])) {
+                    $totalTime += intval($place['duration']);
+                }
+            }
         }
-        if (isset($result['total_time'])) {
-            $totalTime = intval($result['total_time']);
+        
+        // Категории из мест
+        if (isset($routeData['categories']) && is_array($routeData['categories'])) {
+            $categories = json_encode($routeData['categories']);
         }
-        if (isset($result['places']) && is_array($result['places'])) {
-            $placesCount = count($result['places']);
+        
+        // Время
+        if (isset($routeData['time_limit_minutes'])) {
+            $timeLimit = intval($routeData['time_limit_minutes']);
+        }
+        
+        // Режим транспорта
+        if (isset($routeData['mode'])) {
+            $transportMode = $routeData['mode'];
         }
     }
+    
+    error_log("[API] Extracted data:");
+    error_log("[API]   - Start: $startPoint");
+    error_log("[API]   - End: " . ($endPoint ?? 'null'));
+    error_log("[API]   - Categories: " . ($categories ?? 'null'));
+    error_log("[API]   - Distance: " . ($totalDistance ?? 'null'));
+    error_log("[API]   - Time: " . ($totalTime ?? 'null'));
+    error_log("[API]   - Places: $placesCount");
     
     $stmt = $link->prepare("INSERT INTO saved_routes (
         user_id, route_name, route_type, start_point, end_point, categories, 
@@ -120,30 +172,49 @@ function saveRouteToDatabase($userId, $routeType, $routeData, $result) {
         created_at, last_used_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())");
     
-    if ($stmt) {
-        $stmt->bind_param("isssssisississdii", 
-            $userId, $routeName, $routeType, $startPoint, $endPoint, $categories,
-            $timeLimit, $transportMode, $returnToStart, $minPlacesPerCategory,
-            $pace, $timeStrictness, $routeDataJson, $totalDistance, $totalTime, $placesCount
-        );
-        $success = $stmt->execute();
-        $routeId = $stmt->insert_id;
-        $stmt->close();
-        
-        if ($success) {
-            error_log("[API] Route saved successfully. ID: $routeId, Type: $routeType");
-            return $routeId;
-        } else {
-            error_log("[API] Failed to save route: " . $link->error);
-            return null;
-        }
+    if (!$stmt) {
+        error_log("[API] ❌ Failed to prepare statement: " . $link->error);
+        return null;
     }
     
-    error_log("[API] Failed to prepare statement: " . $link->error);
-    return null;
+    error_log("[API] ✓ Statement prepared");
+    
+    $bindResult = $stmt->bind_param("isssssisississdii", 
+        $userId, $routeName, $routeType, $startPoint, $endPoint, $categories,
+        $timeLimit, $transportMode, $returnToStart, $minPlacesPerCategory,
+        $pace, $timeStrictness, $routeDataJson, $totalDistance, $totalTime, $placesCount
+    );
+    
+    if (!$bindResult) {
+        error_log("[API] ❌ Failed to bind params: " . $stmt->error);
+        return null;
+    }
+    
+    error_log("[API] ✓ Parameters bound");
+    
+    $success = $stmt->execute();
+    
+    if (!$success) {
+        error_log("[API] ❌ Execute failed: " . $stmt->error);
+        $stmt->close();
+        return null;
+    }
+    
+    $routeId = $stmt->insert_id;
+    $stmt->close();
+    
+    error_log("[API] ✅ Route saved successfully! ID: $routeId");
+    
+    return $routeId;
 }
 
 $action = $_GET['action'] ?? $_POST['action'] ?? '';
+
+error_log("[API] ============================================");
+error_log("[API] New request: $action");
+error_log("[API] Method: " . $_SERVER['REQUEST_METHOD']);
+error_log("[API] Session loggedin: " . (isset($_SESSION["loggedin"]) ? ($_SESSION["loggedin"] ? 'true' : 'false') : 'not set'));
+error_log("[API] Session user ID: " . (isset($_SESSION["id"]) ? $_SESSION["id"] : 'not set'));
 
 switch ($action) {
     case 'rebuild_route_segment':
@@ -168,44 +239,53 @@ switch ($action) {
         break;
 
     case 'build_smart_walk':
+        error_log("[API] 🚶 Processing smart walk request");
+        
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             echo json_encode(['success' => false, 'error' => 'Method not allowed']);
             exit;
         }
         
         $input = json_decode(file_get_contents('php://input'), true);
+        error_log("[API] Input data: " . json_encode($input, JSON_UNESCAPED_UNICODE));
         
-        $result = callBackendAPI('/calculate_smart_walk', 'POST', $input);
+        $routeId = null;
         
-        if ($result['code'] === 200 && $result['data']) {
-            $routeId = null;
-            if (isset($_SESSION["loggedin"]) && $_SESSION["loggedin"] === true) {
-                $userId = $_SESSION["id"];
-                $routeId = saveRouteToDatabase($userId, 'smart_walk', $input, $result['data']);
-                error_log("[API] Smart walk saved with route_id: " . ($routeId ?? 'null'));
-            }
+        // Проверяем авторизацию
+        if (isset($_SESSION["loggedin"]) && $_SESSION["loggedin"] === true) {
+            $userId = $_SESSION["id"];
+            error_log("[API] ✓ User is logged in. User ID: $userId");
             
-            echo json_encode([
-                'success' => true, 
-                'data' => $result['data'],
-                'route_id' => $routeId
-            ]);
+            // Сохраняем маршрут
+            $routeId = saveRouteToDatabase($userId, 'smart_walk', $input, $input);
+            
+            if ($routeId) {
+                error_log("[API] ✅ Smart walk saved with route_id: $routeId");
+            } else {
+                error_log("[API] ❌ Failed to save smart walk");
+            }
         } else {
-            echo json_encode([
-                'success' => false,
-                'error' => 'Backend error',
-                'details' => $result['data'] ?? $result['error'] ?? 'Unknown error'
-            ]);
+            error_log("[API] ⚠️ User not logged in, route not saved");
         }
+        
+        echo json_encode([
+            'success' => true, 
+            'data' => $input,
+            'route_id' => $routeId,
+            'saved' => ($routeId !== null)
+        ]);
         break;
     
     case 'build_smart_route':
+        error_log("[API] 🎯 Processing smart route request");
+        
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             echo json_encode(['success' => false, 'error' => 'Method not allowed']);
             exit;
         }
         
         $input = json_decode(file_get_contents('php://input'), true);
+        error_log("[API] Input data: " . json_encode($input, JSON_UNESCAPED_UNICODE));
         
         $settings = $input['settings'] ?? [];
         if (!is_array($settings)) {
@@ -245,14 +325,24 @@ switch ($action) {
             $routeId = null;
             if (isset($_SESSION["loggedin"]) && $_SESSION["loggedin"] === true) {
                 $userId = $_SESSION["id"];
+                error_log("[API] ✓ User is logged in. User ID: $userId");
+                
                 $routeId = saveRouteToDatabase($userId, 'smart', $routeData, $result['data']);
-                error_log("[API] Smart route saved with route_id: " . ($routeId ?? 'null'));
+                
+                if ($routeId) {
+                    error_log("[API] ✅ Smart route saved with route_id: $routeId");
+                } else {
+                    error_log("[API] ❌ Failed to save smart route");
+                }
+            } else {
+                error_log("[API] ⚠️ User not logged in, route not saved");
             }
             
             echo json_encode([
                 'success' => true, 
                 'data' => $result['data'],
-                'route_id' => $routeId
+                'route_id' => $routeId,
+                'saved' => ($routeId !== null)
             ]);
         } else {
             echo json_encode([
@@ -265,12 +355,15 @@ switch ($action) {
         break;
         
     case 'build_simple_route':
+        error_log("[API] 🗺️ Processing simple route request");
+        
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             echo json_encode(['success' => false, 'error' => 'Method not allowed']);
             exit;
         }
         
         $input = json_decode(file_get_contents('php://input'), true);
+        error_log("[API] Input data: " . json_encode($input, JSON_UNESCAPED_UNICODE));
         
         $simpleRouteData = [
             'type' => 'simple',
@@ -283,14 +376,24 @@ switch ($action) {
         $routeId = null;
         if (isset($_SESSION["loggedin"]) && $_SESSION["loggedin"] === true) {
             $userId = $_SESSION["id"];
+            error_log("[API] ✓ User is logged in. User ID: $userId");
+            
             $routeId = saveRouteToDatabase($userId, 'simple', $input, $simpleRouteData);
-            error_log("[API] Simple route saved with route_id: " . ($routeId ?? 'null'));
+            
+            if ($routeId) {
+                error_log("[API] ✅ Simple route saved with route_id: $routeId");
+            } else {
+                error_log("[API] ❌ Failed to save simple route");
+            }
+        } else {
+            error_log("[API] ⚠️ User not logged in, route not saved");
         }
         
         echo json_encode([
             'success' => true,
             'data' => $simpleRouteData,
-            'route_id' => $routeId
+            'route_id' => $routeId,
+            'saved' => ($routeId !== null)
         ]);
         break;
     
@@ -344,4 +447,6 @@ switch ($action) {
     default:
         echo json_encode(['success' => false, 'error' => 'Unknown action']);
 }
+
+error_log("[API] ============================================");
 ?>

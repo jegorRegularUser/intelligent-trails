@@ -55,9 +55,104 @@ class MapSmartWalk {
             if (window.MapRouteBuilder) {
                 window.MapRouteBuilder.updateSegmentData(this.segmentDataArray);
             }
+            
+            // ВАЖНО: После построения маршрута сохраняем его в БД
+            this.saveRouteToDB(routeData);
         }, 500);
         
         console.log('[MapSmartWalk] Route visualization complete');
+    }
+    
+    async saveRouteToDB(routeData) {
+        console.log('[MapSmartWalk] 💾 Saving route to database...', routeData);
+        
+        // Проверяем авторизацию
+        const userLoggedIn = document.body.dataset.loggedIn === 'true';
+        if (!userLoggedIn) {
+            console.log('[MapSmartWalk] ⚠️ User not logged in, skipping save');
+            return;
+        }
+        
+        try {
+            // Собираем данные для сохранения
+            const saveData = {
+                start_point: {
+                    name: routeData.places[0].name || 'Старт',
+                    coords: routeData.places[0].coordinates
+                },
+                categories: this.extractCategories(routeData.places),
+                time_limit_minutes: this.calculateTotalTime(),
+                return_to_start: routeData.return_to_start || false,
+                mode: this.extractTransportMode(routeData.places),
+                places: routeData.places
+            };
+            
+            console.log('[MapSmartWalk] 📤 Sending to API:', saveData);
+            
+            // Отправляем на сервер
+            const response = await fetch('api.php?action=build_smart_walk', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(saveData)
+            });
+            
+            const result = await response.json();
+            console.log('[MapSmartWalk] 📥 Server response:', result);
+            
+            if (result.success) {
+                console.log('[MapSmartWalk] ✅ Route saved successfully! ID:', result.route_id);
+                // Можно показать уведомление пользователю
+                if (window.routeModal) {
+                    window.routeModal.showNotification('Маршрут сохранен!', 'success');
+                }
+            } else {
+                console.error('[MapSmartWalk] ❌ Failed to save route:', result.error);
+            }
+            
+        } catch (error) {
+            console.error('[MapSmartWalk] ❌ Error saving route:', error);
+        }
+    }
+    
+    extractCategories(places) {
+        const categories = [];
+        places.forEach(place => {
+            if (place.category && !categories.includes(place.category)) {
+                categories.push(place.category);
+            }
+        });
+        console.log('[MapSmartWalk] Extracted categories:', categories);
+        return categories;
+    }
+    
+    calculateTotalTime() {
+        const totalSeconds = this.segmentDataArray.reduce((sum, seg) => sum + (seg.duration || 0), 0);
+        const totalMinutes = Math.round(totalSeconds / 60);
+        console.log('[MapSmartWalk] Total time:', totalMinutes, 'minutes');
+        return totalMinutes;
+    }
+    
+    extractTransportMode(places) {
+        // Берем самый часто используемый транспорт
+        const modes = {};
+        places.forEach(place => {
+            const mode = place.transport_mode || 'pedestrian';
+            modes[mode] = (modes[mode] || 0) + 1;
+        });
+        
+        let maxMode = 'pedestrian';
+        let maxCount = 0;
+        for (const [mode, count] of Object.entries(modes)) {
+            if (count > maxCount) {
+                maxMode = mode;
+                maxCount = count;
+            }
+        }
+        
+        console.log('[MapSmartWalk] Dominant transport mode:', maxMode);
+        return maxMode;
     }
     
     async drawSegment(fromPlace, toPlace, segmentIndex, isReturnSegment = false) {
