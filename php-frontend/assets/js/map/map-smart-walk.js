@@ -59,7 +59,7 @@ class MapSmartWalk {
         try {
             const routingMode = this.convertModeToYandex(mode);
             
-            // Создаем multiRoute - его и оставляем на карте!
+            // Создаем multiRoute с максимальным скрытием меток
             const multiRoute = new ymaps.multiRouter.MultiRoute({
                 referencePoints: [fromCoords, toCoords],
                 params: {
@@ -67,12 +67,18 @@ class MapSmartWalk {
                 }
             }, {
                 boundsAutoApply: false,
-                // Убираем только метки A и B
+                // Все возможные варианты скрытия меток wayPoint
+                wayPointVisible: false,
+                wayPointStartVisible: false,
+                wayPointFinishVisible: false,
                 wayPointStartIconVisible: false,
-                wayPointFinishIconVisible: false
+                wayPointFinishIconVisible: false,
+                wayPointIconVisible: false,
+                pinVisible: false,
+                viaPointVisible: false
             });
             
-            // Добавляем multiRoute на карту - он сам нарисует красивый маршрут
+            // Добавляем на карту
             this.map.geoObjects.add(multiRoute);
             this.multiRoutes.push(multiRoute);
             
