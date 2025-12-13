@@ -112,9 +112,6 @@ if ($stmt_check = $link->prepare($sql_check_pass)) {
                 <a href="my_routes.php" style="flex: 1; min-width: 200px; padding: 14px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: 2px solid #667eea; border-radius: 12px; text-align: center; text-decoration: none; color: white; font-weight: 600; transition: all 0.3s ease;">
                     🗺️ Мои маршруты
                 </a>
-                <a href="route_history.php" style="flex: 1; min-width: 200px; padding: 14px 20px; background: white; border: 2px solid #e5e7eb; border-radius: 12px; text-align: center; text-decoration: none; color: #374151; font-weight: 600; transition: all 0.3s ease;">
-                    📜 История маршрутов
-                </a>
             </div>
         </div>
     </div>
