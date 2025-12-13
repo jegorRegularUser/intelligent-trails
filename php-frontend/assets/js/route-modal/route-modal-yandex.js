@@ -1,6 +1,7 @@
 window.RouteModalYandex = {
   modalInstance: null,
   startPointMarker: null,
+  lastGeocodedAddress: {},
 
   init(modal) {
     this.modalInstance = modal;
@@ -24,25 +25,74 @@ window.RouteModalYandex = {
       new ymaps.SuggestView(input, { results: 5 });
     }
     
+    // Геокодирование при потере фокуса
     input.addEventListener('blur', async () => {
-      const address = input.value.trim();
-      if (address && !input.dataset.coords) {
-        try {
-          const coords = await this.geocodeAddress(address);
-          if (coords) {
-            input.dataset.coords = coords.join(',');
-            console.log(`[RouteModalYandex] Geocoded ${inputId}: [lat,lon] = ${coords}`);
-            
-            if (inputId.includes('Start')) {
-              input.style.borderColor = '#4CAF50';
-              input.title = `Координаты: ${coords[0].toFixed(4)}, ${coords[1].toFixed(4)}`;
-            }
-          }
-        } catch (error) {
-          console.error(`[RouteModalYandex] Failed to geocode ${inputId}:`, error);
-        }
+      await this.handleInputChange(input, inputId);
+    });
+    
+    // Геокодирование при нажатии Enter
+    input.addEventListener('keydown', async (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        await this.handleInputChange(input, inputId);
       }
     });
+    
+    // Очистка координат при изменении текста
+    input.addEventListener('input', () => {
+      const currentValue = input.value.trim();
+      const lastGeocoded = this.lastGeocodedAddress[inputId];
+      
+      // Если текст изменился - удаляем старые координаты
+      if (currentValue !== lastGeocoded) {
+        delete input.dataset.coords;
+        input.style.borderColor = '';
+        input.title = '';
+      }
+    });
+  },
+
+  async handleInputChange(input, inputId) {
+    const address = input.value.trim();
+    
+    if (!address) {
+      delete input.dataset.coords;
+      delete this.lastGeocodedAddress[inputId];
+      input.style.borderColor = '';
+      input.title = '';
+      return;
+    }
+    
+    // Проверяем, нужно ли геокодировать
+    const lastGeocoded = this.lastGeocodedAddress[inputId];
+    if (address === lastGeocoded && input.dataset.coords) {
+      console.log(`[RouteModalYandex] Skipping geocoding for ${inputId} - already geocoded`);
+      return;
+    }
+    
+    // Геокодируем
+    try {
+      console.log(`[RouteModalYandex] Geocoding ${inputId}: "${address}"`);
+      
+      const coords = await this.geocodeAddress(address);
+      
+      if (coords) {
+        input.dataset.coords = coords.join(',');
+        this.lastGeocodedAddress[inputId] = address;
+        
+        console.log(`[RouteModalYandex] ✓ Geocoded ${inputId}: "${address}" -> [lat,lon] = ${coords}`);
+        console.log(`[RouteModalYandex] ✓ Saved to dataset.coords: "${input.dataset.coords}"`);
+        
+        if (inputId.includes('Start') || inputId.includes('End')) {
+          input.style.borderColor = '#4CAF50';
+          input.title = `Координаты: ${coords[0].toFixed(6)}, ${coords[1].toFixed(6)}`;
+        }
+      }
+    } catch (error) {
+      console.error(`[RouteModalYandex] ✗ Failed to geocode ${inputId}:`, error);
+      input.style.borderColor = '#FF5722';
+      input.title = 'Ошибка геокодирования';
+    }
   },
 
   setupMapClickHandler() {
@@ -84,8 +134,9 @@ window.RouteModalYandex = {
       if (input) {
         input.value = address;
         input.dataset.coords = coords.join(',');
+        this.lastGeocodedAddress[inputId] = address;
         input.style.borderColor = '#4CAF50';
-        input.title = `Координаты: ${coords[0].toFixed(4)}, ${coords[1].toFixed(4)}`;
+        input.title = `Координаты: ${coords[0].toFixed(6)}, ${coords[1].toFixed(6)}`;
         
         console.log(`[RouteModalYandex] ${inputId} set to: ${address}, coords: ${coords}`);
       }
@@ -128,11 +179,17 @@ window.RouteModalYandex = {
 
   async geocodeAddress(address) {
     return new Promise((resolve, reject) => {
+      if (typeof ymaps === 'undefined') {
+        reject(new Error('Yandex Maps not loaded'));
+        return;
+      }
+      
       ymaps.geocode(address, { results: 1 }).then(
         (result) => {
           const firstGeoObject = result.geoObjects.get(0);
           if (firstGeoObject) {
             const coords = firstGeoObject.geometry.getCoordinates();
+            console.log(`[RouteModalYandex] Yandex returned coords for "${address}":`, coords);
             resolve(coords);
           } else {
             reject(new Error("Адрес не найден"));
