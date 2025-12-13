@@ -2,7 +2,6 @@ class MapSmartWalk {
     constructor(map) {
         this.map = map;
         this.routeLines = [];
-        this.multiRoutes = [];
         this.currentRouteData = null;
         this.segmentDataArray = [];
         
@@ -60,20 +59,15 @@ class MapSmartWalk {
         try {
             const routingMode = this.convertModeToYandex(mode);
             
-            // Создаем multiRoute согласно документации
+            // Создаем multiRoute для получения координат маршрута
             const multiRoute = new ymaps.multiRouter.MultiRoute({
                 referencePoints: [fromCoords, toCoords],
                 params: {
                     routingMode: routingMode
                 }
             }, {
-                boundsAutoApply: false,
-                wayPointStartIconVisible: false,
-                wayPointFinishIconVisible: false
+                boundsAutoApply: false
             });
-            
-            this.map.geoObjects.add(multiRoute);
-            this.multiRoutes.push(multiRoute);
             
             // Ждем построения маршрута
             await new Promise((resolve, reject) => {
@@ -96,7 +90,6 @@ class MapSmartWalk {
             const activeRoute = multiRoute.getActiveRoute();
             if (!activeRoute) {
                 console.warn(`[MapSmartWalk] No active route for segment ${segmentIndex}`);
-                this.drawFallbackLine(fromCoords, toCoords, mode, segmentIndex);
                 return;
             }
             
@@ -106,12 +99,16 @@ class MapSmartWalk {
             
             console.log(`  ✓ Distance: ${(distance / 1000).toFixed(2)} km, Time: ${(duration / 60).toFixed(0)} min`);
             
-            // ПРАВИЛЬНЫЙ способ получения координат - через geometry у Route
-            const coordinates = activeRoute.geometry.getCoordinates();
+            // Получаем координаты
+            const geometry = activeRoute.geometry;
+            if (!geometry) {
+                console.warn(`[MapSmartWalk] No geometry for segment ${segmentIndex}`);
+                return;
+            }
             
+            const coordinates = geometry.getCoordinates();
             if (!coordinates || coordinates.length === 0) {
                 console.warn(`[MapSmartWalk] No coordinates found for segment ${segmentIndex}`);
-                this.drawFallbackLine(fromCoords, toCoords, mode, segmentIndex);
                 return;
             }
             
@@ -128,7 +125,7 @@ class MapSmartWalk {
             };
             this.segmentDataArray.push(segmentData);
             
-            // Создаем видимую полилинию
+            // Создаем свою полилинию
             const polyline = new ymaps.Polyline(
                 coordinates,
                 {
@@ -155,29 +152,7 @@ class MapSmartWalk {
             
         } catch (error) {
             console.error(`[MapSmartWalk] Error building segment ${segmentIndex}:`, error);
-            this.drawFallbackLine(fromCoords, toCoords, mode, segmentIndex);
         }
-    }
-    
-    drawFallbackLine(fromCoords, toCoords, mode, segmentIndex) {
-        console.warn('[MapSmartWalk] Using fallback straight line');
-        
-        const polyline = new ymaps.Polyline(
-            [fromCoords, toCoords],
-            {
-                hintContent: 'Прямая линия (ошибка построения маршрута)'
-            },
-            {
-                strokeColor: '#FF6B6B',
-                strokeWidth: 3,
-                strokeOpacity: 0.6,
-                strokeStyle: 'dot',
-                zIndex: 100 + segmentIndex
-            }
-        );
-        
-        this.map.geoObjects.add(polyline);
-        this.routeLines.push(polyline);
     }
     
     createBalloonContent(fromPlace, toPlace, distance, duration, mode) {
@@ -217,7 +192,7 @@ class MapSmartWalk {
             'transit': 'masstransit',
             'bicycle': 'bicycle'
         };
-        return mapping[mode] || 'walking';
+        return mapping[mode] || 'pedestrian';
     }
     
     getModeColor(mode) {
@@ -265,12 +240,6 @@ class MapSmartWalk {
             this.map.geoObjects.remove(line);
         });
         this.routeLines = [];
-        
-        this.multiRoutes.forEach(route => {
-            this.map.geoObjects.remove(route);
-        });
-        this.multiRoutes = [];
-        
         this.segmentDataArray = [];
     }
     
