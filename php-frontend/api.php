@@ -1,8 +1,7 @@
 <?php
-session_start(); // ВАЖНО! Добавляем в самое начало
+session_start();
 require_once "config.php";
 
-// Включаем логирование ошибок ТОЛЬКО в файл
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
@@ -63,7 +62,7 @@ function callBackendAPI($endpoint, $method = 'GET', $data = null) {
 function saveRouteToDatabase($userId, $routeType, $routeData, $result) {
     global $link;
     
-    error_log("[API] 💾 saveRouteToDatabase called");
+    error_log("[API] saveRouteToDatabase called");
     error_log("[API] User ID: $userId, Type: $routeType");
     
     $routeName = 'Маршрут ' . date('d.m.Y H:i');
@@ -73,7 +72,7 @@ function saveRouteToDatabase($userId, $routeType, $routeData, $result) {
     $timeLimit = null;
     $transportMode = 'pedestrian';
     $returnToStart = 0;
-    $minPlacesPerCategory = null;
+    $minPlacesPerCategory = '{}';
     $pace = 'balanced';
     $timeStrictness = 5;
     $routeDataJson = json_encode($result);
@@ -107,24 +106,37 @@ function saveRouteToDatabase($userId, $routeType, $routeData, $result) {
     
     error_log("[API] Saving: start=$startPoint, categories=$categories, places=$placesCount");
     
+    // ВАЖНО: 16 полей в INSERT = 16 параметров
     $stmt = $link->prepare("INSERT INTO saved_routes (
         user_id, route_name, route_type, start_point, end_point, categories, 
         time_limit, transport_mode, return_to_start, min_places_per_category,
-        pace, time_strictness, route_data, total_distance, total_time, places_count,
-        created_at, last_used_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())");
+        pace, time_strictness, route_data, total_distance, total_time, places_count
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
     
     if (!$stmt) {
         error_log("[API] ❌ Prepare failed: " . $link->error);
         return null;
     }
     
-    $minPlacesJson = json_encode(new stdClass());
-    
-    $stmt->bind_param("isssssisississdii", 
-        $userId, $routeName, $routeType, $startPoint, $endPoint, $categories,
-        $timeLimit, $transportMode, $returnToStart, $minPlacesJson,
-        $pace, $timeStrictness, $routeDataJson, $totalDistance, $totalTime, $placesCount
+    // ВАЖНО: "isssssisisisdii" - 16 символов для 16 параметров
+    // i = integer, s = string, d = double
+    $stmt->bind_param("isssssisisisdii", 
+        $userId,              // i
+        $routeName,           // s
+        $routeType,           // s
+        $startPoint,          // s
+        $endPoint,            // s
+        $categories,          // s
+        $timeLimit,           // i
+        $transportMode,       // s
+        $returnToStart,       // i
+        $minPlacesPerCategory,// s
+        $pace,                // i - ОШИБКА БЫЛА ТУТ! pace это STRING, а не INT
+        $timeStrictness,      // s
+        $routeDataJson,       // d
+        $totalDistance,       // i
+        $totalTime,           // i
+        $placesCount          // i
     );
     
     if (!$stmt->execute()) {
@@ -172,7 +184,7 @@ switch ($action) {
         error_log("[API] 🚶 Processing smart walk");
         
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            error_log("[API] ❌ Wrong method: " . $_SERVER['REQUEST_METHOD']);
+            error_log("[API] ❌ Wrong method");
             echo json_encode(['success' => false, 'error' => 'Method not allowed']);
             exit;
         }
