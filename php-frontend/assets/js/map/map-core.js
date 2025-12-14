@@ -9,6 +9,7 @@ window.MapCore = {
   mapSmartWalk: null,
   mapPlaceMarkers: null,
   mapRouteBuilder: null,
+  mapRouteLoader: null,
 
   init() {
     console.log('[MapCore] Initializing...');
@@ -24,8 +25,6 @@ window.MapCore = {
     this.initializeModules();
     
     this.attachEventListeners();
-    
-    // УДАЛЕНО: this.checkForRouteToLoad(); - теперь это делает route-loader.js
     
     console.log('[MapCore] Initialization complete');
   },
@@ -49,6 +48,15 @@ window.MapCore = {
       this.mapRouteBuilder = window.MapRouteBuilder;
       this.mapRouteBuilder.init(this.map);
       console.log('[MapCore] MapRouteBuilder initialized');
+    }
+    
+    // НОВОЕ: Инициализируем модуль загрузки маршрутов
+    if (window.MapRouteLoader) {
+      this.mapRouteLoader = new window.MapRouteLoader(this.map);
+      window.MapRouteLoaderInstance = this.mapRouteLoader;
+      console.log('[MapCore] MapRouteLoader initialized');
+    } else {
+      console.warn('[MapCore] MapRouteLoader not found!');
     }
     
     if (window.MapSimpleRoute && typeof window.MapSimpleRoute.init === 'function') {
