@@ -28,7 +28,7 @@
 
         <div class="route-info-panel" id="routeInfoPanel" style="display: none;">
             <div class="route-info-header">
-                <h3>📊 Ваша прогулка</h3>
+                <h3>📏 Ваша прогулка</h3>
                 <button class="close-panel-btn" id="closeRouteInfo">&times;</button>
             </div>
             <div class="route-info-stats" id="routeInfoStats"></div>
@@ -50,6 +50,7 @@
     <script src="assets/js/map/map-info-panel.js"></script>
     <script src="assets/js/map/map-route-builder.js"></script>
     <script src="assets/js/map/map-smart-walk.js"></script>
+    <script src="assets/js/map/map-route-loader.js"></script>
     <script src="assets/js/map/map-core.js"></script>
 
     <script>
