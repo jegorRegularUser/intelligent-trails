@@ -112,10 +112,12 @@ class MapSimpleRoute {
             }
             
             console.log('[MapSimpleRoute] All segments drawn, waiting for final tasks...');
+            console.log('[MapSimpleRoute] Total multiRoutes on map:', this.multiRoutes.length);
+            console.log('[MapSimpleRoute] Map geoObjects count:', this.map.geoObjects.getLength());
             
             // Подождём и выполним финальные задачи
             setTimeout(() => {
-                console.log('[MapSimpleRoute] Executing post-route tasks');
+                console.log('[MapSimpleRoute] ⏰ Executing post-route tasks');
                 
                 // Подгоняем карту под маршрут
                 this.fitMapToRoute();
@@ -123,23 +125,25 @@ class MapSimpleRoute {
                 // Обновляем данные сегментов в MapRouteBuilder
                 if (window.MapRouteBuilder) {
                     window.MapRouteBuilder.updateSegmentData(this.segmentDataArray);
+                    console.log('[MapSimpleRoute] ✓ Segment data updated in MapRouteBuilder');
                     
                     // Показываем инфо-панель
                     setTimeout(() => {
                         window.MapRouteBuilder.showRouteInfoPanel(places);
+                        console.log('[MapSimpleRoute] ✓ Route info panel shown');
                     }, 500);
                 }
                 
                 // Сохраняем маршрут в БД если пользователь залогинен
                 this.saveRouteToDB(this.currentRouteData);
                 
-            }, 500);
+            }, 1000); // Увеличено до 1000ms для надёжности
             
-            console.log('[MapSimpleRoute] Route built successfully!');
+            console.log('[MapSimpleRoute] ✅ Route built successfully!');
             console.log('[MapSimpleRoute] =========================================');
             
         } catch (error) {
-            console.error('[MapSimpleRoute] Error building route:', error);
+            console.error('[MapSimpleRoute] ❌ Error building route:', error);
             alert('Ошибка построения маршрута: ' + error.message);
         }
     }
@@ -168,13 +172,18 @@ class MapSimpleRoute {
         const fromCoords = fromPlace.coordinates;
         const toCoords = toPlace.coordinates;
         
-        console.log(`[MapSimpleRoute] Segment ${segmentIndex + 1}: ${fromPlace.name} -> ${toPlace.name} (${mode})`);
+        console.log(`[MapSimpleRoute] 🛣️ Segment ${segmentIndex + 1}: ${fromPlace.name} -> ${toPlace.name} (${mode})`);
+        console.log(`[MapSimpleRoute]   From coords: [${fromCoords[0]}, ${fromCoords[1]}]`);
+        console.log(`[MapSimpleRoute]   To coords: [${toCoords[0]}, ${toCoords[1]}]`);
         
         try {
             const routingMode = this.convertModeToYandex(mode);
+            console.log(`[MapSimpleRoute]   Yandex routing mode: ${routingMode}`);
             
+            // Критически важно: убедимся, что маршрут будет виден!
             const routeOptions = {
                 boundsAutoApply: false,
+                // Все эти опции скрывают маркеры, но не саму линию
                 wayPointVisible: false,
                 wayPointStartVisible: false,
                 wayPointFinishVisible: false,
@@ -183,10 +192,14 @@ class MapSimpleRoute {
                 wayPointIconVisible: false,
                 pinVisible: false,
                 viaPointVisible: false,
-                routeActiveStrokeWidth: 5,
+                // Стиль линии маршрута
+                routeActiveStrokeWidth: 6,
                 routeActiveStrokeStyle: 'solid',
-                routeActiveStrokeColor: '#4A90E2'
+                routeActiveStrokeColor: '#4A90E2',
+                routeActiveStrokeOpacity: 0.9
             };
+            
+            console.log(`[MapSimpleRoute]   Creating multiRoute with options:`, routeOptions);
             
             const multiRoute = new ymaps.multiRouter.MultiRoute({
                 referencePoints: [fromCoords, toCoords],
@@ -195,22 +208,27 @@ class MapSimpleRoute {
                 }
             }, routeOptions);
             
+            console.log(`[MapSimpleRoute]   MultiRoute created, adding to map...`);
             this.map.geoObjects.add(multiRoute);
             this.multiRoutes.push(multiRoute);
+            console.log(`[MapSimpleRoute]   ✓ Added to map. Total routes: ${this.multiRoutes.length}`);
             
             // Ждём успешного построения маршрута
             await new Promise((resolve, reject) => {
                 const timeout = setTimeout(() => {
+                    console.error(`[MapSimpleRoute]   ❌ Timeout waiting for route`);
                     reject(new Error('Timeout waiting for route'));
                 }, 10000);
                 
                 multiRoute.model.events.once('requestsuccess', () => {
                     clearTimeout(timeout);
+                    console.log(`[MapSimpleRoute]   ✓ Route request successful`);
                     resolve();
                 });
                 
                 multiRoute.model.events.once('requestfail', (error) => {
                     clearTimeout(timeout);
+                    console.error(`[MapSimpleRoute]   ❌ Route request failed:`, error);
                     reject(error);
                 });
             });
@@ -218,14 +236,14 @@ class MapSimpleRoute {
             // Получаем данные активного маршрута
             const activeRoute = multiRoute.getActiveRoute();
             if (!activeRoute) {
-                console.warn(`[MapSimpleRoute] No active route for segment ${segmentIndex}`);
+                console.warn(`[MapSimpleRoute] ⚠️ No active route for segment ${segmentIndex}`);
                 return;
             }
             
             const distance = activeRoute.properties.get('distance').value;
             const duration = activeRoute.properties.get('duration').value;
             
-            console.log(`  ✓ Distance: ${(distance / 1000).toFixed(2)} km, Time: ${(duration / 60).toFixed(0)} min`);
+            console.log(`[MapSimpleRoute]   ✓ Distance: ${(distance / 1000).toFixed(2)} km, Time: ${(duration / 60).toFixed(0)} min`);
             
             // Сохраняем данные сегмента
             const segmentData = {
@@ -239,10 +257,10 @@ class MapSimpleRoute {
             };
             this.segmentDataArray.push(segmentData);
             
-            console.log(`  ✓ Segment ${segmentIndex + 1} drawn successfully`);
+            console.log(`[MapSimpleRoute]   ✅ Segment ${segmentIndex + 1} drawn successfully`);
             
         } catch (error) {
-            console.error(`[MapSimpleRoute] Error building segment ${segmentIndex}:`, error);
+            console.error(`[MapSimpleRoute] ❌ Error building segment ${segmentIndex}:`, error);
             throw error;
         }
     }
@@ -425,38 +443,54 @@ class MapSimpleRoute {
     }
     
     clearRouteLines() {
-        console.log(`[MapSimpleRoute] Clearing ${this.multiRoutes.length} routes`);
+        console.log(`[MapSimpleRoute] 🧹 Clearing ${this.multiRoutes.length} routes`);
         
         this.multiRoutes.forEach(route => {
             this.map.geoObjects.remove(route);
         });
         this.multiRoutes = [];
         this.segmentDataArray = [];
+        
+        console.log(`[MapSimpleRoute] ✓ Routes cleared. Map geoObjects count: ${this.map.geoObjects.getLength()}`);
     }
     
     fitMapToRoute() {
+        console.log(`[MapSimpleRoute] 🗺️ fitMapToRoute called`);
+        console.log(`[MapSimpleRoute]   multiRoutes.length: ${this.multiRoutes.length}`);
+        console.log(`[MapSimpleRoute]   map.geoObjects.getLength(): ${this.map.geoObjects.getLength()}`);
+        
         if (this.multiRoutes.length === 0) {
-            console.warn('[MapSimpleRoute] No routes to fit');
+            console.warn('[MapSimpleRoute] ⚠️ No routes to fit');
             return;
         }
         
         try {
+            // Получаем bounds всех геообъектов на карте
             const bounds = this.map.geoObjects.getBounds();
+            console.log(`[MapSimpleRoute]   Bounds:`, bounds);
             
             if (bounds) {
+                console.log(`[MapSimpleRoute]   ✓ Setting map bounds...`);
                 this.map.setBounds(bounds, {
                     checkZoomRange: true,
-                    zoomMargin: 50,
+                    zoomMargin: 80, // Увеличено для лучшей видимости
                     duration: 500
                 }).then(() => {
                     const zoom = this.map.getZoom();
-                    if (zoom > 17) {
-                        this.map.setZoom(16);
+                    console.log(`[MapSimpleRoute]   ✓ Bounds set! Current zoom: ${zoom}`);
+                    
+                    if (zoom > 16) {
+                        console.log(`[MapSimpleRoute]   Adjusting zoom to 15`);
+                        this.map.setZoom(15);
                     }
+                }).catch(err => {
+                    console.error(`[MapSimpleRoute]   ❌ Error setting bounds:`, err);
                 });
+            } else {
+                console.warn('[MapSimpleRoute] ⚠️ No bounds available');
             }
         } catch (error) {
-            console.error('[MapSimpleRoute] Error fitting map:', error);
+            console.error('[MapSimpleRoute] ❌ Error fitting map:', error);
         }
     }
     
