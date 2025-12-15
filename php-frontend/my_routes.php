@@ -172,7 +172,7 @@ if ($stmt = $link->prepare($stats_sql)) {
             </div>
             <div class="stat-card">
                 <div class="stat-icon">⏱️</div>
-                <div class="stat-value"><?php echo number_format(($stats['total_time_sum'] ?? 0) / 60, 0); ?> ч</div>
+                <div class="stat-value"><?php  echo number_format(($stats['total_time_sum'] ?? 0) / 60, 0); ?> ч</div>
                 <div class="stat-label">Общее время</div>
             </div>
         </div>
@@ -186,7 +186,6 @@ if ($stmt = $link->prepare($stats_sql)) {
                         <select name="type" id="type" class="filter-select" onchange="document.getElementById('filterForm').submit()">
                             <option value="all" <?php echo $filter_type === 'all' ? 'selected' : ''; ?>>Все типы</option>
                             <option value="simple" <?php echo $filter_type === 'simple' ? 'selected' : ''; ?>>Простые</option>
-                            <option value="smart" <?php echo $filter_type === 'smart' ? 'selected' : ''; ?>>Умные</option>
                             <option value="smart_walk" <?php echo $filter_type === 'smart_walk' ? 'selected' : ''; ?>>Прогулки</option>
                         </select>
                     </div>

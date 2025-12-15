@@ -5,7 +5,6 @@
             Intelligent Trails
         </a>
         <div class="nav-links">
-            <a href="map.php">Карта</a>
             <?php if (isset($_SESSION["loggedin"]) && $_SESSION["loggedin"] === true): ?>
                 <a href="map.php">Карта</a>
                 <a href="my_routes.php">Мои маршруты</a>
