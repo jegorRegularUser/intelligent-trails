@@ -73,6 +73,15 @@ class MapSmartWalk {
                 window.MapRouteBuilder.updateSegmentData(this.segmentDataArray);
             }
             
+            // НОВОЕ: Показываем инфо-панель для загруженных маршрутов
+            if (this.isLoadedRoute && window.MapRouteBuilder && places) {
+                console.log('[MapSmartWalk] 📊 Showing info panel for loaded route');
+                // Используем setTimeout чтобы дать время segment data обновиться
+                setTimeout(() => {
+                    window.MapRouteBuilder.showRouteInfoPanel(places);
+                }, 500);
+            }
+            
             if (!this.isLoadedRoute) {
                 console.log('[MapSmartWalk] 📞 This is a NEW route, calling saveRouteToDB...');
                 this.saveRouteToDB(routeData);
