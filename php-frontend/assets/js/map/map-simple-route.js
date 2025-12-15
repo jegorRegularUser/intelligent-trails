@@ -20,13 +20,11 @@ class MapSimpleRoute {
     }
     
     init() {
-        // ИСПОЛЬЗУЕМ EventBus КАК В MapSmartWalk!
         window.EventBus?.on('simple:route', (routeData) => {
             console.log('[MapSimpleRoute] simple:route event received');
             this.visualizeSimpleRoute(routeData);
         });
         
-        // Оставляем старую функцию для совместимости
         window.displaySimpleRoute = (routeData) => {
             console.log('[MapSimpleRoute] displaySimpleRoute called, emitting event');
             window.EventBus?.emit('simple:route', routeData);
@@ -42,7 +40,6 @@ class MapSimpleRoute {
         
         this.clearRouteLines();
         this.segmentDataArray = [];
-        this.currentRouteData = routeData;
         
         try {
             const points = [];
@@ -84,7 +81,16 @@ class MapSimpleRoute {
             
             console.log(`[MapSimpleRoute] Building route through ${places.length} places`);
             
-            // СТРОИМ СЕГМЕНТЫ ТОЧНО КАК В MapSmartWalk
+            // Сохраняем данные маршрута С places!
+            this.currentRouteData = {
+                places: places,
+                start_point: points[0],
+                end_point: points[points.length - 1],
+                return_to_start: false,
+                mode: mode,
+                activities: []
+            };
+            
             for (let i = 0; i < places.length - 1; i++) {
                 await this.drawSegment(places[i], places[i + 1], i, false);
             }
@@ -103,6 +109,7 @@ class MapSimpleRoute {
                     }, 500);
                 }
                 
+                // ПЕРЕДАЁМ this.currentRouteData КОТОРЫЙ ИМЕЕТ places!
                 this.saveRouteToDB(this.currentRouteData);
                 
             }, 500);
@@ -145,7 +152,6 @@ class MapSimpleRoute {
         try {
             const routingMode = this.convertModeToYandex(mode);
             
-            // ТОЧНО ТАКИЕ ЖЕ ОПЦИИ КАК В MapSmartWalk
             const routeOptions = {
                 boundsAutoApply: false,
                 wayPointVisible: false,
@@ -282,6 +288,12 @@ class MapSimpleRoute {
             
             if (!isLoggedIn) {
                 console.log('[MapSimpleRoute] Not logged in');
+                return;
+            }
+            
+            // ПРОВЕРКА: routeData должен иметь places!
+            if (!routeData || !routeData.places) {
+                console.error('[MapSimpleRoute] Invalid routeData - missing places');
                 return;
             }
             
