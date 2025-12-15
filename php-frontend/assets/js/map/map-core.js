@@ -9,6 +9,7 @@ window.MapCore = {
   mapSmartWalk: null,
   mapPlaceMarkers: null,
   mapRouteBuilder: null,
+  mapSimpleRoute: null,
 
   init() {
     console.log('[MapCore] Initializing...');
@@ -51,8 +52,10 @@ window.MapCore = {
       console.log('[MapCore] MapRouteBuilder initialized');
     }
     
-    if (window.MapSimpleRoute && typeof window.MapSimpleRoute.init === 'function') {
-      window.MapSimpleRoute.init(this);
+    // ИСПРАВЛЕНО: MapSimpleRoute теперь класс, нужно создавать экземпляр
+    if (window.MapSimpleRoute) {
+      this.mapSimpleRoute = new window.MapSimpleRoute(this.map);
+      window.MapSimpleRouteInstance = this.mapSimpleRoute;
       console.log('[MapCore] MapSimpleRoute initialized');
     }
     
