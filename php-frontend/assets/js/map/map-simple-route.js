@@ -15,6 +15,14 @@ class MapSimpleRoute {
             return;
         }
         
+        // КРИТИЧЕСКАЯ ПРОВЕРКА: это настоящий экземпляр карты?
+        console.log('[MapSimpleRoute] 🗺️ Map instance received:', this.map);
+        console.log('[MapSimpleRoute] 🗺️ Map container:', this.map.container);
+        console.log('[MapSimpleRoute] 🗺️ Map center:', this.map.getCenter());
+        console.log('[MapSimpleRoute] 🗺️ Map zoom:', this.map.getZoom());
+        console.log('[MapSimpleRoute] 🗺️ Map geoObjects:', this.map.geoObjects);
+        console.log('[MapSimpleRoute] 🗺️ Is this the same as MapCore.map?', this.map === window.MapCore?.map);
+        
         this.init();
         console.log('[MapSimpleRoute] Initialized');
     }
@@ -29,6 +37,13 @@ class MapSimpleRoute {
         console.log('[MapSimpleRoute] =========================================');
         console.log('[MapSimpleRoute] Building simple route...');
         console.log('[MapSimpleRoute] Route data:', routeData);
+        
+        // ПРОВЕРКА: карта всё ещё та же?
+        console.log('[MapSimpleRoute] 🔍 Checking map instance before building...');
+        console.log('[MapSimpleRoute] 🔍 this.map exists:', !!this.map);
+        console.log('[MapSimpleRoute] 🔍 this.map === MapCore.map:', this.map === window.MapCore?.map);
+        console.log('[MapSimpleRoute] 🔍 Map current center:', this.map.getCenter());
+        console.log('[MapSimpleRoute] 🔍 Map current zoom:', this.map.getZoom());
         
         this.clearRouteLines();
         
@@ -115,12 +130,31 @@ class MapSimpleRoute {
             console.log('[MapSimpleRoute] Total multiRoutes on map:', this.multiRoutes.length);
             console.log('[MapSimpleRoute] Map geoObjects count:', this.map.geoObjects.getLength());
             
+            // КРИТИЧЕСКАЯ ПРОВЕРКА: выводим ВСЕ geoObjects
+            console.log('[MapSimpleRoute] 🔍 Listing ALL geoObjects on map:');
+            this.map.geoObjects.each((geoObject, index) => {
+                console.log(`  [${index}] Type:`, geoObject.constructor.name, 'Object:', geoObject);
+            });
+            
             // Подождём и выполним финальные задачи
             setTimeout(() => {
                 console.log('[MapSimpleRoute] ⏰ Executing post-route tasks');
                 
-                // Подгоняем карту под маршрут
-                this.fitMapToRoute();
+                // ПРЯМОЕ ПЕРЕМЕЩЕНИЕ к середине между точками
+                const startCoords = places[0].coordinates;
+                const endCoords = places[places.length - 1].coordinates;
+                const centerLat = (startCoords[0] + endCoords[0]) / 2;
+                const centerLon = (startCoords[1] + endCoords[1]) / 2;
+                
+                console.log('[MapSimpleRoute] 🎯 Manually moving map to center: [', centerLat, ',', centerLon, ']');
+                
+                this.map.setCenter([centerLat, centerLon], 13, {
+                    duration: 500
+                }).then(() => {
+                    console.log('[MapSimpleRoute] ✓ Map moved to center!');
+                    console.log('[MapSimpleRoute] ✓ New center:', this.map.getCenter());
+                    console.log('[MapSimpleRoute] ✓ New zoom:', this.map.getZoom());
+                });
                 
                 // Обновляем данные сегментов в MapRouteBuilder
                 if (window.MapRouteBuilder) {
@@ -176,15 +210,16 @@ class MapSimpleRoute {
         console.log(`[MapSimpleRoute]   From coords: [${fromCoords[0]}, ${fromCoords[1]}]`);
         console.log(`[MapSimpleRoute]   To coords: [${toCoords[0]}, ${toCoords[1]}]`);
         
+        // ПРОВЕРКА: this.map всё ещё тот же экземпляр?
+        console.log(`[MapSimpleRoute]   🔍 Drawing on map:`, this.map);
+        console.log(`[MapSimpleRoute]   🔍 Is same as MapCore.map:`, this.map === window.MapCore?.map);
+        
         try {
             const routingMode = this.convertModeToYandex(mode);
             console.log(`[MapSimpleRoute]   Yandex routing mode: ${routingMode}`);
             
-            // Критически важно: явно установим все опции для видимости маршрута!
             const routeOptions = {
                 boundsAutoApply: false,
-                
-                // Скрываем маркеры
                 wayPointVisible: false,
                 wayPointStartVisible: false,
                 wayPointFinishVisible: false,
@@ -193,24 +228,18 @@ class MapSimpleRoute {
                 wayPointIconVisible: false,
                 pinVisible: false,
                 viaPointVisible: false,
-                
-                // Стиль АКТИВНОЙ линии маршрута
                 routeActiveStrokeWidth: 8,
                 routeActiveStrokeStyle: 'solid',
-                routeActiveStrokeColor: '#FF4500', // Яркий оранжевый для теста
+                routeActiveStrokeColor: '#FF4500',
                 routeActiveStrokeOpacity: 1.0,
-                
-                // Стиль НЕАКТИВНЫХ линий (альтернативные маршруты)
                 routeStrokeWidth: 6,
                 routeStrokeStyle: 'shortdash',
                 routeStrokeColor: '#999999',
                 routeStrokeOpacity: 0.5,
-                
-                // Явно включаем отображение
                 visible: true
             };
             
-            console.log(`[MapSimpleRoute]   Creating multiRoute with routeActiveStrokeColor: ${routeOptions.routeActiveStrokeColor}`);
+            console.log(`[MapSimpleRoute]   Creating multiRoute...`);
             
             const multiRoute = new ymaps.multiRouter.MultiRoute({
                 referencePoints: [fromCoords, toCoords],
@@ -219,10 +248,14 @@ class MapSimpleRoute {
                 }
             }, routeOptions);
             
-            console.log(`[MapSimpleRoute]   MultiRoute created, adding to map...`);
+            console.log(`[MapSimpleRoute]   ✓ MultiRoute object created:`, multiRoute);
+            console.log(`[MapSimpleRoute]   Adding to this.map.geoObjects...`);
+            
             this.map.geoObjects.add(multiRoute);
             this.multiRoutes.push(multiRoute);
-            console.log(`[MapSimpleRoute]   ✓ Added to map. Total routes: ${this.multiRoutes.length}`);
+            
+            console.log(`[MapSimpleRoute]   ✓ Added! Total routes in array: ${this.multiRoutes.length}`);
+            console.log(`[MapSimpleRoute]   ✓ Map geoObjects count after add: ${this.map.geoObjects.getLength()}`);
             
             // Ждём успешного построения маршрута
             await new Promise((resolve, reject) => {
@@ -235,13 +268,8 @@ class MapSimpleRoute {
                     clearTimeout(timeout);
                     console.log(`[MapSimpleRoute]   ✓ Route request successful`);
                     
-                    // Проверяем видимость маршрута
                     const routes = multiRoute.getRoutes();
                     console.log(`[MapSimpleRoute]   Routes count: ${routes.getLength()}`);
-                    if (routes.getLength() > 0) {
-                        const route = routes.get(0);
-                        console.log(`[MapSimpleRoute]   Route 0 properties:`, route.properties.getAll());
-                    }
                     
                     resolve();
                 });
@@ -253,7 +281,6 @@ class MapSimpleRoute {
                 });
             });
             
-            // Получаем данные активного маршрута
             const activeRoute = multiRoute.getActiveRoute();
             if (!activeRoute) {
                 console.warn(`[MapSimpleRoute] ⚠️ No active route for segment ${segmentIndex}`);
@@ -265,7 +292,6 @@ class MapSimpleRoute {
             
             console.log(`[MapSimpleRoute]   ✓ Distance: ${(distance / 1000).toFixed(2)} km, Time: ${(duration / 60).toFixed(0)} min`);
             
-            // Сохраняем данные сегмента
             const segmentData = {
                 index: segmentIndex,
                 distance: distance,
@@ -368,7 +394,6 @@ class MapSimpleRoute {
             
             console.log('[MapSimpleRoute] 📦 Prepared save data:', saveData);
             
-            // Проверка на дубликаты
             const savedRoutes = JSON.parse(localStorage.getItem('recently_saved_routes') || '[]');
             const routeSignature = this.getRouteSignature(saveData);
             
@@ -382,7 +407,6 @@ class MapSimpleRoute {
             
             console.log('[MapSimpleRoute] ✓ No duplicate found, proceeding to API call');
             
-            // Отправка на сервер
             console.log('[MapSimpleRoute] 📤 Sending POST request to api.php?action=build_smart_walk');
             const response = await fetch('api.php?action=build_smart_walk', {
                 method: 'POST',
@@ -411,7 +435,6 @@ class MapSimpleRoute {
                 console.log('[MapSimpleRoute] ✅ Route saved successfully!');
                 console.log('[MapSimpleRoute] ✅ Route ID:', result.route_id);
                 
-                // Сохраняем сигнатуру в localStorage
                 savedRoutes.push(routeSignature);
                 if (savedRoutes.length > 10) {
                     savedRoutes.shift();
@@ -472,60 +495,6 @@ class MapSimpleRoute {
         this.segmentDataArray = [];
         
         console.log(`[MapSimpleRoute] ✓ Routes cleared. Map geoObjects count: ${this.map.geoObjects.getLength()}`);
-    }
-    
-    fitMapToRoute() {
-        console.log(`[MapSimpleRoute] 🗺️ fitMapToRoute called`);
-        console.log(`[MapSimpleRoute]   multiRoutes.length: ${this.multiRoutes.length}`);
-        console.log(`[MapSimpleRoute]   map.geoObjects.getLength(): ${this.map.geoObjects.getLength()}`);
-        
-        if (this.multiRoutes.length === 0) {
-            console.warn('[MapSimpleRoute] ⚠️ No routes to fit');
-            return;
-        }
-        
-        try {
-            // Получаем bounds всех геообъектов на карте
-            const bounds = this.map.geoObjects.getBounds();
-            console.log(`[MapSimpleRoute]   Bounds:`, bounds);
-            
-            if (bounds) {
-                console.log(`[MapSimpleRoute]   ✓ Setting map bounds...`);
-                this.map.setBounds(bounds, {
-                    checkZoomRange: true,
-                    zoomMargin: 100,
-                    duration: 500
-                }).then(() => {
-                    const zoom = this.map.getZoom();
-                    const center = this.map.getCenter();
-                    console.log(`[MapSimpleRoute]   ✓ Bounds set! Current zoom: ${zoom}, center: [${center[0]}, ${center[1]}]`);
-                    
-                    if (zoom > 15) {
-                        console.log(`[MapSimpleRoute]   Adjusting zoom to 14`);
-                        this.map.setZoom(14);
-                    }
-                }).catch(err => {
-                    console.error(`[MapSimpleRoute]   ❌ Error setting bounds:`, err);
-                });
-            } else {
-                console.warn('[MapSimpleRoute] ⚠️ No bounds available');
-            }
-        } catch (error) {
-            console.error('[MapSimpleRoute] ❌ Error fitting map:', error);
-        }
-    }
-    
-    clearMap() {
-        this.clearRouteLines();
-        this.currentRouteData = null;
-    }
-    
-    getRouteData() {
-        return this.currentRouteData;
-    }
-    
-    getSegmentData() {
-        return this.segmentDataArray;
     }
 }
 
