@@ -80,8 +80,8 @@ class MapSimpleRoute {
             }
             
             console.log(`[MapSimpleRoute] Building route through ${places.length} places`);
+            console.log('[MapSimpleRoute] Places:', places);
             
-            // Сохраняем данные маршрута С places!
             this.currentRouteData = {
                 places: places,
                 start_point: points[0],
@@ -91,11 +91,15 @@ class MapSimpleRoute {
                 activities: []
             };
             
+            console.log('[MapSimpleRoute] currentRouteData saved:', this.currentRouteData);
+            
             for (let i = 0; i < places.length - 1; i++) {
                 await this.drawSegment(places[i], places[i + 1], i, false);
             }
             
             console.log('[MapSimpleRoute] ⏳ Waiting 500ms before post-route tasks...');
+            console.log('[MapSimpleRoute] multiRoutes count:', this.multiRoutes.length);
+            console.log('[MapSimpleRoute] segmentDataArray:', this.segmentDataArray);
             
             setTimeout(() => {
                 console.log('[MapSimpleRoute] ✓ Executing post-route tasks');
@@ -103,13 +107,14 @@ class MapSimpleRoute {
                 this.fitMapToRoute();
                 
                 if (window.MapRouteBuilder) {
+                    console.log('[MapSimpleRoute] Updating MapRouteBuilder with segments');
                     window.MapRouteBuilder.updateSegmentData(this.segmentDataArray);
                     setTimeout(() => {
+                        console.log('[MapSimpleRoute] Showing route info panel');
                         window.MapRouteBuilder.showRouteInfoPanel(places);
                     }, 500);
                 }
                 
-                // ПЕРЕДАЁМ this.currentRouteData КОТОРЫЙ ИМЕЕТ places!
                 this.saveRouteToDB(this.currentRouteData);
                 
             }, 500);
@@ -152,16 +157,14 @@ class MapSimpleRoute {
         try {
             const routingMode = this.convertModeToYandex(mode);
             
+            // ВКЛЮЧАЕМ МАРКЕРЫ!
             const routeOptions = {
                 boundsAutoApply: false,
-                wayPointVisible: false,
-                wayPointStartVisible: false,
-                wayPointFinishVisible: false,
-                wayPointStartIconVisible: false,
-                wayPointFinishIconVisible: false,
-                wayPointIconVisible: false,
-                pinVisible: false,
-                viaPointVisible: false,
+                // ПОКАЗЫВАЕМ МАРКЕРЫ
+                wayPointVisible: true,
+                wayPointStartVisible: true,
+                wayPointFinishVisible: true,
+                pinVisible: true,
                 routeActiveStrokeWidth: 5,
                 routeActiveStrokeStyle: 'solid'
             };
@@ -173,6 +176,8 @@ class MapSimpleRoute {
                 routeOptions.routeActiveStrokeColor = '#4A90E2';
             }
             
+            console.log(`[MapSimpleRoute]   Creating multiRoute with options:`, routeOptions);
+            
             const multiRoute = new ymaps.multiRouter.MultiRoute({
                 referencePoints: [fromCoords, toCoords],
                 params: {
@@ -180,8 +185,10 @@ class MapSimpleRoute {
                 }
             }, routeOptions);
             
+            console.log(`[MapSimpleRoute]   Adding to map...`);
             this.map.geoObjects.add(multiRoute);
             this.multiRoutes.push(multiRoute);
+            console.log(`[MapSimpleRoute]   Added! Total routes: ${this.multiRoutes.length}`);
             
             await new Promise((resolve, reject) => {
                 const timeout = setTimeout(() => {
@@ -190,11 +197,13 @@ class MapSimpleRoute {
                 
                 multiRoute.model.events.once('requestsuccess', () => {
                     clearTimeout(timeout);
+                    console.log(`[MapSimpleRoute]   Route request SUCCESS`);
                     resolve();
                 });
                 
                 multiRoute.model.events.once('requestfail', (error) => {
                     clearTimeout(timeout);
+                    console.error(`[MapSimpleRoute]   Route request FAILED:`, error);
                     reject(error);
                 });
             });
@@ -261,12 +270,14 @@ class MapSimpleRoute {
             const bounds = this.map.geoObjects.getBounds();
             
             if (bounds) {
+                console.log('[MapSimpleRoute] Setting bounds:', bounds);
                 this.map.setBounds(bounds, {
                     checkZoomRange: true,
                     zoomMargin: 50,
                     duration: 500
                 }).then(() => {
                     const zoom = this.map.getZoom();
+                    console.log('[MapSimpleRoute] Bounds set, zoom:', zoom);
                     if (zoom > 17) {
                         this.map.setZoom(16);
                     }
@@ -281,21 +292,23 @@ class MapSimpleRoute {
         if (this.isSaving) return;
         
         this.isSaving = true;
+        console.log('[MapSimpleRoute] Saving route to DB...');
         
         try {
             const bodyElement = document.querySelector('body');
             const isLoggedIn = bodyElement && bodyElement.dataset.loggedIn === 'true';
             
             if (!isLoggedIn) {
-                console.log('[MapSimpleRoute] Not logged in');
+                console.log('[MapSimpleRoute] Not logged in, skipping save');
                 return;
             }
             
-            // ПРОВЕРКА: routeData должен иметь places!
             if (!routeData || !routeData.places) {
-                console.error('[MapSimpleRoute] Invalid routeData - missing places');
+                console.error('[MapSimpleRoute] Invalid routeData - missing places:', routeData);
                 return;
             }
+            
+            console.log('[MapSimpleRoute] Preparing save data...');
             
             const places = routeData.places.map(place => ({
                 name: place.name || 'Точка',
@@ -365,6 +378,8 @@ class MapSimpleRoute {
                 return;
             }
             
+            console.log('[MapSimpleRoute] Sending to API...');
+            
             const response = await fetch('api.php?action=build_smart_walk', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -374,6 +389,7 @@ class MapSimpleRoute {
             const result = JSON.parse(await response.text());
             
             if (result.success) {
+                console.log('[MapSimpleRoute] ✅ Saved successfully!');
                 savedRoutes.push(routeSignature);
                 if (savedRoutes.length > 10) savedRoutes.shift();
                 localStorage.setItem('recently_saved_routes', JSON.stringify(savedRoutes));
