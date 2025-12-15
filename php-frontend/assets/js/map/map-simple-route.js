@@ -137,7 +137,7 @@ class MapSimpleRoute {
                 // Сохраняем маршрут в БД если пользователь залогинен
                 this.saveRouteToDB(this.currentRouteData);
                 
-            }, 1000); // Увеличено до 1000ms для надёжности
+            }, 1000);
             
             console.log('[MapSimpleRoute] ✅ Route built successfully!');
             console.log('[MapSimpleRoute] =========================================');
@@ -180,10 +180,11 @@ class MapSimpleRoute {
             const routingMode = this.convertModeToYandex(mode);
             console.log(`[MapSimpleRoute]   Yandex routing mode: ${routingMode}`);
             
-            // Критически важно: убедимся, что маршрут будет виден!
+            // Критически важно: явно установим все опции для видимости маршрута!
             const routeOptions = {
                 boundsAutoApply: false,
-                // Все эти опции скрывают маркеры, но не саму линию
+                
+                // Скрываем маркеры
                 wayPointVisible: false,
                 wayPointStartVisible: false,
                 wayPointFinishVisible: false,
@@ -192,14 +193,24 @@ class MapSimpleRoute {
                 wayPointIconVisible: false,
                 pinVisible: false,
                 viaPointVisible: false,
-                // Стиль линии маршрута
-                routeActiveStrokeWidth: 6,
+                
+                // Стиль АКТИВНОЙ линии маршрута
+                routeActiveStrokeWidth: 8,
                 routeActiveStrokeStyle: 'solid',
-                routeActiveStrokeColor: '#4A90E2',
-                routeActiveStrokeOpacity: 0.9
+                routeActiveStrokeColor: '#FF4500', // Яркий оранжевый для теста
+                routeActiveStrokeOpacity: 1.0,
+                
+                // Стиль НЕАКТИВНЫХ линий (альтернативные маршруты)
+                routeStrokeWidth: 6,
+                routeStrokeStyle: 'shortdash',
+                routeStrokeColor: '#999999',
+                routeStrokeOpacity: 0.5,
+                
+                // Явно включаем отображение
+                visible: true
             };
             
-            console.log(`[MapSimpleRoute]   Creating multiRoute with options:`, routeOptions);
+            console.log(`[MapSimpleRoute]   Creating multiRoute with routeActiveStrokeColor: ${routeOptions.routeActiveStrokeColor}`);
             
             const multiRoute = new ymaps.multiRouter.MultiRoute({
                 referencePoints: [fromCoords, toCoords],
@@ -223,6 +234,15 @@ class MapSimpleRoute {
                 multiRoute.model.events.once('requestsuccess', () => {
                     clearTimeout(timeout);
                     console.log(`[MapSimpleRoute]   ✓ Route request successful`);
+                    
+                    // Проверяем видимость маршрута
+                    const routes = multiRoute.getRoutes();
+                    console.log(`[MapSimpleRoute]   Routes count: ${routes.getLength()}`);
+                    if (routes.getLength() > 0) {
+                        const route = routes.get(0);
+                        console.log(`[MapSimpleRoute]   Route 0 properties:`, route.properties.getAll());
+                    }
+                    
                     resolve();
                 });
                 
@@ -473,15 +493,16 @@ class MapSimpleRoute {
                 console.log(`[MapSimpleRoute]   ✓ Setting map bounds...`);
                 this.map.setBounds(bounds, {
                     checkZoomRange: true,
-                    zoomMargin: 80, // Увеличено для лучшей видимости
+                    zoomMargin: 100,
                     duration: 500
                 }).then(() => {
                     const zoom = this.map.getZoom();
-                    console.log(`[MapSimpleRoute]   ✓ Bounds set! Current zoom: ${zoom}`);
+                    const center = this.map.getCenter();
+                    console.log(`[MapSimpleRoute]   ✓ Bounds set! Current zoom: ${zoom}, center: [${center[0]}, ${center[1]}]`);
                     
-                    if (zoom > 16) {
-                        console.log(`[MapSimpleRoute]   Adjusting zoom to 15`);
-                        this.map.setZoom(15);
+                    if (zoom > 15) {
+                        console.log(`[MapSimpleRoute]   Adjusting zoom to 14`);
+                        this.map.setZoom(14);
                     }
                 }).catch(err => {
                     console.error(`[MapSimpleRoute]   ❌ Error setting bounds:`, err);
