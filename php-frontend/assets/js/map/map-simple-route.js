@@ -61,13 +61,13 @@ window.MapSimpleRoute = {
     const yandexMode = modeMapping[routeData.mode] || 'auto';
 
     try {
-      const route = await ymaps.route(points, {
+      const multiRoute = await ymaps.route(points, {
         routingMode: yandexMode,
         mapStateAutoApply: true
       });
       
-      this.mapCore.currentRouteLines.push(route);
-      this.mapCore.map.geoObjects.add(route);
+      this.mapCore.currentRouteLines.push(multiRoute);
+      this.mapCore.map.geoObjects.add(multiRoute);
 
       // Добавляем маркеры
       points.forEach((point, index) => {
@@ -85,14 +85,14 @@ window.MapSimpleRoute = {
       });
 
       // Извлекаем данные сегментов
-      await this.extractSegmentData(route, pointNames);
+      await this.extractSegmentData(multiRoute, pointNames);
       
       // Создаем полные данные маршрута с координатами
       const completeRouteData = await this.buildCompleteRouteData(routeData, points, pointNames);
       
       // Отображаем информацию о маршруте
       if (window.MapInfoPanel) {
-        window.MapInfoPanel.displaySimpleRouteInfo(route, routeData);
+        window.MapInfoPanel.displaySimpleRouteInfo(multiRoute, routeData);
       }
       
       // Автоматическое сохранение маршрута
@@ -111,23 +111,17 @@ window.MapSimpleRoute = {
   },
   
   /**
-   * Извлечение данных сегментов из Yandex route
+   * Извлечение данных сегментов из Yandex multiRoute
    */
-  async extractSegmentData(route, pointNames) {
+  async extractSegmentData(multiRoute, pointNames) {
     console.log('[MapSimpleRoute] Extracting segment data...');
+    console.log('[MapSimpleRoute] MultiRoute object:', multiRoute);
+    console.log('[MapSimpleRoute] MultiRoute type:', multiRoute.constructor.name);
     
     try {
-      // Получаем активный маршрут через метод getRoutes()
-      const routes = route.getRoutes();
-      
-      if (!routes || routes.getLength() === 0) {
-        console.warn('[MapSimpleRoute] No routes available');
-        this.createFallbackSegment(pointNames);
-        return;
-      }
-      
-      // Берём первый (активный) маршрут
-      const activeRoute = routes.get(0);
+      // multiRoute это ymaps.multiRouter.MultiRoute
+      // Получаем активный маршрут
+      const activeRoute = multiRoute.getActiveRoute();
       
       if (!activeRoute) {
         console.warn('[MapSimpleRoute] No active route available');
@@ -135,15 +129,19 @@ window.MapSimpleRoute = {
         return;
       }
       
+      console.log('[MapSimpleRoute] Active route found:', activeRoute);
+      
       // Получаем общие данные маршрута
       const properties = activeRoute.properties.getAll();
+      console.log('[MapSimpleRoute] Route properties:', properties);
+      
       const totalDistance = properties.distance?.value || 0;
       const totalDuration = properties.duration?.value || 0;
       
       console.log('[MapSimpleRoute] Total distance:', totalDistance, 'm');
       console.log('[MapSimpleRoute] Total duration:', totalDuration, 's');
       
-      // Пытаемся получить сегменты
+      // Пытаемся получить сегменты (пути)
       const paths = activeRoute.getPaths();
       
       if (paths && paths.getLength && paths.getLength() > 0) {
@@ -185,6 +183,7 @@ window.MapSimpleRoute = {
       
     } catch (error) {
       console.error('[MapSimpleRoute] Error extracting segment data:', error);
+      console.error('[MapSimpleRoute] Error stack:', error.stack);
       this.createFallbackSegment(pointNames);
     }
   },
