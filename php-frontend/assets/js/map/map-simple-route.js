@@ -117,31 +117,44 @@ window.MapSimpleRoute = {
     console.log('[MapSimpleRoute] Extracting segment data...');
     
     try {
-      const activeRoute = route.getActiveRoute();
+      // Получаем активный маршрут через метод getRoutes()
+      const routes = route.getRoutes();
+      
+      if (!routes || routes.getLength() === 0) {
+        console.warn('[MapSimpleRoute] No routes available');
+        this.createFallbackSegment(pointNames);
+        return;
+      }
+      
+      // Берём первый (активный) маршрут
+      const activeRoute = routes.get(0);
       
       if (!activeRoute) {
         console.warn('[MapSimpleRoute] No active route available');
+        this.createFallbackSegment(pointNames);
         return;
       }
       
       // Получаем общие данные маршрута
-      const totalDistance = activeRoute.properties.get('distance')?.value || 0;
-      const totalDuration = activeRoute.properties.get('duration')?.value || 0;
+      const properties = activeRoute.properties.getAll();
+      const totalDistance = properties.distance?.value || 0;
+      const totalDuration = properties.duration?.value || 0;
       
       console.log('[MapSimpleRoute] Total distance:', totalDistance, 'm');
       console.log('[MapSimpleRoute] Total duration:', totalDuration, 's');
       
       // Пытаемся получить сегменты
-      const segments = activeRoute.getPaths();
+      const paths = activeRoute.getPaths();
       
-      if (segments && segments.getLength && segments.getLength() > 0) {
-        console.log('[MapSimpleRoute] Found', segments.getLength(), 'segments');
+      if (paths && paths.getLength && paths.getLength() > 0) {
+        console.log('[MapSimpleRoute] Found', paths.getLength(), 'path segments');
         
         // Если есть отдельные сегменты, извлекаем данные
-        for (let i = 0; i < segments.getLength(); i++) {
-          const segment = segments.get(i);
-          const segmentDistance = segment.properties.get('distance')?.value || 0;
-          const segmentDuration = segment.properties.get('duration')?.value || 0;
+        for (let i = 0; i < paths.getLength(); i++) {
+          const path = paths.get(i);
+          const pathProperties = path.properties.getAll();
+          const segmentDistance = pathProperties.distance?.value || 0;
+          const segmentDuration = pathProperties.duration?.value || 0;
           
           this.segmentDataArray.push({
             index: i,
@@ -172,17 +185,23 @@ window.MapSimpleRoute = {
       
     } catch (error) {
       console.error('[MapSimpleRoute] Error extracting segment data:', error);
-      
-      // Fallback: создаем базовый сегмент
-      this.segmentDataArray.push({
-        index: 0,
-        distance: 0,
-        duration: 0,
-        mode: this.currentRouteData.mode || 'auto',
-        fromPlace: pointNames[0] || 'Старт',
-        toPlace: pointNames[pointNames.length - 1] || 'Финиш'
-      });
+      this.createFallbackSegment(pointNames);
     }
+  },
+  
+  /**
+   * Создание базового сегмента в случае ошибки
+   */
+  createFallbackSegment(pointNames) {
+    console.log('[MapSimpleRoute] Creating fallback segment');
+    this.segmentDataArray.push({
+      index: 0,
+      distance: 0,
+      duration: 0,
+      mode: this.currentRouteData.mode || 'auto',
+      fromPlace: pointNames[0] || 'Старт',
+      toPlace: pointNames[pointNames.length - 1] || 'Финиш'
+    });
   },
   
   /**
