@@ -36,9 +36,11 @@
         </div>
     </main>
 
+    <!-- Базовые модули -->
     <script src="assets/js/event-bus.js"></script>
     <script src="assets/js/state-manager.js"></script>
 
+    <!-- Модальное окно маршрута -->
     <script src="assets/js/route-modal/route-modal-template.js"></script>
     <script src="assets/js/route-modal/route-modal-yandex.js"></script>
     <script src="assets/js/route-modal/route-modal-waypoints.js"></script>
@@ -46,11 +48,15 @@
     <script src="assets/js/route-modal/route-modal-builder.js"></script>
     <script src="assets/js/route-modal/route-modal-core.js"></script>
 
+    <!-- Карта и маршруты -->
     <script src="assets/js/map/map-place-markers.js"></script>
     <script src="assets/js/map/map-info-panel.js"></script>
     <script src="assets/js/map/map-route-builder.js"></script>
     <script src="assets/js/map/map-smart-walk.js"></script>
     <script src="assets/js/map/map-core.js"></script>
+
+    <!-- Загрузка сохраненных маршрутов - ДОБАВЛЕНО! -->
+    <script src="assets/js/route-loader.js"></script>
 
     <script>
     ymaps.ready(function() {
