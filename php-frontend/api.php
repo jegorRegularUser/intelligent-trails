@@ -65,7 +65,7 @@ function saveRouteToDatabase($userId, $routeType, $routeData, $result) {
     error_log("[API] saveRouteToDatabase called");
     error_log("[API] User ID: $userId, Type: $routeType");
     
-    // НОВОЕ: Проверка на дубликаты - проверяем последний сохраненный маршрут
+    // Проверка на дубликаты
     $checkStmt = $link->prepare("
         SELECT id, created_at 
         FROM saved_routes 
@@ -92,9 +92,8 @@ function saveRouteToDatabase($userId, $routeType, $routeData, $result) {
         if ($checkResult->num_rows > 0) {
             $existingRoute = $checkResult->fetch_assoc();
             error_log("[API] ⚠️ Duplicate route detected! Existing ID: " . $existingRoute['id']);
-            error_log("[API] ⚠️ Existing route created at: " . $existingRoute['created_at']);
             $checkStmt->close();
-            return $existingRoute['id']; // Возвращаем ID существующего маршрута
+            return $existingRoute['id'];
         }
         $checkStmt->close();
     }
@@ -103,6 +102,7 @@ function saveRouteToDatabase($userId, $routeType, $routeData, $result) {
     $routeName = 'Маршрут ' . date('d.m.Y H:i');
     $startPoint = '';
     $endPoint = null;
+    $waypointsJson = null;  // НОВОЕ
     $categories = null;
     $timeLimit = null;
     $transportMode = 'pedestrian';
@@ -175,6 +175,21 @@ function saveRouteToDatabase($userId, $routeType, $routeData, $result) {
             $placesCount = count($routeData['places']);
         }
         
+        // НОВОЕ: Waypoints из places массива
+        if (isset($routeData['places']) && is_array($routeData['places']) && count($routeData['places']) > 0) {
+            $waypoints = [];
+            foreach ($routeData['places'] as $place) {
+                $waypoints[] = [
+                    'name' => $place['name'] ?? '',
+                    'address' => $place['address'] ?? '',
+                    'coordinates' => $place['coordinates'] ?? $place['coords'] ?? null,
+                    'category' => $place['category'] ?? ''
+                ];
+            }
+            $waypointsJson = json_encode($waypoints, JSON_UNESCAPED_UNICODE);
+            error_log("[API] ✓ Extracted waypoints: " . count($waypoints) . " points");
+        }
+        
         // Расстояние и время (если есть в результате)
         if (isset($result['total_distance'])) {
             $totalDistance = floatval($result['total_distance']);
@@ -197,14 +212,20 @@ function saveRouteToDatabase($userId, $routeType, $routeData, $result) {
             $transportMode = $routeData['mode'];
         }
         
-        if (isset($routeData['waypoints']) && is_array($routeData['waypoints'])) {
-            $placesCount = count($routeData['waypoints']) + 2; // старт + финиш
+        // НОВОЕ: Waypoints для простого маршрута
+        if (isset($routeData['places']) && is_array($routeData['places'])) {
+            $waypointsJson = json_encode($routeData['places'], JSON_UNESCAPED_UNICODE);
+            $placesCount = count($routeData['places']);
+        } elseif (isset($routeData['waypoints']) && is_array($routeData['waypoints'])) {
+            $waypointsJson = json_encode($routeData['waypoints'], JSON_UNESCAPED_UNICODE);
+            $placesCount = count($routeData['waypoints']) + 2;
         }
     }
     
     error_log("[API] Extracted data:");
     error_log("[API] - Start: $startPoint");
     error_log("[API] - End: " . ($endPoint ?? 'null'));
+    error_log("[API] - Waypoints: " . ($waypointsJson ? 'YES (' . strlen($waypointsJson) . ' bytes)' : 'NO'));
     error_log("[API] - Categories: $categories");
     error_log("[API] - Time limit: " . ($timeLimit ?? 'null'));
     error_log("[API] - Transport: $transportMode");
@@ -215,12 +236,12 @@ function saveRouteToDatabase($userId, $routeType, $routeData, $result) {
     error_log("[API] - Time: " . ($totalTime ?? 'null'));
     error_log("[API] - Places: $placesCount");
     
-    // Подготовка запроса - 16 полей
+    // ИЗМЕНЕНО: Добавлено поле waypoints (17 полей)
     $stmt = $link->prepare("INSERT INTO saved_routes (
-        user_id, route_name, route_type, start_point, end_point, categories, 
+        user_id, route_name, route_type, start_point, end_point, waypoints, categories, 
         time_limit, transport_mode, return_to_start, min_places_per_category,
         pace, time_strictness, route_data, total_distance, total_time, places_count
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
     
     if (!$stmt) {
         error_log("[API] ❌ Prepare failed: " . $link->error);
@@ -229,15 +250,15 @@ function saveRouteToDatabase($userId, $routeType, $routeData, $result) {
     
     error_log("[API] Statement prepared");
     
-    // КРИТИЧНО: 16 полей = 17 символов типов = 16 параметров
-    // i=integer, s=string, d=double
-    // Типы: i s s s s s i s i s s i s d i i
-    $stmt->bind_param("isssssisisissdii", 
+    // ИЗМЕНЕНО: 17 полей, 17 типов
+    // Типы: i s s s s s s i s i s s i s d i i
+    $stmt->bind_param("issssssisisissdii", 
         $userId,              // i - INT
         $routeName,           // s - VARCHAR
         $routeType,           // s - VARCHAR
         $startPoint,          // s - VARCHAR
         $endPoint,            // s - VARCHAR (nullable)
+        $waypointsJson,       // s - TEXT (nullable) - НОВОЕ!
         $categories,          // s - JSON/TEXT
         $timeLimit,           // i - INT (nullable)
         $transportMode,       // s - VARCHAR
