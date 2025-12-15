@@ -1,6 +1,6 @@
 /**
  * Простой маршрут A -> B
- * Полностью переписан на основе MapSmartWalk для правильной работы
+ * Полностью аналогичен MapSmartWalk
  */
 class MapSimpleRoute {
     constructor(map) {
@@ -20,22 +20,35 @@ class MapSimpleRoute {
     }
     
     init() {
-        window.displaySimpleRoute = (routeData) => this.displaySimpleRoute(routeData);
-        console.log('[MapSimpleRoute] Global function registered');
+        // ИСПОЛЬЗУЕМ EventBus КАК В MapSmartWalk!
+        window.EventBus?.on('simple:route', (routeData) => {
+            console.log('[MapSimpleRoute] simple:route event received');
+            this.visualizeSimpleRoute(routeData);
+        });
+        
+        // Оставляем старую функцию для совместимости
+        window.displaySimpleRoute = (routeData) => {
+            console.log('[MapSimpleRoute] displaySimpleRoute called, emitting event');
+            window.EventBus?.emit('simple:route', routeData);
+        };
+        
+        console.log('[MapSimpleRoute] Event handlers registered');
     }
     
-    async displaySimpleRoute(routeData) {
+    async visualizeSimpleRoute(routeData) {
         console.log('[MapSimpleRoute] =========================================');
-        console.log('[MapSimpleRoute] Building simple route...');
+        console.log('[MapSimpleRoute] Visualizing simple route...');
         console.log('[MapSimpleRoute] Route data:', routeData);
         
         this.clearRouteLines();
+        this.segmentDataArray = [];
+        this.currentRouteData = routeData;
         
         try {
             const points = [];
             const pointNames = [];
             
-            console.log('[MapSimpleRoute] Geocoding start point:', routeData.start_point);
+            console.log('[MapSimpleRoute] Geocoding start:', routeData.start_point);
             const startCoords = await this.geocode(routeData.start_point);
             points.push(startCoords);
             pointNames.push(routeData.start_point);
@@ -49,7 +62,7 @@ class MapSimpleRoute {
                 }
             }
             
-            console.log('[MapSimpleRoute] Geocoding end point:', routeData.end_point);
+            console.log('[MapSimpleRoute] Geocoding end:', routeData.end_point);
             const endCoords = await this.geocode(routeData.end_point);
             points.push(endCoords);
             pointNames.push(routeData.end_point);
@@ -59,63 +72,29 @@ class MapSimpleRoute {
             const places = [];
             const mode = routeData.mode || 'auto';
             
-            places.push({
-                name: pointNames[0],
-                coordinates: points[0],
-                address: pointNames[0],
-                type: 'start',
-                transport_mode: mode
-            });
-            
-            for (let i = 1; i < points.length - 1; i++) {
+            for (let i = 0; i < points.length; i++) {
                 places.push({
                     name: pointNames[i],
                     coordinates: points[i],
                     address: pointNames[i],
-                    type: 'waypoint',
+                    type: i === 0 ? 'start' : (i === points.length - 1 ? 'end' : 'waypoint'),
                     transport_mode: mode
                 });
             }
             
-            places.push({
-                name: pointNames[pointNames.length - 1],
-                coordinates: points[points.length - 1],
-                address: pointNames[pointNames.length - 1],
-                type: 'end',
-                transport_mode: mode
-            });
+            console.log(`[MapSimpleRoute] Building route through ${places.length} places`);
             
-            console.log('[MapSimpleRoute] Places prepared:', places);
-            
-            this.currentRouteData = {
-                places: places,
-                start_point: points[0],
-                end_point: points[points.length - 1],
-                return_to_start: false,
-                mode: mode,
-                activities: []
-            };
-            
+            // СТРОИМ СЕГМЕНТЫ ТОЧНО КАК В MapSmartWalk
             for (let i = 0; i < places.length - 1; i++) {
-                await this.drawSegment(places[i], places[i + 1], i);
+                await this.drawSegment(places[i], places[i + 1], i, false);
             }
             
-            console.log('[MapSimpleRoute] All segments drawn');
-            console.log('[MapSimpleRoute] Total multiRoutes:', this.multiRoutes.length);
+            console.log('[MapSimpleRoute] ⏳ Waiting 500ms before post-route tasks...');
             
             setTimeout(() => {
-                console.log('[MapSimpleRoute] ⏰ Post-route tasks');
+                console.log('[MapSimpleRoute] ✓ Executing post-route tasks');
                 
-                const startCoords = places[0].coordinates;
-                const endCoords = places[places.length - 1].coordinates;
-                const centerLat = (startCoords[0] + endCoords[0]) / 2;
-                const centerLon = (startCoords[1] + endCoords[1]) / 2;
-                
-                console.log('[MapSimpleRoute] Moving to:', [centerLat, centerLon]);
-                
-                this.map.setCenter([centerLat, centerLon], 13, {
-                    duration: 500
-                });
+                this.fitMapToRoute();
                 
                 if (window.MapRouteBuilder) {
                     window.MapRouteBuilder.updateSegmentData(this.segmentDataArray);
@@ -126,13 +105,13 @@ class MapSimpleRoute {
                 
                 this.saveRouteToDB(this.currentRouteData);
                 
-            }, 1000);
+            }, 500);
             
-            console.log('[MapSimpleRoute] ✅ Route built!');
+            console.log('[MapSimpleRoute] Route visualization complete');
             console.log('[MapSimpleRoute] =========================================');
             
         } catch (error) {
-            console.error('[MapSimpleRoute] ❌ Error:', error);
+            console.error('[MapSimpleRoute] Error:', error);
             alert('Ошибка: ' + error.message);
         }
     }
@@ -156,61 +135,55 @@ class MapSimpleRoute {
         }
     }
     
-    async drawSegment(fromPlace, toPlace, segmentIndex) {
-        const mode = toPlace.transport_mode || 'auto';
+    async drawSegment(fromPlace, toPlace, segmentIndex, isReturnSegment = false) {
+        const mode = toPlace.transport_mode || 'pedestrian';
         const fromCoords = fromPlace.coordinates;
         const toCoords = toPlace.coordinates;
         
-        console.log(`[MapSimpleRoute] 🛣️ Segment ${segmentIndex + 1}: ${fromPlace.name} -> ${toPlace.name}`);
+        console.log(`[MapSimpleRoute] Segment ${segmentIndex + 1}: ${fromPlace.name} -> ${toPlace.name} (${mode})`);
         
         try {
             const routingMode = this.convertModeToYandex(mode);
             
-            // РАДИКАЛЬНОЕ РЕШЕНИЕ: УБИРАЕМ ВСЕ ОПЦИИ, ИСПОЛЬЗУЕМ ДЕФОЛТНЫЕ
-            // Оставляем ТОЛЬКО стиль линии
+            // ТОЧНО ТАКИЕ ЖЕ ОПЦИИ КАК В MapSmartWalk
+            const routeOptions = {
+                boundsAutoApply: false,
+                wayPointVisible: false,
+                wayPointStartVisible: false,
+                wayPointFinishVisible: false,
+                wayPointStartIconVisible: false,
+                wayPointFinishIconVisible: false,
+                wayPointIconVisible: false,
+                pinVisible: false,
+                viaPointVisible: false,
+                routeActiveStrokeWidth: 5,
+                routeActiveStrokeStyle: 'solid'
+            };
+            
+            if (isReturnSegment) {
+                routeOptions.routeActiveStrokeColor = '#FF6B6B';
+                routeOptions.routeActiveStrokeStyle = 'shortdash';
+            } else {
+                routeOptions.routeActiveStrokeColor = '#4A90E2';
+            }
+            
             const multiRoute = new ymaps.multiRouter.MultiRoute({
                 referencePoints: [fromCoords, toCoords],
                 params: {
                     routingMode: routingMode
                 }
-            }, {
-                // МИНИМАЛЬНЫЕ опции - пусть Yandex решает как отображать
-                routeActiveStrokeWidth: 6,
-                routeActiveStrokeColor: '#007AFF'
-            });
-            
-            console.log(`[MapSimpleRoute]   ✓ MultiRoute created`);
+            }, routeOptions);
             
             this.map.geoObjects.add(multiRoute);
             this.multiRoutes.push(multiRoute);
             
-            console.log(`[MapSimpleRoute]   ✓ Added to map. Total: ${this.multiRoutes.length}`);
-            
             await new Promise((resolve, reject) => {
                 const timeout = setTimeout(() => {
                     reject(new Error('Timeout'));
-                }, 10000);
+                }, 5000);
                 
                 multiRoute.model.events.once('requestsuccess', () => {
                     clearTimeout(timeout);
-                    console.log(`[MapSimpleRoute]   ✓ Route loaded`);
-                    
-                    // ПРИНУДИТЕЛЬНО ПОКАЗЫВАЕМ ВСЕ МАРШРУТЫ
-                    const routes = multiRoute.getRoutes();
-                    console.log(`[MapSimpleRoute]   Routes available: ${routes.getLength()}`);
-                    
-                    routes.each((route, idx) => {
-                        console.log(`[MapSimpleRoute]   Route ${idx}:`, route);
-                        // Принудительно делаем видимым
-                        try {
-                            route.options.set('visible', true);
-                            route.options.set('opacity', 1);
-                            console.log(`[MapSimpleRoute]     ✓ Route ${idx} set visible`);
-                        } catch(e) {
-                            console.log(`[MapSimpleRoute]     ⚠️ Can't set visible:`, e.message);
-                        }
-                    });
-                    
                     resolve();
                 });
                 
@@ -222,28 +195,79 @@ class MapSimpleRoute {
             
             const activeRoute = multiRoute.getActiveRoute();
             if (!activeRoute) {
-                console.warn(`[MapSimpleRoute] ⚠️ No active route`);
+                console.warn(`[MapSimpleRoute] No active route for segment ${segmentIndex}`);
                 return;
             }
             
             const distance = activeRoute.properties.get('distance').value;
             const duration = activeRoute.properties.get('duration').value;
             
-            console.log(`[MapSimpleRoute]   ✓ ${(distance / 1000).toFixed(2)} km, ${(duration / 60).toFixed(0)} min`);
+            console.log(`  ✓ Distance: ${(distance / 1000).toFixed(2)} km, Time: ${(duration / 60).toFixed(0)} min`);
             
-            this.segmentDataArray.push({
+            const segmentData = {
                 index: segmentIndex,
                 distance: distance,
                 duration: duration,
                 mode: mode,
                 fromPlace: fromPlace.name,
                 toPlace: toPlace.name,
-                isReturn: false
-            });
+                isReturn: isReturnSegment
+            };
+            this.segmentDataArray.push(segmentData);
+            
+            console.log(`  ✓ Segment drawn successfully`);
             
         } catch (error) {
-            console.error(`[MapSimpleRoute] ❌ Error segment ${segmentIndex}:`, error);
-            throw error;
+            console.error(`[MapSimpleRoute] Error building segment ${segmentIndex}:`, error);
+        }
+    }
+    
+    convertModeToYandex(mode) {
+        const mapping = {
+            'pedestrian': 'pedestrian',
+            'walking': 'pedestrian',
+            'driving': 'auto',
+            'auto': 'auto',
+            'masstransit': 'masstransit',
+            'transit': 'masstransit',
+            'bicycle': 'bicycle'
+        };
+        return mapping[mode] || 'pedestrian';
+    }
+    
+    clearRouteLines() {
+        console.log(`[MapSimpleRoute] Clearing ${this.multiRoutes.length} routes`);
+        
+        this.multiRoutes.forEach(route => {
+            this.map.geoObjects.remove(route);
+        });
+        this.multiRoutes = [];
+        this.segmentDataArray = [];
+    }
+    
+    fitMapToRoute() {
+        if (this.multiRoutes.length === 0) {
+            console.warn('[MapSimpleRoute] No routes to fit');
+            return;
+        }
+        
+        try {
+            const bounds = this.map.geoObjects.getBounds();
+            
+            if (bounds) {
+                this.map.setBounds(bounds, {
+                    checkZoomRange: true,
+                    zoomMargin: 50,
+                    duration: 500
+                }).then(() => {
+                    const zoom = this.map.getZoom();
+                    if (zoom > 17) {
+                        this.map.setZoom(16);
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('[MapSimpleRoute] Error fitting map:', error);
         }
     }
     
@@ -257,7 +281,7 @@ class MapSimpleRoute {
             const isLoggedIn = bodyElement && bodyElement.dataset.loggedIn === 'true';
             
             if (!isLoggedIn) {
-                console.log('[MapSimpleRoute] Not logged in, skipping save');
+                console.log('[MapSimpleRoute] Not logged in');
                 return;
             }
             
@@ -325,7 +349,7 @@ class MapSimpleRoute {
             
             const isDuplicate = savedRoutes.some(sig => sig === routeSignature);
             if (isDuplicate) {
-                console.log('[MapSimpleRoute] Already saved, skipping');
+                console.log('[MapSimpleRoute] Already saved');
                 return;
             }
             
@@ -362,26 +386,6 @@ class MapSimpleRoute {
             return;
         }
         console.log(`[${type.toUpperCase()}] ${message}`);
-    }
-    
-    convertModeToYandex(mode) {
-        const mapping = {
-            'pedestrian': 'pedestrian',
-            'walking': 'pedestrian',
-            'driving': 'auto',
-            'auto': 'auto',
-            'masstransit': 'masstransit',
-            'transit': 'masstransit',
-            'bicycle': 'bicycle'
-        };
-        return mapping[mode] || 'auto';
-    }
-    
-    clearRouteLines() {
-        console.log(`[MapSimpleRoute] Clearing ${this.multiRoutes.length} routes`);
-        this.multiRoutes.forEach(route => this.map.geoObjects.remove(route));
-        this.multiRoutes = [];
-        this.segmentDataArray = [];
     }
 }
 
