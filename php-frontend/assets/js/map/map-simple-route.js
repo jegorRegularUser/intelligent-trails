@@ -25,7 +25,9 @@ window.MapSimpleRoute = {
       const pointNames = [];
       
       // Старт
+      console.log('[MapSimpleRoute] Geocoding start:', routeData.start_point);
       const startCoords = await this.geocode(routeData.start_point);
+      console.log('[MapSimpleRoute] Start coords:', startCoords);
       points.push(startCoords);
       pointNames.push(routeData.start_point);
       
@@ -33,7 +35,9 @@ window.MapSimpleRoute = {
       if (routeData.waypoints && routeData.waypoints.length > 0) {
         for (const waypoint of routeData.waypoints) {
           try {
+            console.log('[MapSimpleRoute] Geocoding waypoint:', waypoint);
             const coords = await this.geocode(waypoint);
+            console.log('[MapSimpleRoute] Waypoint coords:', coords);
             points.push(coords);
             pointNames.push(waypoint);
           } catch (e) {
@@ -43,11 +47,13 @@ window.MapSimpleRoute = {
       }
       
       // Финиш
+      console.log('[MapSimpleRoute] Geocoding end:', routeData.end_point);
       const endCoords = await this.geocode(routeData.end_point);
+      console.log('[MapSimpleRoute] End coords:', endCoords);
       points.push(endCoords);
       pointNames.push(routeData.end_point);
       
-      console.log('[MapSimpleRoute] ✓ Geocoded', points.length, 'points');
+      console.log('[MapSimpleRoute] ✓ Geocoded', points.length, 'points:', points);
       
       // Строим маршрут
       await this.buildRoute(points, pointNames, routeData.mode || 'auto', routeData);
@@ -70,35 +76,56 @@ window.MapSimpleRoute = {
         routingMode: mode
       }
     }, {
+      // Настройки отображения
       boundsAutoApply: true,
-      wayPointDraggable: false,
+      wayPointVisible: false,  // Скрываем стандартные маркеры
+      wayPointStartVisible: false,
+      wayPointFinishVisible: false,
       routeActiveStrokeWidth: 6,
-      routeActiveStrokeColor: '#1e88e5'
+      routeActiveStrokeColor: '#1e88e5',
+      routeActiveStrokeStyle: 'solid'
     });
+
+    console.log('[MapSimpleRoute] MultiRoute created:', multiRoute);
 
     // Добавляем на карту
     this.mapCore.map.geoObjects.add(multiRoute);
     this.mapCore.currentRouteLines.push(multiRoute);
     this.currentMultiRoute = multiRoute;
+    
+    console.log('[MapSimpleRoute] MultiRoute added to map');
+    console.log('[MapSimpleRoute] Map geoObjects count:', this.mapCore.map.geoObjects.getLength());
 
-    // Добавляем маркеры
+    // Добавляем свои маркеры
     this.addMarkers(points, pointNames);
 
     // Ждём построения маршрута
+    console.log('[MapSimpleRoute] Waiting for route calculation...');
+    
     await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Таймаут построения маршрута'));
+      }, 30000);
+      
       multiRoute.model.events.add('requestsuccess', () => {
+        clearTimeout(timeout);
         console.log('[MapSimpleRoute] ✓ Route calculation successful');
         resolve();
       });
       
       multiRoute.model.events.add('requestfail', (e) => {
+        clearTimeout(timeout);
         console.error('[MapSimpleRoute] ❌ Route calculation failed:', e);
         reject(new Error('Не удалось построить маршрут'));
       });
     });
 
+    console.log('[MapSimpleRoute] Route calculation completed');
+
     // Извлекаем данные маршрута
     const routeInfo = this.extractRouteInfo(multiRoute, pointNames, mode);
+    
+    console.log('[MapSimpleRoute] Route info extracted:', routeInfo);
     
     // Отображаем информацию
     this.displayRouteInfo(routeInfo);
@@ -110,6 +137,8 @@ window.MapSimpleRoute = {
   },
 
   addMarkers(points, pointNames) {
+    console.log('[MapSimpleRoute] Adding', points.length, 'markers');
+    
     points.forEach((coords, index) => {
       let icon, label;
       
@@ -132,6 +161,8 @@ window.MapSimpleRoute = {
       
       this.mapCore.routeMarkers.push(placemark);
       this.mapCore.map.geoObjects.add(placemark);
+      
+      console.log('[MapSimpleRoute] Marker added:', label, coords);
     });
   },
 
@@ -154,6 +185,8 @@ window.MapSimpleRoute = {
       const paths = activeRoute.getPaths();
       
       if (paths && paths.getLength() > 0) {
+        console.log('[MapSimpleRoute] Found', paths.getLength(), 'path segments');
+        
         for (let i = 0; i < paths.getLength(); i++) {
           const path = paths.get(i);
           const pathProps = path.properties.getAll();
@@ -168,6 +201,7 @@ window.MapSimpleRoute = {
           });
         }
       } else {
+        console.log('[MapSimpleRoute] No path segments, creating single segment');
         // Если нет сегментов, создаём один
         segments.push({
           index: 0,
@@ -192,11 +226,16 @@ window.MapSimpleRoute = {
   },
 
   displayRouteInfo(routeInfo) {
+    console.log('[MapSimpleRoute] Displaying route info');
+    
     const panel = document.getElementById('routeInfoPanel');
     const statsDiv = document.getElementById('routeInfoStats');
     const stagesDiv = document.getElementById('routeStagesList');
     
-    if (!panel || !statsDiv || !stagesDiv) return;
+    if (!panel || !statsDiv || !stagesDiv) {
+      console.warn('[MapSimpleRoute] Info panel elements not found');
+      return;
+    }
 
     // Общая информация
     const distanceKm = (routeInfo.distance / 1000).toFixed(1);
@@ -241,6 +280,7 @@ window.MapSimpleRoute = {
     }
 
     panel.style.display = 'block';
+    console.log('[MapSimpleRoute] Route info panel displayed');
   },
 
   async saveRoute(originalRouteData, points, pointNames, routeInfo) {
