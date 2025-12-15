@@ -21,6 +21,11 @@ session_start();
 define('YANDEX_CLIENT_ID', 'c77ba8c142f54e4b87a2ae8f0be20c37');
 define('YANDEX_CLIENT_SECRET', 'd01a3a1dde264599ba61b4d1a9a25253');
 define('YANDEX_REDIRECT_URI', 'http://dvoinydx.beget.tech/yandex_callback.php');
-define('BACKEND_API_URL', 'https://intelligent-trails.onrender.com');
 
+
+if ($_SERVER['HTTP_HOST'] === 'localhost' || $_SERVER['HTTP_HOST'] === 'localhost:80') {
+    define('BACKEND_API_URL', 'http://localhost:8000');
+} else {
+    define('BACKEND_API_URL', 'https://intelligent-trails.onrender.com');
+}
 ?>
