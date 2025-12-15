@@ -223,7 +223,6 @@ window.MapRouteBuilder = {
         0
       );
 
-      // Проверяем авторизацию
       const isLoggedIn = document.body.dataset.loggedIn === "true";
       const saveButtonHTML = isLoggedIn
         ? `<button onclick="window.MapRouteBuilder.saveRoute()" class="save-route-btn" style="background: #4CAF50; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer; font-size: 14px; margin-top: 10px;">
@@ -265,10 +264,6 @@ window.MapRouteBuilder = {
                 }
                 
             `;
-
-            // <div style="width: 100%; text-align: center;">
-            //         ${saveButtonHTML}
-            //      </div>
     }
 
     if (stagesDiv) {
@@ -352,6 +347,7 @@ window.MapRouteBuilder = {
       alert("❌ Ошибка сохранения маршрута");
     }
   },
+  
   renderStages(stagesDiv, waypoints) {
     let stagesHTML = "";
 
@@ -363,20 +359,18 @@ window.MapRouteBuilder = {
         ? `<div class="stage-category">${point.category}</div>`
         : "";
 
+      // ИЗМЕНЕНО: Проверяем что placesData существует перед использованием
       const alternativesInfo =
         point.category &&
+        this.placesData && // ДОБАВЛЕНО!
         this.placesData[point.category] &&
         this.placesData[point.category].length > 1
           ? `<div class="stage-alternatives">
-                    <button class="alt-btn" onclick="window.MapRouteBuilder.switchPlace('${
-                      point.category
-                    }', 'prev')">←</button>
+                    <button class="alt-btn" onclick="window.MapRouteBuilder.switchPlace('${point.category}', 'prev')">←</button>
                     <span>${this.activePlaces[point.category] + 1}/${
               this.placesData[point.category].length
             }</span>
-                    <button class="alt-btn" onclick="window.MapRouteBuilder.switchPlace('${
-                      point.category
-                    }', 'next')">→</button>
+                    <button class="alt-btn" onclick="window.MapRouteBuilder.switchPlace('${point.category}', 'next')">→</button>
                 </div>`
           : "";
 
