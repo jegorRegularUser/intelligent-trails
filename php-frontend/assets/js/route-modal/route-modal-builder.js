@@ -30,6 +30,30 @@ window.RouteModalBuilder = {
         }
 
         console.log('[RouteModalBuilder] ✓ Collected data:', data);
+
+        // Если это простой маршрут, вызываем displaySimpleRoute
+        if (this.modal.currentRouteType === 'simple') {
+            this.modal.showLoading(true, 'Строим маршрут...');
+            
+            try {
+                if (window.displaySimpleRoute) {
+                    await window.displaySimpleRoute(data);
+                    this.modal.close();
+                    this.modal.showNotification('Маршрут построен!', 'success');
+                } else {
+                    throw new Error('Модуль простого маршрута не загружен');
+                }
+            } catch (error) {
+                console.error('[RouteModalBuilder] Error:', error);
+                this.modal.showNotification('Ошибка построения маршрута: ' + error.message, 'error');
+            } finally {
+                this.modal.showLoading(false);
+            }
+            
+            return;
+        }
+
+        // Далее идёт код для умного маршрута...
         console.log('[RouteModalBuilder] ✓ start_point_yandex:', data.start_point_yandex);
         console.log('[RouteModalBuilder] ✓ start_point (for backend):', data.start_point);
 
@@ -116,8 +140,57 @@ window.RouteModalBuilder = {
     },
 
     collectSimpleData() {
-        this.modal.showNotification('Простой режим пока не поддерживается', 'error');
-        return null;
+        console.log('[RouteModalBuilder] Collecting simple route data...');
+        
+        const startInput = document.getElementById('simpleStartPoint');
+        const endInput = document.getElementById('simpleEndPoint');
+        
+        if (!startInput || !endInput) {
+            this.modal.showNotification('Поля маршрута не найдены', 'error');
+            return null;
+        }
+
+        const startValue = startInput.value.trim();
+        const endValue = endInput.value.trim();
+        
+        if (!startValue) {
+            this.modal.showNotification('Укажите начальную точку', 'error');
+            return null;
+        }
+        
+        if (!endValue) {
+            this.modal.showNotification('Укажите конечную точку', 'error');
+            return null;
+        }
+        
+        // Собираем промежуточные точки
+        const waypoints = [];
+        const waypointInputs = document.querySelectorAll('.simple-waypoint-input');
+        waypointInputs.forEach(input => {
+            const value = input.value.trim();
+            if (value) {
+                waypoints.push(value);
+            }
+        });
+        
+        // Получаем способ передвижения
+        const modeRadio = document.querySelector('input[name="simpleTransport"]:checked');
+        const mode = modeRadio ? modeRadio.value : 'auto';
+        
+        console.log('[RouteModalBuilder] Simple route data:', {
+            start: startValue,
+            end: endValue,
+            waypoints: waypoints,
+            mode: mode
+        });
+        
+        return {
+            start_point: startValue,
+            end_point: endValue,
+            waypoints: waypoints,
+            mode: mode,
+            route_type: 'simple'
+        };
     },
 
     getCoordsFromInput(id) {
