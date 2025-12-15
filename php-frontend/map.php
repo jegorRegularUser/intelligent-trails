@@ -54,6 +54,7 @@
     <script src="assets/js/map/map-route-builder.js"></script>
     <script src="assets/js/map/map-smart-walk.js"></script>
     <script src="assets/js/map/map-simple-route.js"></script>
+    <script src="assets/js/map/map-route-saver.js"></script>
     <script src="assets/js/map/map-core.js"></script>
 
     <!-- Загрузка сохраненных маршрутов -->
