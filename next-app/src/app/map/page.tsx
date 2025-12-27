@@ -1,31 +1,35 @@
 'use client'
 
-import { YandexMapWrapper } from '@/components/map/YandexMapWrapper'
-import { Button } from '@/components/ui/Button'
-import { RouteModal } from '@/components/route-modal/RouteModal'
-import { RouteInfoPanel } from '@/components/info-panel/RouteInfoPanel'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
+import '../../styles/map.css'
+
+// Динамический импорт YandexMap чтобы избежать SSR
+const YandexMap = dynamic(() => import('@/components/YandexMap'), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center h-screen">
+      <div className="spinner"></div>
+    </div>
+  ),
+})
 
 export default function MapPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
 
   return (
-    <div className="relative h-screen w-full">
-      {/* Карта */}
-      <YandexMapWrapper />
+    <div className="map-page-container">
+      <YandexMap />
+      
+      <button 
+        className="floating-action-btn"
+        onClick={() => setIsModalOpen(true)}
+      >
+        <span className="fab-icon">🗺️</span>
+        <span className="fab-text">Построить маршрут</span>
+      </button>
 
-      {/* Кнопка построения маршрута */}
-      <div className="absolute top-4 left-4 z-10">
-        <Button onClick={() => setIsModalOpen(true)}>
-          📍 Построить маршрут
-        </Button>
-      </div>
-
-      {/* Панель информации */}
-      <RouteInfoPanel />
-
-      {/* Модалка */}
-      <RouteModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      {/* TODO: Add RouteModal component */}
     </div>
   )
 }
