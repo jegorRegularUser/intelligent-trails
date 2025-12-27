@@ -1,36 +1,139 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Intelligent Trails - Next.js Migration
 
-## Getting Started
+Умные маршруты для прогулок на Next.js + MongoDB + Yandex Maps.
 
-First, run the development server:
+## Технологии
+
+- **Frontend**: Next.js 14 (App Router), React 19, TypeScript, Tailwind CSS
+- **State**: Zustand
+- **Backend**: Next.js API Routes
+- **Database**: MongoDB (Mongoose)
+- **Maps**: Yandex Maps JS API 2.1
+- **Auth**: NextAuth.js v5 (будет добавлено)
+
+## Установка
 
 ```bash
+# 1. Установите зависимости
+npm install
+
+# 2. Создайте .env.local
+cp .env.example .env.local
+
+# 3. Заполните переменные окружения
+# - MONGODB_URI - строка подключения MongoDB
+# - YANDEX_API_KEY - ключ Yandex Geocoder API
+# - NEXT_PUBLIC_YANDEX_API_KEY - публичный ключ Yandex Maps
+
+# 4. Запустите разработку
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Функционал
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### ✅ Реализовано
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- Карта Yandex Maps
+- Простой маршрут (A → B)
+- Умная прогулка (активности)
+- Поиск мест по категориям
+- Генерация прогулок (scenic/direct)
+- State management (Zustand)
+- UI компоненты
+- MongoDB модели
 
-## Learn More
+### 🚧 TODO
 
-To learn more about Next.js, take a look at the following resources:
+- Построение маршрута на карте (Yandex multiRouter)
+- Геокодирование адресов
+- NextAuth.js аутентификация
+- Сохранение маршрутов в MongoDB
+- Список сохраненных маршрутов
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Структура проекта
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+src/
+├── app/                    # Next.js App Router
+│   ├── api/                # API Routes
+│   │   ├── search/places/  # Поиск мест
+│   │   └── walks/generate/ # Генерация прогулок
+│   └── map/                # Страница карты
+├── components/
+│   ├── map/                # Компоненты карты
+│   ├── route-modal/        # Модалка построения
+│   ├── info-panel/         # Панель информации
+│   └── ui/                 # UI компоненты
+├── lib/
+│   ├── mongodb/            # MongoDB подключение
+│   ├── yandex/             # Yandex API
+│   ├── state/              # Zustand store
+│   └── utils/              # Утилиты
+├── models/                # Mongoose модели
+└── types/                 # TypeScript типы
+```
 
-## Deploy on Vercel
+## API Endpoints
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### POST /api/search/places
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Поиск мест по категориям.
+
+**Request:**
+```json
+{
+  "center_coords": [44.0020, 56.3287],
+  "categories": ["кафе", "парк"],
+  "radius_m": 3000,
+  "sequential": false
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "places_by_category": {
+    "кафе": [...],
+    "парк": [...]
+  },
+  "total_count": 15
+}
+```
+
+### POST /api/walks/generate
+
+Генерация прогулки на заданное время.
+
+**Request:**
+```json
+{
+  "start_point": [44.0020, 56.3287],
+  "end_point": null,
+  "duration": 60,
+  "style": "scenic",
+  "transport": "pedestrian"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "waypoints": [[44.0020, 56.3287], ...],
+  "estimated_distance": 4800,
+  "estimated_time": 60
+}
+```
+
+## Хостинг
+
+Рекомендуемые бесплатные платформы:
+
+- **Vercel** - лучшее для Next.js, auto-deploy из GitHub
+- **MongoDB Atlas** - бесплатный кластер M0 (512MB)
+- **Railway / Fly.io** - альтернативы с Docker
+
+## Лицензия
+
+MIT

@@ -1,3 +1,5 @@
+import type { Activity } from './activity'
+
 // Типы маршрутов
 export type RouteMode = 'simple' | 'smart'
 export type TransportType = 'pedestrian' | 'auto' | 'bicycle' | 'masstransit'
@@ -30,6 +32,3 @@ export interface Route {
   }
   createdAt?: Date
 }
-
-// Импорт Activity из activity.ts
-import { Activity } from './activity'
