@@ -2,6 +2,8 @@
 
 import { useEffect, useRef } from 'react'
 import { useRouteStore } from '@/lib/state/routeStore'
+import { SimpleRouteBuilder } from './SimpleRouteBuilder'
+import { SmartWalkBuilder } from './SmartWalkBuilder'
 
 // Декларация типов для ymaps
 declare global {
@@ -13,7 +15,7 @@ declare global {
 export function YandexMapWrapper() {
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstance = useRef<any>(null)
-  const { currentRoute } = useRouteStore()
+  const { mode, simpleRoute, smartRoute, activities, currentRoute, setCurrentRoute } = useRouteStore()
 
   useEffect(() => {
     // Загружаем Yandex Maps API
@@ -45,12 +47,43 @@ export function YandexMapWrapper() {
     })
   }
 
-  useEffect(() => {
-    if (currentRoute && mapInstance.current) {
-      // TODO: Добавление маршрута на карту
-      console.log('🛤️ Маршрут построен:', currentRoute)
-    }
-  }, [currentRoute])
+  const handleRouteBuilt = (routeData: any) => {
+    console.log('✅ Маршрут построен:', routeData)
+    setCurrentRoute({
+      type: mode,
+      waypoints: routeData.waypoints,
+      metadata: {
+        distance: routeData.distance,
+        duration: routeData.duration,
+        activities: routeData.activities,
+      },
+    })
+  }
 
-  return <div ref={mapRef} className="w-full h-full" id="map" />
+  return (
+    <>
+      <div ref={mapRef} className="w-full h-full" id="map" />
+      
+      {/* Route builders */}
+      {mapInstance.current && mode === 'simple' && simpleRoute.start && simpleRoute.end && (
+        <SimpleRouteBuilder
+          mapInstance={mapInstance.current}
+          start={simpleRoute.start}
+          end={simpleRoute.end}
+          waypoints={simpleRoute.waypoints}
+          transport={simpleRoute.transport}
+          onRouteBuilt={handleRouteBuilt}
+        />
+      )}
+
+      {mapInstance.current && mode === 'smart' && smartRoute.start && activities.length > 0 && (
+        <SmartWalkBuilder
+          mapInstance={mapInstance.current}
+          smartRoute={smartRoute}
+          activities={activities}
+          onRouteBuilt={handleRouteBuilt}
+        />
+      )}
+    </>
+  )
 }
