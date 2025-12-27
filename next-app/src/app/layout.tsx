@@ -4,7 +4,6 @@ import './globals.css'
 import '../styles/navigation.css'
 import '../styles/modal.css'
 import '../styles/activities.css'
-import { Navigation } from '@/components/Navigation'
 
 const inter = Inter({ subsets: ['latin', 'cyrillic'] })
 
@@ -21,7 +20,6 @@ export default function RootLayout({
   return (
     <html lang="ru">
       <body className={inter.className}>
-        <Navigation />
         {children}
       </body>
     </html>
