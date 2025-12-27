@@ -2,6 +2,8 @@
 
 import { YandexMapWrapper } from '@/components/map/YandexMapWrapper'
 import { Button } from '@/components/ui/Button'
+import { RouteModal } from '@/components/route-modal/RouteModal'
+import { RouteInfoPanel } from '@/components/info-panel/RouteInfoPanel'
 import { useState } from 'react'
 
 export default function MapPage() {
@@ -19,13 +21,11 @@ export default function MapPage() {
         </Button>
       </div>
 
-      {/* Панель информации (потом добавим) */}
-      <div className="absolute top-4 right-4 bg-white rounded-lg shadow-lg p-4 max-w-sm z-10">
-        <h3 className="font-bold text-lg mb-2">🗺️ Intelligent Trails</h3>
-        <p className="text-sm text-gray-600">
-          Постройте умный маршрут для прогулки!
-        </p>
-      </div>
+      {/* Панель информации */}
+      <RouteInfoPanel />
+
+      {/* Модалка */}
+      <RouteModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
     </div>
   )
 }
