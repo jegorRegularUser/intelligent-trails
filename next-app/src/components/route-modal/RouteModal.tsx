@@ -13,11 +13,35 @@ interface RouteModalProps {
 }
 
 export function RouteModal({ isOpen, onClose }: RouteModalProps) {
-  const { mode, setMode, isBuilding } = useRouteStore()
+  const { mode, setMode, isBuilding, setBuilding, simpleRoute, smartRoute, activities } = useRouteStore()
+  const [error, setError] = useState<string | null>(null)
 
   const handleBuild = async () => {
-    // TODO: Логика построения маршрута
-    console.log('🚀 Начинаем построение маршрута...')
+    setError(null)
+    
+    // Валидация
+    if (mode === 'simple') {
+      if (!simpleRoute.start || !simpleRoute.end) {
+        setError('Укажите начальную и конечную точки')
+        return
+      }
+    } else {
+      if (!smartRoute.start) {
+        setError('Укажите стартовую точку')
+        return
+      }
+      if (activities.length === 0) {
+        setError('Добавьте хотя бы одну активность')
+        return
+      }
+    }
+
+    setBuilding(true)
+    
+    // Ждем немного для рендера
+    await new Promise(resolve => setTimeout(resolve, 500))
+    
+    setBuilding(false)
     onClose()
   }
 
@@ -48,6 +72,13 @@ export function RouteModal({ isOpen, onClose }: RouteModalProps) {
           </button>
         </div>
 
+        {/* Ошибка */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+            <p className="text-sm text-red-800">⚠️ {error}</p>
+          </div>
+        )}
+
         {/* Панели */}
         <div className="min-h-[400px]">
           {mode === 'simple' ? <SimpleRoutePanel /> : <SmartRoutePanel />}
@@ -55,11 +86,11 @@ export function RouteModal({ isOpen, onClose }: RouteModalProps) {
 
         {/* Кнопка построения */}
         <div className="flex justify-end space-x-3 pt-4 border-t">
-          <Button variant="secondary" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose} disabled={isBuilding}>
             Отмена
           </Button>
           <Button onClick={handleBuild} disabled={isBuilding}>
-            {isBuilding ? 'Строим...' : 'Построить маршрут'}
+            {isBuilding ? '🔄 Строим маршрут...' : '🚀 Построить маршрут'}
           </Button>
         </div>
       </div>
