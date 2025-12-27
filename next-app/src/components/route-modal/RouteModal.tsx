@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
-import { Button } from '@/components/ui/Button'
 import { SimpleRoutePanel } from './SimpleRoutePanel'
 import { SmartRoutePanel } from './SmartRoutePanel'
 import { useRouteStore } from '@/lib/state/routeStore'
@@ -38,7 +37,7 @@ export function RouteModal({ isOpen, onClose }: RouteModalProps) {
 
     setBuilding(true)
     
-    // Ждем немного для рендера
+    // TODO: Implement route building logic
     await new Promise(resolve => setTimeout(resolve, 500))
     
     setBuilding(false)
@@ -46,52 +45,55 @@ export function RouteModal({ isOpen, onClose }: RouteModalProps) {
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Построить маршрут" size="xl">
+    <Modal isOpen={isOpen} onClose={onClose} title="✨ Построить маршрут" size="xl">
       <div className="space-y-6">
-        {/* Табы */}
-        <div className="flex space-x-2 border-b">
-          <button
-            onClick={() => setMode('simple')}
-            className={`px-4 py-2 font-medium transition-colors ${
-              mode === 'simple'
-                ? 'border-b-2 border-blue-600 text-blue-600'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Простой маршрут
-          </button>
+        {/* Route Type Selector - как в старом проекте */}
+        <div className="route-type-selector">
           <button
             onClick={() => setMode('smart')}
-            className={`px-4 py-2 font-medium transition-colors ${
-              mode === 'smart'
-                ? 'border-b-2 border-blue-600 text-blue-600'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
+            className={`route-type-btn ${mode === 'smart' ? 'active' : ''}`}
           >
-            Умная прогулка
+            <span className="type-icon">🧠</span>
+            <div>
+              <div className="type-title">Умная прогулка</div>
+              <div className="type-desc">С активностями</div>
+            </div>
+          </button>
+          <button
+            onClick={() => setMode('simple')}
+            className={`route-type-btn ${mode === 'simple' ? 'active' : ''}`}
+          >
+            <span className="type-icon">🗺️</span>
+            <div>
+              <div className="type-title">Простой маршрут</div>
+              <div className="type-desc">Из точки А в точку Б</div>
+            </div>
           </button>
         </div>
 
         {/* Ошибка */}
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-            <p className="text-sm text-red-800">⚠️ {error}</p>
+          <div className="bg-red-50 border-2 border-red-200 rounded-lg p-3">
+            <p className="text-sm text-red-800 font-medium">⚠️ {error}</p>
           </div>
         )}
 
         {/* Панели */}
-        <div className="min-h-[400px]">
+        <div className="modal-body">
           {mode === 'simple' ? <SimpleRoutePanel /> : <SmartRoutePanel />}
         </div>
 
-        {/* Кнопка построения */}
-        <div className="flex justify-end space-x-3 pt-4 border-t">
-          <Button variant="secondary" onClick={onClose} disabled={isBuilding}>
+        {/* Футер с кнопками */}
+        <div className="modal-footer">
+          <button className="btn-secondary" onClick={onClose} disabled={isBuilding}>
             Отмена
-          </Button>
-          <Button onClick={handleBuild} disabled={isBuilding}>
-            {isBuilding ? '🔄 Строим маршрут...' : '🚀 Построить маршрут'}
-          </Button>
+          </button>
+          <button className="btn-primary" onClick={handleBuild} disabled={isBuilding}>
+            <span className="btn-icon">{isBuilding ? '🔄' : '🗺️'}</span>
+            <span id="buildBtnText">
+              {isBuilding ? 'Строим маршрут...' : mode === 'smart' ? 'Построить прогулку' : 'Построить маршрут'}
+            </span>
+          </button>
         </div>
       </div>
     </Modal>
