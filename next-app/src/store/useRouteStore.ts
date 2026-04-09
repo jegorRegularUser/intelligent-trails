@@ -23,6 +23,8 @@ export interface FormWaypoint {
   alternatives?: PlaceOfInterest[];
   selectedAlternativeIndex?: number;
   address?: string;
+  originalCategory?: string; 
+  resolvedName?: string;
 }
 
 interface RouteState {

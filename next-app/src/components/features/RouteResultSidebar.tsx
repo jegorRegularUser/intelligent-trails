@@ -10,14 +10,14 @@ import { TravelInfo } from "@/components/ui/TravelInfo";
 import { useRouteStore } from "@/store/useRouteStore";
 import { encodeRouteToUrl } from "@/utils/routeCodec";
 import { RefreshCw, Navigation, ArrowLeft } from "lucide-react";
-import { formatDistance, formatDuration } from "@/utils/format";
 
 export function RouteResultSidebar() {
   const router = useRouter();
   const t = useTranslations("BuilderSidebar");
   
   const { 
-    mapPoints, waypoints, setWaypoints, 
+    mapPoints, setMapPoints, 
+    waypoints, setWaypoints, 
     startPoint, startTransport, setStartPoint, setStartTransport,
     endPoint, endPointType, endPointCategory, setEndPoint, setEndPointType, setEndPointCategory, 
     setIsRouteBuilt 
@@ -26,29 +26,42 @@ export function RouteResultSidebar() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isRebuilding, setIsRebuilding] = useState(false);
 
+  // Утилита, которая забирает ТОЛЬКО нужные данные для жесткого сохранения в URL
+  const getCleanWaypoints = (wps: typeof waypoints) => wps.map(wp => ({
+    id: wp.id,
+    type: wp.type,
+    value: wp.value,
+    originalCategory: wp.originalCategory || wp.value, // Сохраняем интент ("кафе")
+    resolvedName: wp.resolvedName || wp.value,         // Сохраняем имя ("Шоколадница")
+    coords: wp.coords,                                 // ЖЕСТКИЕ КООРДИНАТЫ
+    address: wp.address,
+    duration: wp.duration,
+    modeToNext: wp.modeToNext,
+    selectedAlternativeIndex: wp.selectedAlternativeIndex || 0
+  }));
+
   const handleRebuild = () => {
     setIsRebuilding(true);
+    setIsRouteBuilt(false); // Открываем замок для Менеджера, если пользователь захотел ПЕРЕстроить
     
     const routeData = {
       startPoint,
       startTransport,
-      waypoints,
-      endPoint,
+      startPointName: mapPoints[0]?.name,
+      waypoints: getCleanWaypoints(waypoints),
+      endPoint: endPointType === "address" ? endPoint : mapPoints[mapPoints.length - 1]?.coordinates,
       endPointType,
       endPointCategory,
-      // Сохраняем названия из mapPoints, чтобы избежать мерцания при перезагрузке
-      startPointName: mapPoints[0]?.name || "",
-      endPointName: mapPoints[mapPoints.length - 1]?.name || ""
+      endPointName: mapPoints[mapPoints.length - 1]?.name
     };
+
     const encoded = encodeRouteToUrl(routeData);
     router.push(`?r=${encoded}`, { scroll: false });
     
-    // Менеджер сайдбаров сам сбросит состояние, когда увидит новый URL
-    // Но мы закроем режим редактирования сразу для отзывчивости
     setEditingId(null);
     setIsRebuilding(false);
   };
-  console.log(mapPoints)
+
   return (
     <RoutePanel
       className="pb-[100px]"
@@ -57,7 +70,7 @@ export function RouteResultSidebar() {
           <div className="flex items-center gap-3">
             <button 
               onClick={() => setIsRouteBuilt(false)} 
-              className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-500"
+              className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-500 active:scale-95"
             >
               <ArrowLeft size={20} />
             </button>
@@ -77,12 +90,7 @@ export function RouteResultSidebar() {
             variant="start"
             isEditing={editingId === 'start'}
             showDoneButton={true}
-            data={{ 
-              id: 'start', 
-              type: 'address', 
-              value: mapPoints[0]?.name || "", 
-              modeToNext: startTransport 
-            }}
+            data={{ id: 'start', type: 'address', value: mapPoints[0]?.name || "", modeToNext: startTransport }}
             resolvedName={mapPoints[0]?.name}
             resolvedAddress={mapPoints[0]?.address}
             onEdit={() => setEditingId(editingId === 'start' ? null : 'start')}
@@ -93,16 +101,11 @@ export function RouteResultSidebar() {
           />
         </div>
 
-        {/* РЕАЛЬНЫЕ ДАННЫЕ О ПУТИ: берем из первого mapPoint (дистанция до следующей точки) */}
         {mapPoints[0] && (
-           <TravelInfo 
-             mode={startTransport} 
-             distance={mapPoints[0].distanceToNext || 0} 
-             duration={mapPoints[0].durationToNext || 0} 
-           />
+           <TravelInfo mode={startTransport} distance={mapPoints[0].distanceToNext} duration={mapPoints[0].durationToNext} />
         )}
 
-        {/* --- ПРОМЕЖУТОЧНЫЕ ТОЧКИ --- */}
+        {/* --- 2. ПРОМЕЖУТОЧНЫЕ ТОЧКИ --- */}
         {waypoints.map((wp, index) => {
           const mapPoint = mapPoints[index + 1];
           const isEditing = editingId === wp.id;
@@ -114,7 +117,6 @@ export function RouteResultSidebar() {
                 index={index + 1}
                 isEditing={isEditing}
                 showDoneButton={true}
-                // ВАЖНО: передаем весь wp, где лежат .alternatives и .selectedAlternativeIndex
                 data={wp} 
                 resolvedName={mapPoint?.name}
                 resolvedAddress={mapPoint?.address}
@@ -122,25 +124,58 @@ export function RouteResultSidebar() {
                 onSave={(u) => setWaypoints(prev => prev.map(item => item.id === wp.id ? { ...item, ...u } : item))}
                 onRemove={() => setWaypoints(prev => prev.filter(item => item.id !== wp.id))}
                 onAlternativeSelect={(altIndex) => {
-                  setWaypoints(prev => prev.map(item => 
-                    item.id === wp.id ? { ...item, selectedAlternativeIndex: altIndex } : item
-                  ));
+                  const selectedAlt = wp.alternatives?.[altIndex];
+                  if (!selectedAlt) return;
+
+                  // 1. Атомарно обновляем Zustand (Черновик)
+                  const newWaypoints = waypoints.map(item => 
+                    item.id === wp.id ? { 
+                      ...item, 
+                      selectedAlternativeIndex: altIndex,
+                      coords: selectedAlt.coordinates,
+                      resolvedName: selectedAlt.name,
+                      address: selectedAlt.address
+                    } : item
+                  );
+                  setWaypoints(newWaypoints);
+
+                  // 2. Атомарно обновляем Zustand (Карта) - сбрасываем метрики, Яндекс.Карты сами нарисуют новую линию!
+                  const newMapPoints = [...mapPoints];
+                  newMapPoints[index + 1] = {
+                    ...newMapPoints[index + 1],
+                    coordinates: selectedAlt.coordinates,
+                    name: selectedAlt.name,
+                    address: selectedAlt.address,
+                    distanceToNext: undefined, 
+                    durationToNext: undefined
+                  };
+                  if (newMapPoints[index]) {
+                    newMapPoints[index].distanceToNext = undefined;
+                    newMapPoints[index].durationToNext = undefined;
+                  }
+                  setMapPoints(newMapPoints);
+
+                  // 3. ТИХО ОБНОВЛЯЕМ URL С НОВЫМИ КООРДИНАТАМИ
+                  const routeData = {
+                    startPoint, startTransport, startPointName: mapPoints[0]?.name,
+                    waypoints: getCleanWaypoints(newWaypoints),
+                    endPoint: endPointType === "address" ? endPoint : mapPoints[mapPoints.length - 1]?.coordinates,
+                    endPointType, endPointCategory, endPointName: mapPoints[mapPoints.length - 1]?.name
+                  };
+                  const encoded = encodeRouteToUrl(routeData);
+                  window.history.replaceState(null, '', `?r=${encoded}`);
                 }}
               />
               
-              {/* Метрики (реальные данные из стора) */}
               {!isEditing && mapPoint && (
-                <TravelInfo 
-                  mode={wp.modeToNext} 
-                  distance={mapPoint.distanceToNext} 
-                  duration={mapPoint.durationToNext} 
-                />
+                <TravelInfo mode={wp.modeToNext} distance={mapPoint.distanceToNext} duration={mapPoint.durationToNext} />
               )}
             </div>
           );
         })}
+
         {/* --- 3. ФИНИШ --- */}
-        {endPoint && (
+        {endPoint && mapPoints.length > 1 && (
           <div className="relative" style={{ zIndex: 10 }}>
             <WaypointItem
               variant="end"
@@ -148,9 +183,10 @@ export function RouteResultSidebar() {
               isEditing={editingId === 'end'}
               showDoneButton={true}
               data={{ 
-                id: 'end', 
-                type: endPointType, 
-                value: endPointType === "category" ? endPointCategory : mapPoints[mapPoints.length - 1]?.name || "" 
+                id: 'end', type: endPointType, 
+                value: endPointType === "category" ? endPointCategory : mapPoints[mapPoints.length - 1]?.name || "",
+                alternatives: mapPoints[mapPoints.length - 1]?.alternatives,
+                selectedAlternativeIndex: mapPoints[mapPoints.length - 1]?.selectedAlternativeIndex
               }}
               resolvedName={mapPoints[mapPoints.length - 1]?.name}
               resolvedAddress={mapPoints[mapPoints.length - 1]?.address}
@@ -159,6 +195,32 @@ export function RouteResultSidebar() {
                 if (u.type) setEndPointType(u.type as any);
                 if (u.type === "category" && u.value) setEndPointCategory(u.value);
                 if (u.coords) setEndPoint(u.coords); 
+              }}
+              onAlternativeSelect={(altIndex) => {
+                const mapPointIndex = mapPoints.length - 1;
+                const endMapPoint = mapPoints[mapPointIndex];
+                const selectedAlt = endMapPoint.alternatives?.[altIndex];
+                if (!selectedAlt) return;
+
+                const newMapPoints = [...mapPoints];
+                newMapPoints[mapPointIndex] = {
+                  ...endMapPoint, coordinates: selectedAlt.coordinates, name: selectedAlt.name,
+                  address: selectedAlt.address, selectedAlternativeIndex: altIndex
+                };
+                if (newMapPoints[mapPointIndex - 1]) {
+                  newMapPoints[mapPointIndex - 1].distanceToNext = undefined;
+                  newMapPoints[mapPointIndex - 1].durationToNext = undefined;
+                }
+                setMapPoints(newMapPoints);
+
+                const routeData = {
+                  startPoint, startTransport, startPointName: mapPoints[0]?.name,
+                  waypoints: getCleanWaypoints(waypoints),
+                  endPoint: selectedAlt.coordinates,
+                  endPointType: "category" as const, endPointCategory, endPointName: selectedAlt.name
+                };
+                const encoded = encodeRouteToUrl(routeData);
+                window.history.replaceState(null, '', `?r=${encoded}`);
               }}
             />
           </div>
@@ -177,7 +239,6 @@ export function RouteResultSidebar() {
           Обновить маршрут
         </Button>
       </div>
-      
     </RoutePanel>
   );
 }

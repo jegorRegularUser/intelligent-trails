@@ -1,12 +1,12 @@
 // src/actions/builder.ts
 "use server";
 
-import { Coordinates, RouteStep, RoutingMode } from "@/types/map";
+import { Coordinates, RoutingMode, PlaceOfInterest } from "@/types/map";
 import { fetchPlacesByCategory } from "@/services/osm";
 import { getDistanceInMeters } from "@/utils/geo";
 import { sleep } from "@/utils/async";
+import { reverseGeocode } from "@/actions/geocoder"; // Предполагаем, что он есть
 
-// Средние скорости в м/с для расчёта duration
 const SPEEDS: Record<RoutingMode, number> = {
   pedestrian: 1.38,
   auto: 8.33,
@@ -14,80 +14,96 @@ const SPEEDS: Record<RoutingMode, number> = {
   bicycle: 4.16
 };
 
+export interface BuiltStep {
+  name: string;
+  address?: string;
+  coordinates: Coordinates;
+  alternatives?: PlaceOfInterest[];
+  modeToNext: RoutingMode;
+  distanceToNext?: number;
+  durationToNext?: number;
+}
+
 export async function buildSmartRouteWithAlternatives(
   start: Coordinates,
   end: Coordinates,
   categories: { name: string; modeToNext: RoutingMode; stayDuration: number }[],
-  startMode: RoutingMode
-): Promise<RouteStep[]> {
-  const steps: RouteStep[] = [];
+  startMode: RoutingMode,
+  // Добавляем опциональные имена из формы, если они уже есть
+  startName?: string,
+  endName?: string
+): Promise<BuiltStep[]> {
+  const steps: BuiltStep[] = [];
   let currentPoint = start;
 
-  // 1. Добавляем СТАРТ (пока без метрик, они запишутся в цикле)
+  // 1. ГЕОКОДИРУЕМ СТАРТ (Чтобы не было "Старт")
+  let startInfo = { name: startName || "Точка отправления", address: "" };
+  if (!startName) {
+    const geo = await reverseGeocode(start);
+    startInfo = { name: geo.name, address: geo.address };
+  }
+
   steps.push({
-    id: "start",
-    type: "point",
-    selectedCoords: start,
+    name: startInfo.name,
+    address: startInfo.address,
+    coordinates: start,
     modeToNext: startMode,
-    stayDuration: 0,
   });
 
-  // 2. Ищем точки категорий
+  // 2. ИЩЕМ КАТЕГОРИИ
   for (let i = 0; i < categories.length; i++) {
     const cat = categories[i];
     try {
       const places = await fetchPlacesByCategory(currentPoint, cat.name);
 
       if (places.length > 0) {
-        // Сортируем по близости
         places.sort((a, b) => getDistanceInMeters(currentPoint, a.coordinates) - getDistanceInMeters(currentPoint, b.coordinates));
+        
         const topAlternatives = places.slice(0, 5);
-        const bestCoords = topAlternatives[0].coordinates;
+        const bestPlace = topAlternatives[0];
 
-        // Расчёт метрик от предыдущей точки к текущей
-        const distance = getDistanceInMeters(currentPoint, bestCoords);
-        const mode = i === 0 ? startMode : categories[i - 1].modeToNext;
-        const duration = distance / SPEEDS[mode];
-
-        // Обновляем метрики ПРЕДЫДУЩЕЙ точки (путь К этой точке)
-        steps[steps.length - 1].travelMetrics = {
-          distance,
-          duration
-        };
+        // Метрики от предыдущей точки к этой
+        const distance = getDistanceInMeters(currentPoint, bestPlace.coordinates);
+        const mode = i === 0 ? startMode : categories[i-1].modeToNext;
+        
+        // Обновляем предыдущий шаг реальными данными
+        steps[steps.length - 1].distanceToNext = distance;
+        steps[steps.length - 1].durationToNext = distance / SPEEDS[mode];
 
         steps.push({
-          id: `cat-${cat.name}-${i}`,
-          type: "category",
-          selectedCoords: bestCoords,
-          alternatives: topAlternatives,
+          name: bestPlace.name,
+          address: bestPlace.address,
+          coordinates: bestPlace.coordinates,
+          alternatives: topAlternatives, // ВОТ ОНИ, РОДИМЫЕ
           modeToNext: cat.modeToNext,
-          stayDuration: cat.stayDuration * 60, // Переводим минуты из формы в секунды
         });
 
-        currentPoint = bestCoords;
+        currentPoint = bestPlace.coordinates;
       }
-    } catch (error) {
-      console.error(`Ошибка при поиске ${cat.name}:`, error);
+    } catch (e) {
+      console.error(e);
     }
-
-    if (i < categories.length - 1) await sleep(1000);
+    await sleep(500);
   }
 
-  // 3. Расчёт пути к ФИНАЛУ
-  const finalDistance = getDistanceInMeters(currentPoint, end);
+  // 3. ГЕОКОДИРУЕМ ФИНИШ
+  let endInfo = { name: endName || "Финиш", address: "" };
+  if (!endName) {
+    const geo = await reverseGeocode(end);
+    endInfo = { name: geo.name, address: geo.address };
+  }
+
+  const finalDist = getDistanceInMeters(currentPoint, end);
   const finalMode = categories.length > 0 ? categories[categories.length - 1].modeToNext : startMode;
-  
-  steps[steps.length - 1].travelMetrics = {
-    distance: finalDistance,
-    duration: finalDistance / SPEEDS[finalMode]
-  };
+
+  steps[steps.length - 1].distanceToNext = finalDist;
+  steps[steps.length - 1].durationToNext = finalDist / SPEEDS[finalMode];
 
   steps.push({
-    id: "end",
-    type: "point",
-    selectedCoords: end,
-    modeToNext: "pedestrian", // После финиша не едем
-    stayDuration: 0,
+    name: endInfo.name,
+    address: endInfo.address,
+    coordinates: end,
+    modeToNext: "pedestrian",
   });
 
   return steps;

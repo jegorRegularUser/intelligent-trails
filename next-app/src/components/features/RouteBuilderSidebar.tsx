@@ -75,29 +75,42 @@ export function RouteBuilderSidebar() {
 
 
 
-/* --- Внутри функции handleBuildRoute --- */
-const handleBuildRoute = () => {
-  setIsGenerating(true);
-  
-  if (!startPoint) {
+  const handleBuildRoute = () => {
+    setIsGenerating(true);
+    
+    if (!startPoint) {
+      setIsGenerating(false);
+      return;
+    }
+
+    // Снимаем блокировку: разрешаем Менеджеру запустить процесс OSM
+    setIsRouteBuilt(false); 
+
+    // Очищаем waypoints от тяжелых данных перед кодированием в URL
+    const cleanWaypoints = waypoints.map(wp => ({
+      id: wp.id,
+      type: wp.type,
+      value: wp.value,
+      coords: wp.coords,
+      duration: wp.duration,
+      modeToNext: wp.modeToNext,
+      selectedAlternativeIndex: wp.selectedAlternativeIndex || 0
+    }));
+
+    const routeData = {
+      startPoint,
+      startTransport,
+      waypoints: cleanWaypoints,
+      endPoint: endPointType === "address" ? endPoint : null,
+      endPointType,
+      endPointCategory
+    };
+
+    const encodedString = encodeRouteToUrl(routeData);
+    router.push(`?r=${encodedString}`, { scroll: false });
+    
     setIsGenerating(false);
-    return;
-  }
-
-  // Собираем данные. Если финиш — категория, то координаты (endPoint) не нужны
-  const routeData = {
-    startPoint,
-    startTransport,
-    waypoints,
-    endPoint: endPointType === "address" ? endPoint : null, 
-    endPointType,
-    endPointCategory
   };
-
-  const encodedString = encodeRouteToUrl(routeData);
-  router.push(`?r=${encodedString}`, { scroll: false });
-  setIsGenerating(false);
-};
 
   return (
     <RoutePanel
