@@ -54,7 +54,16 @@ export function WaypointItem({
   /**
    * Подзаголовок: Показываем адрес только если он отличается от заголовка.
    */
-  const displaySubtitle = (resolvedAddress && resolvedAddress !== displayTitle) ? resolvedAddress : null;
+  let displaySubtitle = null;
+  if (resolvedAddress && resolvedAddress !== displayTitle) {
+    const titleLower = displayTitle.toLowerCase();
+    const addrLower = resolvedAddress.toLowerCase();
+    
+    // Показываем подзаголовок ТОЛЬКО если адрес не содержит название (и наоборот)
+    if (!addrLower.includes(titleLower) && !titleLower.includes(addrLower)) {
+      displaySubtitle = resolvedAddress;
+    }
+  }
 
   /**
    * ЛОГИКА АЛЬТЕРНАТИВ
