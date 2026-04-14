@@ -35,5 +35,32 @@
     "transportBicycle": "Велосипед",
     "loading": "Загрузка"
 
+  },
+  "Profile": {
+    "title": "Личный кабинет",
+    "subtitle": "Управление личными данными и настройками приложения",
+    "personalData": "Личные данные",
+    "personalDataDesc": "Основная информация вашего профиля",
+    "namePlaceholder": "Ваше имя",
+    "saveChanges": "Сохранить изменения",
+    "security": "Безопасность",
+    "securityDesc": "Управление паролем и способами авторизации",
+    "currentPassword": "Текущий пароль",
+    "newPassword": "Новый пароль",
+    "updatePassword": "Обновить пароль",
+    "oauthWarning": "Вы вошли через внешний сервис. Смена пароля выполняется на стороне провайдера.",
+    "preferences": "Настройки",
+    "language": "Язык интерфейса",
+    "languageDesc": "Выберите язык для приложения",
+    "distanceUnit": "Единицы измерения",
+    "distanceUnitDesc": "Километры или мили (в разработке)"
+  },
+  "Navigation": {
+    "logo": "Intelligent Trails",
+    "map": "Карта",
+    "history": "История",
+    "profile": "Профиль",
+    "signIn": "Войти",
+    "signUp": "Регистрация"
   }
 }
