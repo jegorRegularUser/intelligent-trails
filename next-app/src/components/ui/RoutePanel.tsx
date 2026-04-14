@@ -6,9 +6,10 @@ interface RoutePanelProps {
   children: ReactNode;
   className?: string;
   header?: ReactNode;
+  isNavigationOpen?: boolean;
 }
 
-export function RoutePanel({ children, className, header }: RoutePanelProps) {
+export function RoutePanel({ children, className, header, isNavigationOpen = false }: RoutePanelProps) {
   // Стейт для мобилки: развернута шторка или свернута
   const [isExpanded, setIsExpanded] = useState(true);
 
@@ -16,22 +17,25 @@ export function RoutePanel({ children, className, header }: RoutePanelProps) {
     <div
       className={cn(
         "bg-white z-40 flex flex-col overflow-hidden transition-all duration-300 ease-in-out",
-        
+
         // --- МОБИЛЬНАЯ ВЕРСИЯ ---
         "fixed bottom-0 left-0 right-0 rounded-t-3xl border-t border-slate-200 shadow-[0_-10px_40px_rgba(0,0,0,0.1)]",
         // Динамическая высота: если свернуто, показываем только шапку (около 80px), если развернуто - до 85% экрана
         isExpanded ? "max-h-[85vh] h-[85vh]" : "max-h-[80px] h-[80px]",
-        
+        // Прячем сайдбар когда открыта навигация на мобилке
+        isNavigationOpen && "hidden md:flex",
+
         // --- ДЕСКТОПНАЯ ВЕРСИЯ ---
         // На десктопе высота всегда автоматическая до низа, шторка не сворачивается
-        "md:top-6 md:bottom-6 md:left-6 md:right-auto md:w-[420px] md:rounded-3xl md:h-auto md:max-h-none",
+        // top-24 вместо top-6 чтобы не перекрывать навигацию (навигация ~60px + отступ)
+        "md:top-24 md:bottom-6 md:left-6 md:right-auto md:w-[420px] md:rounded-3xl md:h-auto md:max-h-none",
         "md:border md:border-slate-200 md:shadow-float",
-        
+
         className
       )}
     >
       {/* Кликабельная зона для мобилки (Ручка + Хедер) */}
-      <div 
+      <div
         className="cursor-pointer md:cursor-default shrink-0 bg-white z-10"
         onClick={() => setIsExpanded(!isExpanded)}
       >

@@ -8,10 +8,12 @@ import { RouteResultSidebar } from "./RouteResultSidebar";
 import { decodeRouteFromUrl, encodeRouteToUrl } from "@/utils/routeCodec";
 import { findOSMPlacesWithAlternatives } from "@/actions/osmPlaces";
 import { reverseGeocode } from "@/actions/geocoder";
+import { useNavigation } from "@/contexts/NavigationContext";
 
 export function RouteSidebarManager() {
   const searchParams = useSearchParams();
   const routeParam = searchParams.get("r");
+  const { isMobileMenuOpen } = useNavigation();
   
   const { 
     setMapPoints, setStartPoint, setWaypoints, 
@@ -210,5 +212,5 @@ export function RouteSidebarManager() {
     );
   }
 
-  return (isRouteBuilt && routeParam) ? <RouteResultSidebar /> : <RouteBuilderSidebar />;
+  return (isRouteBuilt && routeParam) ? <RouteResultSidebar isNavigationOpen={isMobileMenuOpen} /> : <RouteBuilderSidebar isNavigationOpen={isMobileMenuOpen} />;
 }

@@ -3,5 +3,32 @@
     "title": "Intelligent Route Planner",
     "subtitle": "Build your perfect walking route",
     "startButton": "Build Route"
+  },
+  "Profile": {
+    "title": "Profile",
+    "subtitle": "Manage your personal information and app settings",
+    "personalData": "Personal Data",
+    "personalDataDesc": "Basic information about your profile",
+    "namePlaceholder": "Your name",
+    "saveChanges": "Save changes",
+    "security": "Security",
+    "securityDesc": "Password management and login methods",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "updatePassword": "Update password",
+    "oauthWarning": "You signed in using an external service. Password changes are managed by the provider.",
+    "preferences": "Preferences",
+    "language": "Interface language",
+    "languageDesc": "Choose the language for the application",
+    "distanceUnit": "Distance units",
+    "distanceUnitDesc": "Kilometers or miles (coming soon)"
+  },
+  "Navigation": {
+    "logo": "Intelligent Trails",
+    "map": "Map",
+    "history": "History",
+    "profile": "Profile",
+    "signIn": "Sign In",
+    "signUp": "Sign Up"
   }
 }

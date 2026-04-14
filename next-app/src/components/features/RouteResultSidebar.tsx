@@ -11,7 +11,11 @@ import { useRouteStore } from "@/store/useRouteStore";
 import { encodeRouteToUrl } from "@/utils/routeCodec";
 import { RefreshCw, Navigation, ArrowLeft } from "lucide-react";
 
-export function RouteResultSidebar() {
+interface RouteResultSidebarProps {
+  isNavigationOpen?: boolean;
+}
+
+export function RouteResultSidebar({ isNavigationOpen = false }: RouteResultSidebarProps) {
   const router = useRouter();
   const t = useTranslations("BuilderSidebar");
   
@@ -65,6 +69,7 @@ export function RouteResultSidebar() {
   return (
     <RoutePanel
       className="pb-[100px]"
+      isNavigationOpen={isNavigationOpen}
       header={
         <div className="flex items-center justify-between w-full">
           <div className="flex items-center gap-3">

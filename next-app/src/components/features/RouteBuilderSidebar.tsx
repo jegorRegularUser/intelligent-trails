@@ -16,7 +16,11 @@ import { useRouter } from 'next/navigation';
 import { encodeRouteToUrl } from '@/utils/routeCodec';
 import { Navigation, Footprints, Car, Bus, Plus, Trash2, MapPin, Coffee, TreePine, Landmark, Flag } from "lucide-react";
 
-export function RouteBuilderSidebar() {
+interface RouteBuilderSidebarProps {
+  isNavigationOpen?: boolean;
+}
+
+export function RouteBuilderSidebar({ isNavigationOpen = false }: RouteBuilderSidebarProps) {
   const router = useRouter();
   const t = useTranslations("BuilderSidebar");
   
@@ -114,6 +118,7 @@ export function RouteBuilderSidebar() {
 
   return (
     <RoutePanel
+      isNavigationOpen={isNavigationOpen}
       header={
         <div className="flex items-center gap-3 text-slate-800">
           <div className="p-2 bg-brand-100 rounded-xl text-brand-600">
