@@ -2,12 +2,13 @@
 "use server";
 
 import { Coordinates, PlaceOfInterest } from "@/types/map";
-import { fetchPlacesByCategory } from "@/services/osm"; 
-import { getDistanceInMeters } from "@/utils/geo"; 
+import { fetchPlacesByCategory } from "@/services/osm";
+import { rankPlaces } from "@/utils/placeRanking";
 
 export async function findOSMPlacesWithAlternatives(
   category: string,
-  nearCoords: Coordinates
+  nearCoords: Coordinates,
+  destinationCoords?: Coordinates
 ): Promise<PlaceOfInterest[]> {
   try {
     const places = await fetchPlacesByCategory(nearCoords, category);
@@ -16,9 +17,13 @@ export async function findOSMPlacesWithAlternatives(
       return [];
     }
 
-    return places.sort((a, b) => 
-      getDistanceInMeters(nearCoords, a.coordinates) - getDistanceInMeters(nearCoords, b.coordinates)
-    );
+    // Умное ранжирование с учетом качества, расстояния, направления и разнообразия
+    return rankPlaces(places, {
+      currentPosition: nearCoords,
+      destinationPosition: destinationCoords,
+      maxResults: 5,
+      diversityRadius: 300, // 300м между альтернативами
+    });
   } catch (error) {
     console.error("Ошибка при поиске через OSM:", error);
     return [];

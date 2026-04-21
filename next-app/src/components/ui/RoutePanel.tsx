@@ -1,6 +1,7 @@
-import { ReactNode, useState } from "react";
+import { ReactNode, useState, useEffect } from "react";
 import { cn } from "@/utils/cn";
 import { ChevronUp, ChevronDown } from "lucide-react";
+import { useRouteStore } from "@/store/useRouteStore";
 
 interface RoutePanelProps {
   children: ReactNode;
@@ -12,6 +13,14 @@ interface RoutePanelProps {
 export function RoutePanel({ children, className, header, isNavigationOpen = false }: RoutePanelProps) {
   // Стейт для мобилки: развернута шторка или свернута
   const [isExpanded, setIsExpanded] = useState(true);
+  const { isMapPickerActive } = useRouteStore();
+
+  // Автоматически сворачиваем сайдбар на мобилке при активации режима выбора
+  useEffect(() => {
+    if (isMapPickerActive && typeof window !== 'undefined' && window.innerWidth < 768) {
+      setIsExpanded(false);
+    }
+  }, [isMapPickerActive]);
 
   return (
     <div
@@ -28,7 +37,8 @@ export function RoutePanel({ children, className, header, isNavigationOpen = fal
         // --- ДЕСКТОПНАЯ ВЕРСИЯ ---
         // На десктопе высота всегда автоматическая до низа, шторка не сворачивается
         // top-24 вместо top-6 чтобы не перекрывать навигацию (навигация ~60px + отступ)
-        "md:top-24 md:bottom-6 md:left-6 md:right-auto md:w-[420px] md:rounded-3xl md:h-auto md:max-h-none",
+        // pointer-events-none чтобы не блокировать карту, но pointer-events-auto на контенте
+        "md:top-24 md:bottom-6 md:left-6 md:right-auto md:w-[420px] md:rounded-3xl md:h-auto md:max-h-none md:pointer-events-none",
         "md:border md:border-slate-200 md:shadow-float",
 
         className
@@ -36,7 +46,7 @@ export function RoutePanel({ children, className, header, isNavigationOpen = fal
     >
       {/* Кликабельная зона для мобилки (Ручка + Хедер) */}
       <div
-        className="cursor-pointer md:cursor-default shrink-0 bg-white z-10"
+        className="cursor-pointer md:cursor-default shrink-0 bg-white z-10 md:pointer-events-auto"
         onClick={() => setIsExpanded(!isExpanded)}
       >
         {/* Ручка (Drag Handle) - видна только на мобилке */}
@@ -57,7 +67,7 @@ export function RoutePanel({ children, className, header, isNavigationOpen = fal
 
       {/* Основной контент */}
       <div className={cn(
-        "flex-1 overflow-y-auto overflow-x-hidden p-6 custom-scrollbar transition-opacity duration-300",
+        "flex-1 overflow-y-auto overflow-x-hidden p-6 custom-scrollbar transition-opacity duration-300 md:pointer-events-auto",
         // Прячем контент, если свернуто (чтобы нельзя было скроллить невидимку)
         !isExpanded && "opacity-0 pointer-events-none md:opacity-100 md:pointer-events-auto"
       )}>

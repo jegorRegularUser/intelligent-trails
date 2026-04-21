@@ -1,20 +1,23 @@
-import { RouteSidebarManager } from '@/components/features/RouteSidebarManager';
-import { RouteMap } from '@/components/map/RouteMap';
+import { HeroSection } from '@/components/landing/HeroSection';
+import { FeaturesSection } from '@/components/landing/FeaturesSection';
+import { TutorialSection } from '@/components/landing/TutorialSection';
+import { CTASection } from '@/components/landing/CTASection';
+import { Footer } from '@/components/landing/Footer';
 
-export default function AppHome() {
+export default async function LandingPage({
+  params
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+
   return (
-    <main className="relative w-full h-screen overflow-hidden">
-      
-      {/* Карта на заднем фоне (100% ширины и высоты) */}
-      <div className="absolute inset-0 z-0">
-        <RouteMap />
-      </div>
-
-      {/* Сайдбар поверх карты. 
-          Он использует fixed-позиционирование внутри себя, 
-          так что тут мы просто рендерим его в DOM */}
-      <RouteSidebarManager />
-      
+    <main className="min-h-screen">
+      <HeroSection locale={locale} />
+      <FeaturesSection />
+      <TutorialSection />
+      <CTASection locale={locale} />
+      <Footer locale={locale} />
     </main>
   );
 }

@@ -21,7 +21,27 @@
     "language": "Interface language",
     "languageDesc": "Choose the language for the application",
     "distanceUnit": "Distance units",
-    "distanceUnitDesc": "Kilometers or miles (coming soon)"
+    "distanceUnitDesc": "Choose kilometers or miles",
+    "unitKm": "Kilometers",
+    "unitKmDesc": "Meters and kilometers",
+    "unitMi": "Miles",
+    "unitMiDesc": "Feet and miles",
+    "mapLanguage": "Map language",
+    "mapLanguageDesc": "Language for map labels",
+    "customMapLanguage": "Separate language",
+    "signOut": "Sign Out",
+    "signingOut": "Signing out...",
+    "signOutError": "Sign out error",
+    "preferencesUpdated": "Preferences updated",
+    "nameUpdated": "Name successfully updated",
+    "passwordUpdated": "Password successfully updated",
+    "updateError": "Update error",
+    "saving": "Saving...",
+    "updating": "Updating...",
+    "fillAllFields": "Fill in all fields",
+    "passwordTooShort": "Password must be at least 6 characters",
+    "incorrectPassword": "Current password is incorrect",
+    "oauthPasswordError": "Password change not available for OAuth users"
   },
   "Navigation": {
     "logo": "Intelligent Trails",
@@ -30,5 +50,258 @@
     "profile": "Profile",
     "signIn": "Sign In",
     "signUp": "Sign Up"
+  },
+  "BuilderSidebar": {
+    "title": "Walk Plan",
+    "startPointLabel": "Where do we start?",
+    "startPointPlaceholder": "Address or place...",
+    "waypointLabel": "Where to visit?",
+    "endPointLabel": "Where to finish?",
+    "endPointOptional": "(optional)",
+    "endPointPlaceholder": "Final destination?",
+    "typeCategory": "Category",
+    "typeAddress": "Address",
+    "typeMap": "On map",
+    "durationLabel": "How long to stay?",
+    "addWaypointButton": "Add place",
+    "buildRouteButton": "Build route",
+    "buildingRouteButton": "Building route...",
+    "transportPedestrian": "Walking",
+    "transportAuto": "Car",
+    "transportMassTransit": "Transit",
+    "transportLabel": "Transport",
+    "time15m": "15 min",
+    "time30m": "30 min",
+    "time1h": "1 hour",
+    "time2h": "2 hours",
+    "catCafe": "Cafe",
+    "catRestaurant": "Restaurant",
+    "catPark": "Park",
+    "catMuseum": "Museum",
+    "catAttraction": "Attraction",
+    "catBar": "Bar",
+    "catCinema": "Cinema",
+    "catShopping": "Shopping",
+    "catViewpoint": "Viewpoint",
+    "selectPlaceholder": "Select...",
+    "timeUnitMinutes": "min.",
+    "minutesShort": "min.",
+    "unknownLocation": "Unknown location",
+    "edit": "Save",
+    "done": "Save",
+    "enterAddress": "Enter address",
+    "transportBicycle": "Bicycle",
+    "loading": "Loading",
+    "mapPickerTitle": "Select point on map",
+    "mapPickerInstruction": "Click on the map to select a place",
+    "mapPickerCancel": "Cancel",
+    "mapPickerConfirm": "Select this place",
+    "totalDistance": "Total distance",
+    "totalDuration": "Total time",
+    "shareRoute": "Share route",
+    "saveRoute": "Save route",
+    "routeSaved": "Route saved",
+    "routeLinkCopied": "Route link copied!",
+    "routeLinkCopyError": "Failed to copy link"
+  },
+  "TransportAlternatives": {
+    "routeOptions": "Route options",
+    "infoOnly": "map shows optimal",
+    "walk": "Walk",
+    "bus": "Bus",
+    "tram": "Tram",
+    "metro": "Metro",
+    "transport": "Transport",
+    "minutes": "{count} min",
+    "multipleTypes": "{count} types"
+  },
+  "Map": {
+    "youAreHere": "You are here"
+  },
+  "Auth": {
+    "signInTitle": "Sign in to your account",
+    "signInSubtitle": "Sign in to save routes and sync them across devices",
+    "signUpTitle": "Create an account",
+    "signUpSubtitle": "Join Intelligent Trails and start planning your walks",
+    "signInWithGoogle": "Sign in with Google",
+    "signInWithGitHub": "Sign in with GitHub",
+    "signInWithYandex": "Sign in with Yandex",
+    "orContinueWith": "Or continue with",
+    "email": "Email",
+    "emailPlaceholder": "your@email.com",
+    "password": "Password",
+    "passwordPlaceholder": "Enter password",
+    "confirmPassword": "Confirm password",
+    "confirmPasswordPlaceholder": "Repeat password",
+    "namePlaceholder": "Your name",
+    "signInButton": "Sign in",
+    "signUpButton": "Create account",
+    "signingIn": "Signing in...",
+    "signingUp": "Creating account...",
+    "noAccount": "Don't have an account?",
+    "hasAccount": "Already have an account?",
+    "signUpLink": "Sign up",
+    "signInLink": "Sign in",
+    "forgotPassword": "Forgot password?",
+    "rememberMe": "Remember me",
+    "termsAgree": "By signing up, you agree to our",
+    "termsLink": "terms of service",
+    "and": "and",
+    "privacyLink": "privacy policy",
+    "errorEmailRequired": "Email is required",
+    "errorEmailInvalid": "Invalid email",
+    "errorPasswordRequired": "Password is required",
+    "errorPasswordShort": "Password must be at least 6 characters",
+    "errorPasswordMismatch": "Passwords don't match",
+    "errorSignIn": "Sign in error. Check your email and password.",
+    "errorSignUp": "Sign up error. Try a different email."
+  },
+  "History": {
+    "title": "Route History",
+    "subtitle": "All your saved routes in one place",
+    "searchPlaceholder": "Search by name or tags...",
+    "filterCategories": "Place categories",
+    "filterTransport": "Transport modes",
+    "filterFavorites": "Favorites only",
+    "sortDateDesc": "Newest first",
+    "sortDateAsc": "Oldest first",
+    "sortNameAsc": "By name (A-Z)",
+    "sortNameDesc": "By name (Z-A)",
+    "sortDistanceAsc": "By distance (asc)",
+    "sortDistanceDesc": "By distance (desc)",
+    "sortDurationAsc": "By duration (asc)",
+    "sortDurationDesc": "By duration (desc)",
+    "recentRoutes": "Recent routes",
+    "statistics": "Statistics",
+    "totalRoutes": "routes",
+    "totalDistance": "traveled",
+    "totalTime": "time",
+    "favoriteCategories": "Favorite places",
+    "places": "places",
+    "openOnMap": "Open on map",
+    "rename": "Rename",
+    "share": "Share",
+    "delete": "Delete",
+    "renamePrompt": "Enter new route name:",
+    "deleteConfirm": "Are you sure you want to delete this route?",
+    "linkCopied": "Link copied to clipboard!",
+    "noResults": "No routes found. Try changing the filters.",
+    "emptyTitle": "You don't have any saved routes yet",
+    "distance": "Distance",
+    "duration": "Time",
+    "placesCount": "Places",
+    "byTransport": "By transport mode:",
+    "transportPedestrian": "Walking",
+    "transportBicycle": "Bicycle",
+    "transportAuto": "Car",
+    "transportMasstransit": "Transit",
+    "emptyDescription": "Create your first route and it will appear here. All your walks will be saved automatically.",
+    "createFirstRoute": "Create first route",
+    "favoriteToggled": "Route added/removed from favorites",
+    "routeRenamed": "Route renamed",
+    "routeDeleted": "Route deleted",
+    "routeSaved": "Route saved!",
+    "routeAlreadySaved": "This route is already saved",
+    "routeSaveError": "Error saving route",
+    "loginToSave": "Sign in to save routes"
+  },
+  "Landing": {
+    "hero": {
+      "title": "Smart Routes for Your Walks",
+      "subtitle": "Plan perfect routes with interesting places. Cafes, parks, museums — everything on your way.",
+      "cta": "Start Planning",
+      "ctaSecondary": "See How It Works"
+    },
+    "features": {
+      "title": "Features",
+      "subtitle": "Everything you need for a perfect walk",
+      "smartRouting": {
+        "title": "Smart Route Building",
+        "description": "Just tell where you want to stop by — the algorithm will find suitable places near your route and build an optimal path"
+      },
+      "categories": {
+        "title": "Interesting Places Along the Way",
+        "description": "Want to visit a cafe, walk through a park, or see a museum? Choose the type of place — the app will find options on your route"
+      },
+      "transport": {
+        "title": "Different Transport Modes",
+        "description": "Walking, driving, or public transport — choose the convenient way for each part of your journey"
+      },
+      "sharing": {
+        "title": "Share Routes",
+        "description": "Send a link to friends — the route opens immediately on the map with all details"
+      },
+      "history": {
+        "title": "Route History",
+        "description": "All your walks are saved automatically. Filter, sort, add to favorites"
+      },
+      "alternatives": {
+        "title": "Multiple Options to Choose",
+        "description": "For each point, the app suggests several places — choose what you like more by rating, photos, or location"
+      }
+    },
+    "tutorial": {
+      "title": "How to Use",
+      "subtitle": "Simple guide to main features",
+      "step1": {
+        "title": "Set Starting Point",
+        "description": "Enter the address where you'll start your walk. You can select a place on the map or use your current geolocation"
+      },
+      "step2": {
+        "title": "Add Interesting Places",
+        "description": "Click 'Add place' and choose what you want to visit along the way: cafe, park, museum, or other. You can add multiple places in a row — the app will build a route through all points"
+      },
+      "step3": {
+        "title": "Choose Transport Mode",
+        "description": "For each route segment, specify how you'll get there: walking, driving, or public transport. This affects time calculation and route building"
+      },
+      "step4": {
+        "title": "Build the Route",
+        "description": "Click 'Build Route' button — the algorithm will find suitable places near your path and build an optimal route considering distances and direction"
+      },
+      "step5": {
+        "title": "Choose from Multiple Options",
+        "description": "For each route point, the app suggests several places. Swipe the carousel and choose what suits you better — the route will recalculate automatically"
+      },
+      "step6": {
+        "title": "Share with Friends and Save",
+        "description": "Click 'Share' button to copy the link — friends will see your route on the map. Sign in and click the bookmark to save the route to history"
+      }
+    },
+    "cta": {
+      "badge": "Start Right Now",
+      "title": "Ready to Plan Your Walk?",
+      "subtitle": "Create your first route in a couple of minutes. It's free and doesn't require registration.",
+      "button": "Try Now"
+    },
+    "stats": {
+      "title": "Trusted by Thousands",
+      "subtitle": "Join thousands of users",
+      "routes": {
+        "label": "Routes Built"
+      },
+      "places": {
+        "label": "Interesting Places"
+      },
+      "users": {
+        "label": "Active Users"
+      },
+      "growth": {
+        "label": "Growth per Year"
+      }
+    }
+  },
+  "Footer": {
+    "description": "Plan smart routes with interesting places. Cafes, parks, museums — everything on your way.",
+    "navigation": "Navigation",
+    "map": "Map",
+    "history": "History",
+    "profile": "Profile",
+    "resources": "Resources",
+    "tutorial": "How to Use",
+    "signIn": "Sign In",
+    "signUp": "Sign Up",
+    "rights": "All rights reserved.",
+    "madeWith": "Made with love for walks"
   }
 }

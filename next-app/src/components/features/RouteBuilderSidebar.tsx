@@ -14,7 +14,8 @@ import { cn } from "@/utils/cn";
 
 import { useRouter } from 'next/navigation';
 import { encodeRouteToUrl } from '@/utils/routeCodec';
-import { Navigation, Footprints, Car, Bus, Plus, Trash2, MapPin, Coffee, TreePine, Landmark, Flag } from "lucide-react";
+import { Navigation, Footprints, Car, Bus, Plus, Trash2, MapPin, Flag } from "lucide-react";
+import { PLACE_CATEGORIES } from "@/constants/categories";
 
 interface RouteBuilderSidebarProps {
   isNavigationOpen?: boolean;
@@ -25,25 +26,33 @@ export function RouteBuilderSidebar({ isNavigationOpen = false }: RouteBuilderSi
   const t = useTranslations("BuilderSidebar");
   
   // 1. Достаем всё из глобального стора вместо локального стейта
-  const { 
-    startPoint, setStartPoint, 
+  const {
+    startPoint, setStartPoint,
+    startPointName, setStartPointName,
+    startPointType, setStartPointType,
     startTransport, setStartTransport,
     waypoints, setWaypoints,
     endPoint, setEndPoint,
+    endPointName, setEndPointName,
     endPointType, setEndPointType,
     endPointCategory, setEndPointCategory,
-    setMapPoints, setIsRouteBuilt 
+    setMapPoints, setIsRouteBuilt,
+    setMapPickerActive
   } = useRouteStore();
 
   // Локальный стейт нужен только для спиннера на кнопке загрузки
   const [isGenerating, setIsGenerating] = useState(false);
 
   // Формируем массивы ВНУТРИ компонента, чтобы работал хук переводов t()
-  const CATEGORIES = [
-    { id: "cafe", title: t("catCafe"), icon: <Coffee size={18} /> },
-    { id: "park", title: t("catPark"), icon: <TreePine size={18} /> },
-    { id: "museum", title: t("catMuseum"), icon: <Landmark size={18} /> },
-  ];
+  const CATEGORIES = Object.entries(PLACE_CATEGORIES)
+    .map(([id, config]) => {
+      const Icon = config.icon;
+      return {
+        id,
+        title: t(`cat${id.charAt(0).toUpperCase() + id.slice(1)}`),
+        icon: <Icon size={18} />
+      };
+    });
 
   const TIME_OPTIONS = [
     { label: t("time15m"), value: 15 },
@@ -63,7 +72,7 @@ export function RouteBuilderSidebar({ isNavigationOpen = false }: RouteBuilderSi
       id: Math.random().toString(36).substring(7),
       type: "category",
       value: "cafe",
-      duration: 60,
+      duration: 60, // Обратная совместимость (используется в UI)
       modeToNext: "pedestrian",
     };
     setWaypoints((prev) => [...prev, newPoint]);
@@ -79,41 +88,78 @@ export function RouteBuilderSidebar({ isNavigationOpen = false }: RouteBuilderSi
 
 
 
-  const handleBuildRoute = () => {
+  const handleBuildRoute = async () => {
     setIsGenerating(true);
-    
+
     if (!startPoint) {
       setIsGenerating(false);
       return;
     }
 
-    // Снимаем блокировку: разрешаем Менеджеру запустить процесс OSM
-    setIsRouteBuilt(false); 
+    try {
+      // Импортируем Server Action для построения маршрута
+      const { buildCompleteRoute } = await import("@/actions/routeBuilder");
 
-    // Очищаем waypoints от тяжелых данных перед кодированием в URL
-    const cleanWaypoints = waypoints.map(wp => ({
-      id: wp.id,
-      type: wp.type,
-      value: wp.value,
-      coords: wp.coords,
-      duration: wp.duration,
-      modeToNext: wp.modeToNext,
-      selectedAlternativeIndex: wp.selectedAlternativeIndex || 0
-    }));
+      // Вызываем построение маршрута с OSM и геокодированием
+      const result = await buildCompleteRoute({
+        startPoint,
+        startPointName: startPointName || undefined,
+        startTransport,
+        waypoints,
+        endPoint: endPointType === "address" ? endPoint : null,
+        endPointName: endPointName || undefined,
+        endPointType: endPointType === "map" ? "address" : endPointType,
+        endPointCategory: endPointType === "category" ? endPointCategory : undefined,
+      });
 
-    const routeData = {
-      startPoint,
-      startTransport,
-      waypoints: cleanWaypoints,
-      endPoint: endPointType === "address" ? endPoint : null,
-      endPointType,
-      endPointCategory
-    };
+      if (!result.success) {
+        // Показываем ошибку пользователю
+        alert(result.error || "Не удалось построить маршрут");
+        setIsGenerating(false);
+        return;
+      }
 
-    const encodedString = encodeRouteToUrl(routeData);
-    router.push(`?r=${encodedString}`, { scroll: false });
-    
-    setIsGenerating(false);
+      // Записываем готовые данные в store
+      setMapPoints(result.mapPoints || []);
+      setWaypoints(result.waypoints || []);
+
+      if (result.startPointName) {
+        setStartPointName(result.startPointName);
+      }
+
+      if (result.endPoint) {
+        setEndPoint(result.endPoint);
+      }
+
+      if (result.endPointName) {
+        setEndPointName(result.endPointName);
+      }
+
+      // Кодируем ПОЛНЫЕ данные в URL
+      const routeData = {
+        startPoint,
+        startPointName: result.startPointName,
+        startPointAddress: result.startPointAddress,
+        startTransport,
+        waypoints: result.waypoints || [],
+        endPoint: result.endPoint,
+        endPointName: result.endPointName,
+        endPointAddress: result.endPointAddress,
+        endPointType,
+        endPointCategory: endPointType === "category" ? endPointCategory : undefined,
+      };
+
+      const encodedString = encodeRouteToUrl(routeData);
+
+      // Переходим на Result view
+      setIsRouteBuilt(true);
+      router.push(`?r=${encodedString}`, { scroll: false });
+    } catch (error: any) {
+      console.error("Ошибка построения маршрута:", error);
+      alert("Произошла ошибка при построении маршрута");
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   return (
@@ -141,7 +187,15 @@ export function RouteBuilderSidebar({ isNavigationOpen = false }: RouteBuilderSi
             <label className="text-sm font-bold text-slate-700">{t("startPointLabel")}</label>
           </div>
           <div className="pl-12">
-            <AddressInput placeholder={t("startPointPlaceholder")} onSelect={setStartPoint} />
+            <AddressInput
+              placeholder={t("startPointPlaceholder")}
+              onSelect={(coords, text) => {
+                setStartPoint(coords);
+                setStartPointName(text);
+              }}
+              defaultValue={startPointName || ""}
+              onMapPickerClick={() => setMapPickerActive(true, "start")}
+            />
           </div>
         </div>
 
@@ -167,34 +221,39 @@ export function RouteBuilderSidebar({ isNavigationOpen = false }: RouteBuilderSi
             </div>
 
             <div className="pl-12 flex flex-col gap-4">
-              
+
               <div className="flex bg-slate-100 p-1 rounded-xl w-full">
-                <button 
+                <button
                   onClick={() => updateWaypoint(wp.id, { type: "category" })}
                   className={cn("flex-1 text-xs font-bold py-2 rounded-lg transition-all", wp.type === "category" ? "bg-white shadow-sm text-brand-600" : "text-slate-500 hover:text-slate-700")}
                 >
                   {t("typeCategory")}
                 </button>
-                <button 
+                <button
                   onClick={() => updateWaypoint(wp.id, { type: "address" })}
                   className={cn("flex-1 text-xs font-bold py-2 rounded-lg transition-all", wp.type === "address" ? "bg-white shadow-sm text-brand-600" : "text-slate-500 hover:text-slate-700")}
                 >
                   {t("typeAddress")}
                 </button>
-                <button className="flex-1 text-xs font-bold py-2 rounded-lg text-slate-400 cursor-not-allowed">
-                  {t("typeMap")}
-                </button>
               </div>
 
               {wp.type === "category" ? (
-                <GridSelect 
-                  options={CATEGORIES} 
-                  value={wp.value} 
-                  onChange={(val) => updateWaypoint(wp.id, { value: val })} 
+                <GridSelect
+                  options={CATEGORIES}
+                  value={wp.value}
+                  onChange={(val) => updateWaypoint(wp.id, { value: val })}
                   placeholder={t("selectPlaceholder")}
                 />
               ) : (
-                <AddressInput placeholder={t("startPointPlaceholder")} onSelect={(coords, text) => updateWaypoint(wp.id, { value: text, coords })} />
+                <AddressInput
+                  placeholder={t("startPointPlaceholder")}
+                  onSelect={(coords, text) => updateWaypoint(wp.id, { value: text, coords })}
+                  defaultValue={wp.value}
+                  onMapPickerClick={() => {
+                    updateWaypoint(wp.id, { type: "address" });
+                    setMapPickerActive(true, wp.id);
+                  }}
+                />
               )}
 
               <div>
@@ -236,32 +295,40 @@ export function RouteBuilderSidebar({ isNavigationOpen = false }: RouteBuilderSi
           
           <div className="pl-12 flex flex-col gap-4">
             <div className="flex bg-slate-100 p-1 rounded-xl w-full">
-              <button 
+              <button
                 onClick={() => setEndPointType("address")}
                 className={cn("flex-1 text-xs font-bold py-2 rounded-lg transition-all", endPointType === "address" ? "bg-white shadow-sm text-brand-600" : "text-slate-500 hover:text-slate-700")}
               >
                 {t("typeAddress")}
               </button>
-              <button 
+              <button
                 onClick={() => setEndPointType("category")}
                 className={cn("flex-1 text-xs font-bold py-2 rounded-lg transition-all", endPointType === "category" ? "bg-white shadow-sm text-brand-600" : "text-slate-500 hover:text-slate-700")}
               >
                 {t("typeCategory")}
               </button>
-              <button className="flex-1 text-xs font-bold py-2 rounded-lg text-slate-400 cursor-not-allowed">
-                {t("typeMap")}
-              </button>
             </div>
 
             {endPointType === "category" ? (
-               <GridSelect 
-                 options={CATEGORIES} 
-                 value={endPointCategory} 
-                 onChange={setEndPointCategory} 
+               <GridSelect
+                 options={CATEGORIES}
+                 value={endPointCategory}
+                 onChange={setEndPointCategory}
                  placeholder={t("selectPlaceholder")}
                />
             ) : (
-              <AddressInput placeholder={t("endPointPlaceholder")} onSelect={setEndPoint} />
+              <AddressInput
+                placeholder={t("endPointPlaceholder")}
+                onSelect={(coords, text) => {
+                  setEndPoint(coords);
+                  setEndPointName(text);
+                }}
+                defaultValue={endPointName || ""}
+                onMapPickerClick={() => {
+                  setEndPointType("address");
+                  setMapPickerActive(true, "end");
+                }}
+              />
             )}
           </div>
         </div>

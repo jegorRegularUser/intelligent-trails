@@ -1,36 +1,124 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Intelligent Trails
 
-## Getting Started
+Умное приложение для построения пешеходных и велосипедных маршрутов с точками интереса.
 
-First, run the development server:
+## Возможности
+
+- 🗺️ **Интеллектуальное построение маршрутов** с автоматическим поиском мест (кафе, парки, музеи)
+- 🎯 **Умное ранжирование** мест по качеству, рейтингу, размеру и направлению движения
+- 🔄 **Альтернативы** для каждой точки маршрута
+- 📍 **Несколько видов транспорта**: пешком, велосипед, авто, общественный транспорт
+- 🔗 **Шаринг маршрутов** через URL
+- 💾 **История маршрутов** с поиском, фильтрацией и сортировкой
+- 🌍 **Мультиязычность**: русский и английский
+- 🔐 **Аутентификация**: email/пароль, Google, GitHub, Yandex
+
+## Технологии
+
+- **Frontend**: Next.js 16, React, TypeScript, Tailwind CSS
+- **State**: Zustand
+- **Maps**: Yandex Maps API
+- **Places**: OpenStreetMap Overpass API
+- **Database**: MongoDB Atlas
+- **Auth**: NextAuth.js
+- **Testing**: Vitest
+- **i18n**: next-intl
+
+## Быстрый старт
 
 ```bash
+# Установка зависимостей
+npm install
+
+# Настройка переменных окружения
+cp .env.example .env.local
+# Заполните .env.local своими ключами
+
+# Запуск dev сервера
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Откройте [http://localhost:3000](http://localhost:3000)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Команды
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run dev      # Запуск dev сервера
+npm run build    # Сборка для продакшена
+npm start        # Запуск prod сервера
+npm run lint     # Линтер
+npm test         # Тесты (Vitest)
+```
 
-## Learn More
+## Документация
 
-To learn more about Next.js, take a look at the following resources:
+- **CLAUDE.md** - полная документация для разработки
+- **ALGORITHM_IMPROVEMENTS.md** - оптимизации алгоритма построения маршрутов
+- **RANKING_ALGORITHM.md** - система ранжирования мест
+- **ROUTE_OPTIMIZATION.md** - оптимизации производительности
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Архитектура
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Основной поток
 
-## Deploy on Vercel
+1. Пользователь вводит начальную точку, промежуточные точки (адреса или категории), конечную точку
+2. Server Actions вызывают OSM Overpass API для поиска мест по категориям
+3. Умное ранжирование мест по качеству, направлению, разнообразию
+4. Yandex Maps строит маршрут между точками
+5. Маршрут сохраняется в URL (сжатый Base64) для шаринга
+6. Пользователь может сохранить маршрут в историю (требуется авторизация)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Оптимизации
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- ⚡ **Параллельная обработка** адресов (3x ускорение)
+- 💾 **In-memory кэш** OSM запросов (15-20x ускорение повторных запросов)
+- 🎯 **Умное геокодирование** (используем OSM адреса, -60% API вызовов)
+- 📏 **Адаптивные радиусы** поиска (больше результатов, меньше ошибок)
+
+### Умное ранжирование
+
+Места ранжируются по:
+- **Качеству**: рейтинг (0-5), популярность (Wikipedia, сайт), размер (площадь парка, вместимость)
+- **Направлению**: бонус за движение к цели, штраф за обратное направление
+- **Расстоянию**: баланс между качеством и близостью
+- **Разнообразию**: минимум 300м между альтернативами
+
+## Переменные окружения
+
+```bash
+# Yandex Maps
+NEXT_PUBLIC_YANDEX_API_KEY=your_key
+
+# MongoDB
+MONGODB_URI=mongodb://...
+
+# NextAuth
+NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_SECRET=your_secret
+
+# OAuth (опционально)
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GITHUB_CLIENT_ID=...
+GITHUB_CLIENT_SECRET=...
+YANDEX_CLIENT_ID=...
+YANDEX_CLIENT_SECRET=...
+```
+
+## Тестирование
+
+```bash
+npm test              # Запуск всех тестов
+npm test -- --run     # Без watch режима
+npm test -- --ui      # UI для тестов
+```
+
+**Покрытие**: 72 теста (база данных, actions, OSM сервис, кодек маршрутов)
+
+## Лицензия
+
+MIT
+
+## Автор
+
+Егор Двойняков

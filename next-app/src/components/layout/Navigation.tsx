@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { useTranslations } from 'next-intl';
 import { Menu, X, Map, History, User, LogIn, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -25,14 +26,15 @@ export function Navigation({ locale, isAuthenticated = false }: NavigationProps)
           <div className="flex justify-between items-center">
             <Link
               href={`/${locale}`}
-              className="text-2xl font-bold text-slate-900 hover:text-brand-600 transition-colors"
+              className="flex items-center gap-3 text-2xl font-bold text-slate-900 hover:text-brand-600 transition-colors"
             >
+              <Image src="/logo.png" alt="Intelligent Trails" width={32} height={32} className="w-8 h-8" />
               {t('logo')}
             </Link>
 
             <div className="flex items-center gap-6">
               <Link
-                href={`/${locale}`}
+                href={`/${locale}/map`}
                 className="text-slate-700 hover:text-brand-600 font-medium transition-colors"
               >
                 {t('map')}
@@ -86,13 +88,16 @@ export function Navigation({ locale, isAuthenticated = false }: NavigationProps)
         <div className="md:hidden fixed inset-0 z-40 bg-white flex flex-col">
           {/* Хедер */}
           <div className="px-6 pt-20 pb-8 border-b border-slate-200">
-            <h2 className="text-2xl font-bold text-slate-900">{t('logo')}</h2>
+            <div className="flex items-center gap-3">
+              <Image src="/logo.png" alt="Intelligent Trails" width={32} height={32} className="w-8 h-8" />
+              <h2 className="text-2xl font-bold text-slate-900">{t('logo')}</h2>
+            </div>
           </div>
 
           {/* Навигационные ссылки */}
           <div className="flex-1 px-6 py-8 space-y-2 overflow-y-auto">
             <Link
-              href={`/${locale}`}
+              href={`/${locale}/map`}
               onClick={toggleMobileMenu}
               className="flex items-center justify-between px-4 py-4 rounded-2xl hover:bg-slate-50 active:bg-slate-100 transition-colors group"
             >
