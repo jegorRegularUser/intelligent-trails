@@ -35,6 +35,7 @@ interface WaypointItemProps {
   showDoneButton?: boolean;
   resolvedName?: string;
   resolvedAddress?: string;
+  readOnlyFields?: boolean; // Если true, скрывает переключатель категория/адрес и поле ввода
   onEdit?: () => void;
   onSave: (updates: Partial<WaypointData> & { coords?: any }) => void;
   onRemove?: () => void;
@@ -43,7 +44,7 @@ interface WaypointItemProps {
 }
 
 export function WaypointItem({
-  variant, data, index, isLast, isEditing, showDoneButton, resolvedName, resolvedAddress, onEdit, onSave, onRemove, onAlternativeSelect, onMapPickerClick
+  variant, data, index, isLast, isEditing, showDoneButton, resolvedName, resolvedAddress, readOnlyFields, onEdit, onSave, onRemove, onAlternativeSelect, onMapPickerClick
 }: WaypointItemProps) {
   const t = useTranslations("BuilderSidebar");
   const { setMapPickerActive } = useRouteStore();
@@ -175,7 +176,7 @@ export function WaypointItem({
             </div>
 
             {/* Переключатель Категория/Адрес (только для промежуточных и финиша) */}
-            {variant !== "start" && (
+            {!readOnlyFields && variant !== "start" && (
               <div className="flex bg-slate-100 p-1 rounded-xl w-full">
                 <button
                   type="button"
@@ -195,7 +196,7 @@ export function WaypointItem({
             )}
 
             {/* Поле ввода */}
-            {currentType === "category" ? (
+            {!readOnlyFields && (currentType === "category" ? (
               <GridSelect
                 options={CATEGORIES}
                 value={currentValue}
@@ -212,7 +213,7 @@ export function WaypointItem({
                   setMapPickerActive(true, data.id);
                 })}
               />
-            )}
+            ))}
 
             {/* Настройки транспорта и времени */}
             {variant !== "end" && (

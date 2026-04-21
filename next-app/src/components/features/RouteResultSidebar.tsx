@@ -217,6 +217,7 @@ export function RouteResultSidebar({ isNavigationOpen = false }: RouteResultSide
             variant="start"
             isEditing={editingId === 'start'}
             showDoneButton={true}
+            readOnlyFields={true}
             data={{ id: 'start', type: 'address', value: startPointName || mapPoints[0]?.name || "", modeToNext: startTransport }}
             resolvedName={mapPoints[0]?.name}
             resolvedAddress={mapPoints[0]?.address}
@@ -291,6 +292,7 @@ export function RouteResultSidebar({ isNavigationOpen = false }: RouteResultSide
                 index={index + 1}
                 isEditing={isEditing}
                 showDoneButton={true}
+                readOnlyFields={true}
                 data={wp}
                 resolvedName={mapPoint?.name}
                 resolvedAddress={mapPoint?.address}
@@ -422,6 +424,7 @@ export function RouteResultSidebar({ isNavigationOpen = false }: RouteResultSide
               isLast={true}
               isEditing={editingId === 'end'}
               showDoneButton={true}
+              readOnlyFields={true}
               data={{
                 id: 'end', type: endPointType,
                 value: endPointType === "category" ? endPointCategory : (endPointName || mapPoints[mapPoints.length - 1]?.name || ""),

@@ -1,8 +1,6 @@
 // src/lib/auth/config.ts
 
 import NextAuth from 'next-auth';
-import Google from 'next-auth/providers/google';
-import GitHub from 'next-auth/providers/github';
 import Credentials from 'next-auth/providers/credentials';
 import YandexProvider from 'next-auth/providers/yandex';
 import { MongoDBAdapter } from '@auth/mongodb-adapter';
@@ -16,14 +14,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     databaseName: 'intelligent-trails',
   }),
   providers: [
-    Google({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-    }),
-    GitHub({
-      clientId: process.env.GITHUB_CLIENT_ID!,
-      clientSecret: process.env.GITHUB_CLIENT_SECRET!,
-    }),
     YandexProvider({
       clientId: process.env.YANDEX_CLIENT_ID!,
       clientSecret: process.env.YANDEX_CLIENT_SECRET!,
