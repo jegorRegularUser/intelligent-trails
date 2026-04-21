@@ -3,45 +3,53 @@
 import { useState, useEffect, useRef } from "react";
 import { Input } from "./Input";
 import { Spinner } from "./Spinner";
-import { MapPin, Search } from "lucide-react";
+import { MapPin, Search, Map } from "lucide-react";
 import { useDebounce } from "@/hooks/useDebounce";
 
 // Импортируем оба наших Server Action'а
 import { getAddressSuggestions, YandexSuggestResult } from "@/actions/suggest";
-import { getCoordinatesFromAddress } from "@/actions/geocoder"; 
+import { getCoordinatesFromAddress } from "@/actions/geocoder";
 import { Coordinates } from "@/types/map";
+import { useRouteStore } from "@/store/useRouteStore";
 
 interface AddressInputProps {
   placeholder?: string;
   onSelect: (coords: Coordinates, addressText: string) => void;
   defaultValue?: string;
+  onMapPickerClick?: () => void; // Новый проп для активации выбора на карте
 }
 
-export function AddressInput({ placeholder = "Введите адрес...", onSelect, defaultValue = "" }: AddressInputProps) {
+export function AddressInput({ placeholder = "Введите адрес...", onSelect, defaultValue = "", onMapPickerClick }: AddressInputProps) {
   const [query, setQuery] = useState(defaultValue);
   const [suggestions, setSuggestions] = useState<YandexSuggestResult[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const debouncedQuery = useDebounce(query, 500);
+  const { userLocation } = useRouteStore();
+  const debouncedQuery = useDebounce(query, 300); // Уменьшили с 500ms до 300ms
   const wrapperRef = useRef<HTMLDivElement>(null);
+
+  // Обновляем query когда меняется defaultValue (для синхронизации с выбором на карте)
+  useEffect(() => {
+    setQuery(defaultValue);
+  }, [defaultValue]);
 
   // 1. Эффект для поиска текстовых подсказок
   useEffect(() => {
     async function fetchSuggestions() {
-      if (debouncedQuery.length < 3 || !isOpen) {
+      if (debouncedQuery.length < 2 || !isOpen) { // Уменьшили с 3 до 2 символов
         setSuggestions([]);
         return;
       }
 
       setIsLoading(true);
-      const results = await getAddressSuggestions(debouncedQuery);
+      const results = await getAddressSuggestions(debouncedQuery, userLocation);
       setSuggestions(results);
       setIsLoading(false);
     }
 
     fetchSuggestions();
-  }, [debouncedQuery, isOpen]);
+  }, [debouncedQuery, isOpen, userLocation]);
 
   // Закрытие списка по клику снаружи
   useEffect(() => {
@@ -89,11 +97,24 @@ export function AddressInput({ placeholder = "Введите адрес...", onS
           setIsOpen(true);
         }}
         onFocus={() => {
-          if (query.length >= 3) setIsOpen(true);
+          if (query.length >= 2) setIsOpen(true); // Уменьшили с 3 до 2
         }}
         placeholder={placeholder}
         leftIcon={<Search size={20} className="text-slate-400" />}
-        rightIcon={isLoading ? <Spinner size={20} className="text-brand-500" /> : null}
+        rightIcon={
+          isLoading ? (
+            <Spinner size={20} className="text-brand-500" />
+          ) : onMapPickerClick ? (
+            <button
+              type="button"
+              onClick={onMapPickerClick}
+              className="p-1 hover:bg-brand-50 rounded-lg transition-colors text-slate-400 hover:text-brand-600"
+              title="Выбрать на карте"
+            >
+              <Map size={20} />
+            </button>
+          ) : null
+        }
       />
 
       {isOpen && suggestions.length > 0 && (

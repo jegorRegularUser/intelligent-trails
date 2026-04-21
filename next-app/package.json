@@ -10,14 +10,20 @@
     "test": "vitest"
   },
   "dependencies": {
+    "@auth/mongodb-adapter": "^3.11.2",
     "@pbe/react-yandex-maps": "^1.2.5",
     "@tailwindcss/postcss": "^4.2.2",
+    "@types/bcryptjs": "^2.4.6",
     "@types/maplibre-gl": "^1.13.2",
     "axios": "^1.13.6",
+    "bcryptjs": "^3.0.3",
     "clsx": "^2.1.1",
     "lucide-react": "^1.8.0",
+    "lz-string": "^1.5.0",
     "maplibre-gl": "^5.20.0",
+    "mongodb": "^7.1.1",
     "next": "16.1.6",
+    "next-auth": "^5.0.0-beta.31",
     "next-intl": "^4.9.0",
     "postcss": "^8.5.8",
     "react": "19.2.3",
@@ -33,6 +39,7 @@
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "mongodb-memory-server": "^11.0.1",
     "typescript": "^5",
     "vite-tsconfig-paths": "^6.1.1",
     "vitest": "^3.2.4"

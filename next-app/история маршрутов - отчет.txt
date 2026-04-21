@@ -1,0 +1,112 @@
+Download the React DevTools for a better development experience: https://react.dev/link/react-devtools forward-logs-shared.ts:95:22
+Active route: 
+Object { model: {…}, geometry: null, properties: {…}, state: {…}, options: {…}, events: {…}, _geoObjectComponent: {…}, _pathsCollection: {…}, _parentComponent: {…}, boundsAggregator: {…}, … }
+​
+_geoObjectComponent: Object { _context: {…}, _geometry: null, _properties: {…}, … }
+​
+_parentComponent: Object { _callbacks: {}, _parent: {…}, _parentEvents: {…}, … }
+​
+_pathsCollection: Object { geometry: null, properties: {…}, state: {…}, … }
+​
+_pathsManager: Object { _callbacks: {…}, _params: {…}, _subEntities: (1) […] }
+​
+balloon: Object { _route: {…}, _map: {…}, _routeEvents: {…}, … }
+​
+boundsAggregator: Object { _collections: (1) […], _callbacks: {…}, _boundsCache: {}, … }
+​
+events: Object { types: {…}, typesCount: 5, params: {…}, … }
+​
+geometry: null
+​
+model: Object { properties: {…}, events: {…}, _jsonModel: {…}, … }
+​
+options: Object { _originalOptions: false, _name: "activeRoute", _frozen: false, … }
+​
+properties: Object { events: {…}, _internalFreezer: {…}, _preventInputChange: true, … }
+​
+state: Object { events: {…}, _internalFreezer: {…}, _preventInputChange: false, … }
+​
+<prototype>: Object { constructor: i(t, e), createSubPath: createSubPath(t) }
+forward-logs-shared.ts:95:22
+  Distance: 2.6 км forward-logs-shared.ts:95:22
+  Paths count: 1 forward-logs-shared.ts:95:22
+    Path 0 has 3 segments: forward-logs-shared.ts:95:22
+      Segment 0: walk forward-logs-shared.ts:95:22
+        Walk: 650 м, 8 мин forward-logs-shared.ts:95:22
+      Segment 1: transport forward-logs-shared.ts:95:22
+        Transports: bus:20, bus:36, bus:41, bus:61, bus:70, bus:91, bus:94, bus:э13, bus:э17, bus:э9 forward-logs-shared.ts:95:22
+        Duration: 4 мин forward-logs-shared.ts:95:22
+      Segment 2: walk forward-logs-shared.ts:95:22
+        Walk: 480 м, 6 мин forward-logs-shared.ts:95:22
+
+📍 Alternative route 1: forward-logs-shared.ts:95:22
+  Duration: 27 мин (1629s) forward-logs-shared.ts:95:22
+  Distance: 2.7 км forward-logs-shared.ts:95:22
+  Paths count: 1 forward-logs-shared.ts:95:22
+    Path 0 has 3 segments: forward-logs-shared.ts:95:22
+      Segment 0: walk forward-logs-shared.ts:95:22
+        Walk: 650 м, 8 мин forward-logs-shared.ts:95:22
+      Segment 1: transport forward-logs-shared.ts:95:22
+        Transports: bus:31, bus:62 forward-logs-shared.ts:95:22
+        Duration: 5 мин forward-logs-shared.ts:95:22
+      Segment 2: walk forward-logs-shared.ts:95:22
+        Walk: 400 м, 5 мин forward-logs-shared.ts:95:22
+
+📍 Alternative route 2: forward-logs-shared.ts:95:22
+  Duration: 27 мин (1641s) forward-logs-shared.ts:95:22
+  Distance: 2.1 км forward-logs-shared.ts:95:22
+  Paths count: 1 forward-logs-shared.ts:95:22
+    Path 0 has 1 segments: forward-logs-shared.ts:95:22
+      Segment 0: walk forward-logs-shared.ts:95:22
+        Walk: 2,14 км, 27 мин forward-logs-shared.ts:95:22
+=== END DEBUG === forward-logs-shared.ts:95:22
+=== MASSTRANSIT ROUTE DEBUG === forward-logs-shared.ts:95:22
+Active route: 
+Object { model: {…}, geometry: null, properties: {…}, state: {…}, options: {…}, events: {…}, _geoObjectComponent: {…}, _pathsCollection: {…}, _parentComponent: {…}, boundsAggregator: {…}, … }
+forward-logs-shared.ts:95:22
+Properties: 
+Object { events: {…}, _internalFreezer: {…}, _freezer: {…}, _data: {…}, _preventInputChange: true }
+forward-logs-shared.ts:95:22
+Raw properties: 
+Object { boundedBy: (2) […], RouteMetaData: {…} }
+forward-logs-shared.ts:95:22
+Paths count: 1 forward-logs-shared.ts:95:22
+Path 0: 
+Object { model: {…}, geometry: null, properties: {…}, state: {…}, options: {…}, events: {…}, _geoObjectComponent: {…}, _segmentsCollection: {…}, _markersCollection: {…}, _parentComponent: {…}, … }
+forward-logs-shared.ts:95:22
+  Path properties: 
+Object { index: 0, type: "masstransit", distance: {…}, duration: {…}, coordinates: (15) […], encodedCoordinates: "EpCfAmlJWwNMAAAAxP___0gAAADE____-gAAAGAAAABnAQAAiQAAACYAAABoAAAAAf___9kAAADiAAAATgAAADYAAAATAAAA9____wgAAADz____CwAAAP3___8DAAAA-____wQAAADb____IAAAAFv-__-2____", rawProperties: {…} }
+forward-logs-shared.ts:95:22
+  Path raw properties: 
+Object { boundedBy: (2) […], PathMetaData: {…}, encodedCoordinates: "EpCfAmlJWwNMAAAAxP___0gAAADE____-gAAAGAAAABnAQAAiQAAACYAAABoAAAAAf___9kAAADiAAAATgAAADYAAAATAAAA9____wgAAADz____CwAAAP3___8DAAAA-____wQAAADb____IAAAAFv-__-2____" }
+forward-logs-shared.ts:95:22
+  Segments count: 1 forward-logs-shared.ts:95:22
+  Segment 0: 
+Object { model: {…}, geometry: {…}, properties: {…}, state: {…}, options: {…}, events: {…}, _geoObjectComponent: {…} }
+forward-logs-shared.ts:95:22
+    Type: walk forward-logs-shared.ts:95:22
+    Duration: 
+Object { value: 100, text: "2 мин" }
+forward-logs-shared.ts:95:22
+    Distance: 
+Object { value: 158, text: "158 м" }
+forward-logs-shared.ts:95:22
+    Text: 160 м, 2 мин в пути forward-logs-shared.ts:95:22
+    All properties: 
+Object { index: 0, type: "walk", text: "160 м, 2 мин в пути", distance: {…}, duration: {…}, links: undefined, lodIndex: 0, rawProperties: {…} }
+forward-logs-shared.ts:95:22
+🔀 Total routes (alternatives): 1 forward-logs-shared.ts:95:22
+
+📍 Alternative route 0: forward-logs-shared.ts:95:22
+  Duration: 2 мин (100s) forward-logs-shared.ts:95:22
+  Distance: 160 м forward-logs-shared.ts:95:22
+  Paths count: 1 forward-logs-shared.ts:95:22
+    Path 0 has 1 segments: forward-logs-shared.ts:95:22
+      Segment 0: walk forward-logs-shared.ts:95:22
+        Walk: 158 м, 2 мин forward-logs-shared.ts:95:22
+=== END DEBUG === forward-logs-shared.ts:95:22
+Ресурс «http://localhost:3000/_next/static/media/83afe278b6a6bb3c-s.p.3a6ba036.woff2», уже загруженный по ссылке для предварительной загрузки, не был использован в течение нескольких секунд. Убедитесь, что все атрибуты тега «preload» были заданы корректно. ru
+Ресурс «http://localhost:3000/_next/static/media/9c72aa0f40e4eef8-s.p.18a48cbc.woff2», уже загруженный по ссылке для предварительной загрузки, не был использован в течение нескольких секунд. Убедитесь, что все атрибуты тега «preload» были заданы корректно. ru
+
+​
+

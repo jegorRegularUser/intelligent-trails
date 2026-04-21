@@ -1,22 +1,25 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { AddressInput } from "@/components/ui/AddressInput";
 import { PillSelect } from "@/components/ui/PillSelect";
 import { GridSelect } from "@/components/ui/GridSelect";
 import { TransportToggle } from "@/components/ui/TransportToggle";
 import { AlternativesSelect } from "@/components/ui/AlternativesSelect";
-import { 
-  MapPin, Check, Coffee, TreePine, Landmark, 
-  Flag, Trash2, Pencil, Footprints, Car, Bus, Bike 
+import {
+  MapPin, Check, Flag, Trash2, Pencil, Footprints, Car, Bus, Bike, Coffee
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { cn } from "@/utils/cn";
-import { RoutingMode, PlaceOfInterest } from "@/types/map";
+import { RoutingMode, PlaceOfInterest, Coordinates } from "@/types/map";
+import { useRouteStore } from "@/store/useRouteStore";
+import { PLACE_CATEGORIES } from "@/constants/categories";
 
 export interface WaypointData {
   id: string;
   type: "address" | "category" | "map";
   value: string;
+  coords?: Coordinates;
   duration?: number;
   modeToNext?: RoutingMode;
   alternatives?: PlaceOfInterest[];
@@ -36,20 +39,58 @@ interface WaypointItemProps {
   onSave: (updates: Partial<WaypointData> & { coords?: any }) => void;
   onRemove?: () => void;
   onAlternativeSelect?: (index: number) => void;
+  onMapPickerClick?: () => void;
 }
 
 export function WaypointItem({
-  variant, data, index, isLast, isEditing, showDoneButton, resolvedName, resolvedAddress, onEdit, onSave, onRemove, onAlternativeSelect
+  variant, data, index, isLast, isEditing, showDoneButton, resolvedName, resolvedAddress, onEdit, onSave, onRemove, onAlternativeSelect, onMapPickerClick
 }: WaypointItemProps) {
   const t = useTranslations("BuilderSidebar");
+  const { setMapPickerActive } = useRouteStore();
+
+  // Локальное состояние для редактирования (черновик)
+  const [draft, setDraft] = useState<Partial<WaypointData> & { coords?: any }>({});
+
+  // Сброс черновика при открытии/закрытии редактора
+  useEffect(() => {
+    if (isEditing) {
+      setDraft({});
+    }
+  }, [isEditing]);
+
+  // Синхронизация с внешними изменениями (например, выбор с карты)
+  useEffect(() => {
+    if (isEditing && data.coords && !draft.coords) {
+      // Если пришли координаты извне (с карты), обновляем черновик
+      setDraft(prev => ({
+        ...prev,
+        coords: data.coords,
+        value: data.value,
+        type: data.type
+      }));
+    }
+  }, [data.coords, data.value, data.type, isEditing, draft.coords]);
 
   /**
    * ЛОГИКА ЗАГОЛОВКОВ (Согласно ТЗ)
-   * displayTitle: Сначала ищем реальное название (Парк Кулибина). 
+   * displayTitle: Сначала ищем реальное название (Парк Кулибина).
    * Если его нет — берем адрес (Агрономическая, 132).
    * Если и адреса нет — берем то, что введено (data.value).
+   * Для категорий переводим ключ (cafe → Кафе).
    */
-  const displayTitle = resolvedName || resolvedAddress || data.value || t("loading");
+  const getCategoryName = (categoryId: string) => {
+    return t(`cat${categoryId.charAt(0).toUpperCase() + categoryId.slice(1)}`);
+  };
+
+  // Текущие значения с учетом черновика
+  const currentType = draft.type ?? data.type;
+  const currentValue = draft.value ?? data.value;
+  const currentDuration = draft.duration ?? data.duration;
+  const currentModeToNext = draft.modeToNext ?? data.modeToNext;
+
+  const displayTitle = resolvedName || resolvedAddress ||
+    (data.type === "category" ? getCategoryName(data.value) : data.value) ||
+    t("loading");
   
   /**
    * Подзаголовок: Показываем адрес только если он отличается от заголовка.
@@ -70,17 +111,22 @@ export function WaypointItem({
    * Показываем селектор, если это НЕ старт (старт всегда фиксирован) 
    * и у нас в данных уже лежат найденные варианты.
    */
-  const showAlternatives = 
-    variant !== "start" && 
-    data.alternatives && 
-    data.alternatives.length > 1 && 
+  const showAlternatives =
+    variant !== "start" &&
+    data.alternatives &&
+    data.alternatives.length > 1 &&
     onAlternativeSelect;
 
-  const CATEGORIES = [
-    { id: "cafe", title: t("catCafe"), icon: <Coffee size={18} /> },
-    { id: "park", title: t("catPark"), icon: <TreePine size={18} /> },
-    { id: "museum", title: t("catMuseum"), icon: <Landmark size={18} /> },
-  ];
+  // Формируем список всех категорий с переводами
+  const CATEGORIES = Object.entries(PLACE_CATEGORIES)
+    .map(([id, config]) => {
+      const Icon = config.icon;
+      return {
+        id,
+        title: t(`cat${id.charAt(0).toUpperCase() + id.slice(1)}`),
+        icon: <Icon size={18} />
+      };
+    });
 
   const TIME_OPTIONS = [
     { label: t("time15m"), value: 15 },
@@ -131,17 +177,17 @@ export function WaypointItem({
             {/* Переключатель Категория/Адрес (только для промежуточных и финиша) */}
             {variant !== "start" && (
               <div className="flex bg-slate-100 p-1 rounded-xl w-full">
-                <button 
+                <button
                   type="button"
-                  onClick={() => onSave({ type: "category" })}
-                  className={cn("flex-1 text-[10px] font-bold py-1.5 rounded-lg transition-all", data.type === "category" ? "bg-white shadow-sm text-brand-600" : "text-slate-500 hover:text-slate-700")}
+                  onClick={() => setDraft(prev => ({ ...prev, type: "category" }))}
+                  className={cn("flex-1 text-[10px] font-bold py-1.5 rounded-lg transition-all", currentType === "category" ? "bg-white shadow-sm text-brand-600" : "text-slate-500 hover:text-slate-700")}
                 >
                   {t("typeCategory").toUpperCase()}
                 </button>
-                <button 
+                <button
                   type="button"
-                  onClick={() => onSave({ type: "address" })}
-                  className={cn("flex-1 text-[10px] font-bold py-1.5 rounded-lg transition-all", data.type === "address" ? "bg-white shadow-sm text-brand-600" : "text-slate-500 hover:text-slate-700")}
+                  onClick={() => setDraft(prev => ({ ...prev, type: "address" }))}
+                  className={cn("flex-1 text-[10px] font-bold py-1.5 rounded-lg transition-all", currentType === "address" ? "bg-white shadow-sm text-brand-600" : "text-slate-500 hover:text-slate-700")}
                 >
                   {t("typeAddress").toUpperCase()}
                 </button>
@@ -149,17 +195,22 @@ export function WaypointItem({
             )}
 
             {/* Поле ввода */}
-            {data.type === "category" ? (
-              <GridSelect 
-                options={CATEGORIES} 
-                value={data.value} 
-                onChange={(v) => onSave({ value: v })} 
+            {currentType === "category" ? (
+              <GridSelect
+                options={CATEGORIES}
+                value={currentValue}
+                onChange={(v) => setDraft(prev => ({ ...prev, value: v }))}
               />
             ) : (
-              <AddressInput 
-                defaultValue={data.value} 
-                onSelect={(c, v) => onSave({ coords: c, value: v })} 
+              <AddressInput
+                key={`${data.id}-${data.value}-${data.coords?.[0]}-${data.coords?.[1]}`}
+                defaultValue={currentValue}
+                onSelect={(c, v) => setDraft(prev => ({ ...prev, coords: c, value: v }))}
                 placeholder={t("enterAddress")}
+                onMapPickerClick={onMapPickerClick || (() => {
+                  setDraft(prev => ({ ...prev, type: "address" }));
+                  setMapPickerActive(true, data.id);
+                })}
               />
             )}
 
@@ -169,20 +220,26 @@ export function WaypointItem({
                 {variant === "waypoint" && (
                   <div>
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">{t("durationLabel")}</label>
-                    <PillSelect options={TIME_OPTIONS} value={data.duration || 60} onChange={(v) => onSave({ duration: v })} />
+                    <PillSelect options={TIME_OPTIONS} value={currentDuration || 60} onChange={(v) => setDraft(prev => ({ ...prev, duration: v }))} />
                   </div>
                 )}
                 <div>
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">{t("transportLabel")}</label>
-                  <TransportToggle activeValue={data.modeToNext || 'pedestrian'} onChange={(v) => onSave({ modeToNext: v })} options={TRANSPORT_OPTIONS} />
+                  <TransportToggle activeValue={currentModeToNext || 'pedestrian'} onChange={(v) => setDraft(prev => ({ ...prev, modeToNext: v }))} options={TRANSPORT_OPTIONS} />
                 </div>
               </div>
             )}
 
             {showDoneButton && (
-              <button 
-                type="button" 
-                onClick={onEdit} 
+              <button
+                type="button"
+                onClick={() => {
+                  // Применяем все изменения из черновика
+                  if (Object.keys(draft).length > 0) {
+                    onSave(draft);
+                  }
+                  onEdit?.();
+                }}
                 className="w-full py-3 bg-slate-900 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-slate-800 transition-colors shadow-lg shadow-slate-200"
               >
                 <Check size={18} /> {t("done")}
