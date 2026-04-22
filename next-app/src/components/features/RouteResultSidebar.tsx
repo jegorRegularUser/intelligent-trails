@@ -14,7 +14,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { useRouteUrlSync } from "@/hooks/useRouteUrlSync";
 import { usePreferences } from "@/contexts/PreferencesContext";
 import { formatDistance } from "@/utils/format";
-import { RefreshCw, Navigation, ArrowLeft, Bookmark, Share2 } from "lucide-react";
+import { RefreshCw, ArrowLeft, Bookmark, Share2 } from "lucide-react";
 
 interface RouteResultSidebarProps {
   isNavigationOpen?: boolean;
@@ -55,6 +55,14 @@ export function RouteResultSidebar({ isNavigationOpen = false }: RouteResultSide
     }).catch(() => {
       showToast(t('routeLinkCopyError'), 'error');
     });
+  };
+
+  const handleOpenInYandex = () => {
+    // Формируем URL для Яндекс.Карт с маршрутом
+    // Координаты в формате [lat, lon]
+    const points = mapPoints.map(point => `${point.coordinates[0]},${point.coordinates[1]}`).join('~');
+    const yandexUrl = `https://yandex.ru/maps/?rtext=${points}&rtt=auto`;
+    window.open(yandexUrl, '_blank');
   };
 
   // Маппинг категорий на переводы
@@ -113,8 +121,8 @@ export function RouteResultSidebar({ isNavigationOpen = false }: RouteResultSide
       const encoded = encodeRouteToUrl(routeData);
 
       // Генерируем название маршрута
-      const startName = mapPoints[0]?.name || 'Начало';
-      const endName = mapPoints[mapPoints.length - 1]?.name || 'Конец';
+      const startName = mapPoints[0]?.name || t('startPointDefault');
+      const endName = mapPoints[mapPoints.length - 1]?.name || t('endPointDefault');
       const routeName = `${startName} → ${endName}`;
 
       const result = await saveRouteAction({
@@ -131,8 +139,7 @@ export function RouteResultSidebar({ isNavigationOpen = false }: RouteResultSide
       }
     } catch (error: any) {
       if (error.message === 'Unauthorized') {
-        showToast(tHistory('loginToSave'), 'error');
-        router.push('/signin');
+        showToast(tHistory('loginToSaveAlert'), 'info');
       } else {
         showToast(tHistory('routeSaveError'), 'error');
       }
@@ -154,9 +161,16 @@ export function RouteResultSidebar({ isNavigationOpen = false }: RouteResultSide
             >
               <ArrowLeft size={20} />
             </button>
-            <h2 className="text-xl font-bold text-slate-800">Ваш путь</h2>
+            <h2 className="text-xl font-bold text-slate-800">{t('yourPath')}</h2>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleOpenInYandex}
+              className="p-2 hover:bg-red-50 rounded-xl transition-colors active:scale-95 font-bold text-red-600"
+              title={tHistory('openInYandex')}
+            >
+              Я
+            </button>
             <button
               onClick={handleShareRoute}
               className="p-2 hover:bg-blue-50 rounded-xl transition-colors text-blue-600 active:scale-95"
@@ -172,9 +186,6 @@ export function RouteResultSidebar({ isNavigationOpen = false }: RouteResultSide
             >
               <Bookmark size={20} fill={isSaved || isSaving ? "currentColor" : "none"} />
             </button>
-            <div className="p-2 bg-brand-500 text-white rounded-xl shadow-sm">
-              <Navigation size={20} />
-            </div>
           </div>
         </div>
       }
@@ -202,9 +213,9 @@ export function RouteResultSidebar({ isNavigationOpen = false }: RouteResultSide
                   const hours = Math.floor(total / 3600);
                   const minutes = Math.round((total % 3600) / 60);
                   if (hours > 0) {
-                    return `${hours} ч ${minutes} мин`;
+                    return `${hours} ${t('hoursShort')} ${minutes} ${t('minutesShort')}`;
                   }
-                  return `${minutes} мин`;
+                  return `${minutes} ${t('minutesShort')}`;
                 })()}
               </span>
             </div>
@@ -213,6 +224,11 @@ export function RouteResultSidebar({ isNavigationOpen = false }: RouteResultSide
 
         {/* --- 1. СТАРТ --- */}
         <div className="relative" style={{ zIndex: 60 }}>
+          {editingId === 'start' && (
+            <p className="text-xs text-slate-400 mb-2 px-1">
+              {t('editHint')}
+            </p>
+          )}
           <WaypointItem
             variant="start"
             isEditing={editingId === 'start'}
@@ -287,6 +303,11 @@ export function RouteResultSidebar({ isNavigationOpen = false }: RouteResultSide
 
           return (
             <div key={wp.id} className="relative" style={{ zIndex: 50 - index }}>
+              {isEditing && (
+                <p className="text-xs text-slate-400 mb-2 px-1">
+                  {t('editHint')}
+                </p>
+              )}
               <WaypointItem
                 variant="waypoint"
                 index={index + 1}
@@ -419,6 +440,11 @@ export function RouteResultSidebar({ isNavigationOpen = false }: RouteResultSide
         {/* --- 3. ФИНИШ --- */}
         {endPoint && mapPoints.length > 1 && (
           <div className="relative" style={{ zIndex: 10 }}>
+            {editingId === 'end' && (
+              <p className="text-xs text-slate-400 mb-2 px-1">
+                {t('editHint')}
+              </p>
+            )}
             <WaypointItem
               variant="end"
               isLast={true}

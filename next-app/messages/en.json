@@ -102,7 +102,12 @@
     "saveRoute": "Save route",
     "routeSaved": "Route saved",
     "routeLinkCopied": "Route link copied!",
-    "routeLinkCopyError": "Failed to copy link"
+    "routeLinkCopyError": "Failed to copy link",
+    "yourPath": "Your Path",
+    "editHint": "To change address, click the back arrow",
+    "hoursShort": "h",
+    "startPointDefault": "Start",
+    "endPointDefault": "End"
   },
   "TransportAlternatives": {
     "routeOptions": "Route options",
@@ -203,7 +208,9 @@
     "routeSaved": "Route saved!",
     "routeAlreadySaved": "This route is already saved",
     "routeSaveError": "Error saving route",
-    "loginToSave": "Sign in to save routes"
+    "loginToSave": "Sign in to save routes",
+    "openInYandex": "Open in Yandex",
+    "loginToSaveAlert": "Sign in to save routes"
   },
   "Landing": {
     "hero": {

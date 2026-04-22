@@ -50,8 +50,12 @@
     "saveRoute": "Сохранить маршрут",
     "routeSaved": "Маршрут сохранен",
     "routeLinkCopied": "Ссылка на маршрут скопирована!",
-    "routeLinkCopyError": "Не удалось скопировать ссылку"
-
+    "routeLinkCopyError": "Не удалось скопировать ссылку",
+    "yourPath": "Ваш путь",
+    "editHint": "Чтобы изменить адрес, нажмите стрелку назад",
+    "hoursShort": "ч",
+    "startPointDefault": "Начало",
+    "endPointDefault": "Конец"
   },
   "TransportAlternatives": {
     "routeOptions": "Варианты маршрута",
@@ -199,7 +203,9 @@
     "routeSaved": "Маршрут сохранен!",
     "routeAlreadySaved": "Этот маршрут уже сохранен",
     "routeSaveError": "Ошибка сохранения маршрута",
-    "loginToSave": "Войдите, чтобы сохранять маршруты"
+    "loginToSave": "Войдите, чтобы сохранять маршруты",
+    "openInYandex": "Открыть в Яндексе",
+    "loginToSaveAlert": "Авторизируйтесь чтобы сохранять маршрут"
   },
   "Landing": {
     "hero": {

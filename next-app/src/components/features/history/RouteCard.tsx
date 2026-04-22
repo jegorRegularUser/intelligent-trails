@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/Input";
 import { RouteCardThumbnail } from "./RouteCardThumbnail";
 import { TransportMetrics } from "./TransportMetrics";
 import { PLACE_CATEGORIES } from "@/constants/categories";
+import { decodeRouteFromUrl } from "@/utils/routeCodec";
 import { Star, Pencil, Trash2, Share2, MapPin, Clock, Check, X } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { formatDistance, formatDuration } from "@/utils/format";
@@ -36,6 +37,46 @@ export function RouteCard({ route, onToggleFavorite, onRename, onDelete, onShare
 
   const handleOpen = () => {
     router.push(`/?r=${route.encodedRoute}`);
+  };
+
+  const handleOpenInYandex = () => {
+    try {
+      // Декодируем маршрут
+      const decoded = decodeRouteFromUrl(route.encodedRoute);
+      if (!decoded) {
+        showToast('Ошибка декодирования маршрута', 'error');
+        return;
+      }
+
+      // Собираем все координаты: старт + промежуточные точки + финиш
+      const points: string[] = [];
+
+      // Старт - координаты в формате [lat, lon]
+      if (decoded.startPoint) {
+        points.push(`${decoded.startPoint[0]},${decoded.startPoint[1]}`);
+      }
+
+      // Промежуточные точки
+      if (decoded.waypoints) {
+        decoded.waypoints.forEach((wp: any) => {
+          if (wp.coords) {
+            points.push(`${wp.coords[0]},${wp.coords[1]}`);
+          }
+        });
+      }
+
+      // Финиш
+      if (decoded.endPoint) {
+        points.push(`${decoded.endPoint[0]},${decoded.endPoint[1]}`);
+      }
+
+      // Формируем URL для Яндекс.Карт
+      const yandexUrl = `https://yandex.ru/maps/?rtext=${points.join('~')}&rtt=auto`;
+      window.open(yandexUrl, '_blank');
+    } catch (error) {
+      console.error('Error opening in Yandex Maps:', error);
+      showToast('Ошибка открытия в Яндекс.Картах', 'error');
+    }
   };
 
   const handleStartEdit = () => {
@@ -238,14 +279,25 @@ export function RouteCard({ route, onToggleFavorite, onRename, onDelete, onShare
         </div>
 
         {/* Кнопка открытия */}
-        <Button
-          variant="primary"
-          size="md"
-          className="w-full"
-          onClick={handleOpen}
-        >
-          {t("openOnMap")}
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="md"
+            className="flex-1"
+            onClick={handleOpenInYandex}
+          >
+            <span className="font-bold text-red-600 mr-1">Я</span>
+            Карты
+          </Button>
+          <Button
+            variant="primary"
+            size="md"
+            className="flex-1"
+            onClick={handleOpen}
+          >
+            {t("openOnMap")}
+          </Button>
+        </div>
       </div>
     </Card>
   );
