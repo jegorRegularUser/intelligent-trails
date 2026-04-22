@@ -310,5 +310,25 @@
     "signUp": "Sign Up",
     "rights": "All rights reserved.",
     "madeWith": "Made with love for walks"
+  },
+  "RouteErrorModal": {
+    "title": "Place Not Found",
+    "subtitle": "Don't worry, these things happen",
+    "description": "You can try building the route again or remove this point and continue without it.",
+    "categoryLabel": "Category",
+    "retryButton": "Try Again",
+    "removeButton": "Remove Point"
+  },
+  "RouteDistanceWarning": {
+    "title": "Very Long Distance",
+    "subtitle": "This might not be the best idea",
+    "distanceInfo": "The straight-line distance between start and end points is {distance} km.",
+    "description": "Intelligent Trails is optimized for city walks and routes within a single city. With such a large distance:",
+    "reason1": "Place search may not work correctly",
+    "reason2": "The route may pass through empty areas without attractions",
+    "reason3": "Building time will significantly increase",
+    "recommendation": "We recommend using the app for routes within a city (up to 30-50 km).",
+    "cancelButton": "Change Route",
+    "proceedButton": "Build Anyway"
   }
 }
