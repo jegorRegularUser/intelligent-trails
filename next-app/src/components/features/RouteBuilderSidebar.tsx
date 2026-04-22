@@ -11,6 +11,10 @@ import { GridSelect } from "@/components/ui/GridSelect";
 import { useRouteStore, FormWaypoint, MapRoutePoint } from "@/store/useRouteStore";
 import { RoutingMode } from "@/types/map";
 import { cn } from "@/utils/cn";
+import { RouteErrorModal } from "@/components/features/RouteErrorModal";
+import { RouteDistanceWarningModal } from "@/components/features/RouteDistanceWarningModal";
+import { extractCategoryFromError } from "@/utils/categoryFormatter";
+import { shouldShowDistanceWarning, calculateDirectDistance } from "@/utils/routeValidation";
 
 import { useRouter } from 'next/navigation';
 import { encodeRouteToUrl } from '@/utils/routeCodec';
@@ -40,8 +44,24 @@ export function RouteBuilderSidebar({ isNavigationOpen = false }: RouteBuilderSi
     setMapPickerActive
   } = useRouteStore();
 
-  // Локальный стейт нужен только для спиннера на кнопке загрузки
+  // Локальный стейт для спиннера и модального окна ошибок
   const [isGenerating, setIsGenerating] = useState(false);
+  const [errorModal, setErrorModal] = useState<{
+    isOpen: boolean;
+    message: string;
+    categoryName?: string;
+    failedWaypointId?: string;
+  }>({
+    isOpen: false,
+    message: "",
+  });
+  const [distanceWarning, setDistanceWarning] = useState<{
+    isOpen: boolean;
+    distance: number;
+  }>({
+    isOpen: false,
+    distance: 0,
+  });
 
   // Формируем массивы ВНУТРИ компонента, чтобы работал хук переводов t()
   const CATEGORIES = Object.entries(PLACE_CATEGORIES)
@@ -89,6 +109,32 @@ export function RouteBuilderSidebar({ isNavigationOpen = false }: RouteBuilderSi
 
 
   const handleBuildRoute = async () => {
+    if (!startPoint) {
+      return;
+    }
+
+    // Определяем конечную точку для проверки расстояния
+    const finalEndPoint = endPointType === "address" ? endPoint : null;
+
+    // Проверяем расстояние только если есть конечная точка
+    if (finalEndPoint) {
+      const distance = calculateDirectDistance(startPoint, finalEndPoint);
+
+      if (shouldShowDistanceWarning(distance)) {
+        // Показываем предупреждение вместо немедленного построения
+        setDistanceWarning({
+          isOpen: true,
+          distance,
+        });
+        return;
+      }
+    }
+
+    // Если проверка пройдена или конечной точки нет, строим маршрут
+    await buildRoute();
+  };
+
+  const buildRoute = async () => {
     setIsGenerating(true);
 
     if (!startPoint) {
@@ -113,8 +159,12 @@ export function RouteBuilderSidebar({ isNavigationOpen = false }: RouteBuilderSi
       });
 
       if (!result.success) {
-        // Показываем ошибку пользователю
-        alert(result.error || "Не удалось построить маршрут");
+        // Показываем модальное окно с ошибкой вместо alert
+        setErrorModal({
+          isOpen: true,
+          message: result.error || "Не удалось построить маршрут",
+          categoryName: extractCategoryFromError(result.error),
+        });
         setIsGenerating(false);
         return;
       }
@@ -156,24 +206,79 @@ export function RouteBuilderSidebar({ isNavigationOpen = false }: RouteBuilderSi
       router.push(`?r=${encodedString}`, { scroll: false });
     } catch (error: any) {
       console.error("Ошибка построения маршрута:", error);
-      alert("Произошла ошибка при построении маршрута");
+      setErrorModal({
+        isOpen: true,
+        message: "Произошла ошибка при построении маршрута",
+      });
     } finally {
       setIsGenerating(false);
     }
   };
 
-  return (
-    <RoutePanel
-      isNavigationOpen={isNavigationOpen}
-      header={
-        <div className="flex items-center gap-3 text-slate-800">
-          <div className="p-2 bg-brand-100 rounded-xl text-brand-600">
-            <Navigation size={20} />
-          </div>
-          <h2 className="text-xl font-bold">{t("title")}</h2>
-        </div>
+  // Обработчик повторной попытки построения
+  const handleRetry = () => {
+    setErrorModal({ isOpen: false, message: "" });
+    handleBuildRoute();
+  };
+
+  // Обработчик удаления проблемной точки
+  const handleRemovePoint = () => {
+    const categoryName = errorModal.categoryName;
+
+    // Находим и удаляем точку с проблемной категорией
+    if (categoryName) {
+      // Проверяем, это промежуточная точка или финиш
+      const isEndPoint = endPointType === "category" && endPointCategory === categoryName;
+
+      if (isEndPoint) {
+        // Удаляем финишную точку (делаем её пустой)
+        setEndPointType("address");
+        setEndPoint(null);
+        setEndPointName("");
+      } else {
+        // Удаляем промежуточную точку
+        const waypointToRemove = waypoints.find(
+          wp => wp.type === "category" && (wp.value === categoryName || wp.originalCategory === categoryName)
+        );
+        if (waypointToRemove) {
+          setWaypoints(waypoints.filter(wp => wp.id !== waypointToRemove.id));
+        }
       }
-    >
+    }
+
+    setErrorModal({ isOpen: false, message: "" });
+
+    // Автоматически перестраиваем маршрут без проблемной точки
+    setTimeout(() => {
+      handleBuildRoute();
+    }, 100);
+  };
+
+  // Обработчик подтверждения построения длинного маршрута
+  const handleProceedWithLongRoute = () => {
+    setDistanceWarning({ isOpen: false, distance: 0 });
+    // Строим маршрут без дополнительных проверок
+    buildRoute();
+  };
+
+  // Обработчик отмены построения длинного маршрута
+  const handleCancelLongRoute = () => {
+    setDistanceWarning({ isOpen: false, distance: 0 });
+  };
+
+  return (
+    <>
+      <RoutePanel
+        isNavigationOpen={isNavigationOpen}
+        header={
+          <div className="flex items-center gap-3 text-slate-800">
+            <div className="p-2 bg-brand-100 rounded-xl text-brand-600">
+              <Navigation size={20} />
+            </div>
+            <h2 className="text-xl font-bold">{t("title")}</h2>
+          </div>
+        }
+      >
       <div className="flex flex-col relative pb-4">
         
         <div className="absolute left-[20px] top-4 bottom-14 w-0.5 bg-slate-200 z-0" />
@@ -338,8 +443,25 @@ export function RouteBuilderSidebar({ isNavigationOpen = false }: RouteBuilderSi
             {isGenerating ? t("buildingRouteButton") : t("buildRouteButton")}
           </Button>
         </div>
-        
+
       </div>
     </RoutePanel>
+
+    <RouteErrorModal
+      isOpen={errorModal.isOpen}
+      onClose={() => setErrorModal({ isOpen: false, message: "" })}
+      errorMessage={errorModal.message}
+      categoryName={errorModal.categoryName}
+      onRetry={handleRetry}
+      onRemovePoint={handleRemovePoint}
+    />
+
+    <RouteDistanceWarningModal
+      isOpen={distanceWarning.isOpen}
+      onClose={handleCancelLongRoute}
+      onProceed={handleProceedWithLongRoute}
+      distance={distanceWarning.distance}
+    />
+  </>
   );
 }
