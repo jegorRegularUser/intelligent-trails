@@ -88,10 +88,10 @@ export function Navigation({ locale, isAuthenticated = false }: NavigationProps)
         <div className="md:hidden fixed inset-0 z-40 bg-white flex flex-col">
           {/* Хедер */}
           <div className="px-6 pt-20 pb-8 border-b border-slate-200">
-            <div className="flex items-center gap-3">
+            <Link href={`/${locale}`} onClick={toggleMobileMenu} className="flex items-center gap-3">
               <Image src="/logo.png" alt="Intelligent Trails" width={32} height={32} className="w-8 h-8" />
               <h2 className="text-2xl font-bold text-slate-900">{t('logo')}</h2>
-            </div>
+            </Link>
           </div>
 
           {/* Навигационные ссылки */}

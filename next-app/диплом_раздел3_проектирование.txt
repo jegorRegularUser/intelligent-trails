@@ -1,0 +1,440 @@
+3 Проектирование информационной системы
+
+Для проектирования данной информационной системы был выбран язык объектно-ориентированного подхода UML.
+Унифицированный язык моделирования UML (Unified Modeling Language) – это язык визуального моделирования, который разработан для спецификации, визуализации, проектирования и документирования компонентов программного обеспечения, бизнес-процессов и других систем. Данный язык одновременно является простым и мощным средством моделирования, который может быть эффективно использован для построения концептуальных, логических и графических моделей сложных систем самого различного целевого назначения.
+
+3.1 Диаграмма вариантов использования
+
+Диаграммы прецедентов представляют собой один из пяти типов диаграмм, применяемых в UML для моделирования динамических аспектов системы. Диаграммы прецедентов играют основную роль в моделировании поведения системы, подсистемы или класса. Каждая такая диаграмма показывает множество прецедентов, актёров и отношения между ними.
+
+На рисунке 3.1 представлена диаграмма прецедентов системы Intelligent Trails.
+
+[ПРОМПТ ДЛЯ ГЕНЕРАЦИИ ДИАГРАММЫ 3.1 - Use Case Diagram]
+Create a UML use case diagram for Intelligent Trails. Include:
+- Two actors: "Незарегистрированный пользователь" and "Авторизованный пользователь" (with generalization arrow from authorized to unregistered)
+- System boundary: "Intelligent Trails"
+- Use cases for unregistered: "Построить маршрут", "Добавить точки интереса" (<<extend>> from build route), "Регистрация", "Авторизация"
+- Additional for authorized: "Сохранить маршрут" (<<include>> to build route), "Просмотреть историю маршрутов", "Фильтровать маршруты" (<<extend>> from history), "Удалить маршрут" (<<extend>> from history), "Поделиться маршрутом" (<<extend>> from build route)
+
+Рисунок 3.1 Диаграмма прецедентов
+
+В таблицах 3.1 – 3.9 представлены описательные спецификации прецедентов.
+
+Таблица 3.1 Описательная спецификация прецедента «Построить маршрут»
+Прецедент: Построить маршрут
+Субъекты: Незарегистрированный пользователь, Авторизованный пользователь
+Предусловие: Открытие страницы /map
+Постусловие: Отображение построенного маршрута на карте
+
+Таблица 3.2 Описательная спецификация прецедента «Добавить точки интереса»
+Прецедент: Добавить точки интереса
+Субъекты: Незарегистрированный пользователь, Авторизованный пользователь
+Предусловие: Указание начальной и конечной точек
+Постусловие: Система находит места по категориям
+
+Таблица 3.3 Описательная спецификация прецедента «Сохранить маршрут»
+Прецедент: Сохранить маршрут
+Субъекты: Авторизованный пользователь
+Предусловие: Построение маршрута
+Постусловие: Сохранение в MongoDB
+
+
+3.2 Информационно-логическая модель базы данных
+
+Информационно-логическая модель данных описывает структуру хранения информации в базе данных. Система использует MongoDB с двумя коллекциями: users и routes.
+
+На рисунке 3.2 представлена информационно-логическая модель базы данных.
+
+[ПРОМПТ ДЛЯ ГЕНЕРАЦИИ ДИАГРАММЫ 3.2 - Database ER Diagram]
+Create an ER diagram for MongoDB collections:
+
+Collection "users":
+- _id: ObjectId (PK)
+- email: String (unique)
+- name: String
+- avatar: String
+- provider: String (google/github/yandex)
+- providerId: String
+- preferences: Object {
+    locale: String (ru/en)
+    defaultTransport: String
+    theme: String
+  }
+- createdAt: Date
+- lastLoginAt: Date
+
+Collection "routes":
+- _id: ObjectId (PK)
+- userId: ObjectId (FK -> users._id)
+- name: String
+- encodedRoute: String
+- metrics: Object {
+    totalDistance: Number
+    totalDuration: Number
+    placesCount: Number
+  }
+- startPoint: Object {
+    type: String
+    value: String
+    coords: Array[Number]
+  }
+- endPoint: Object {
+    type: String
+    value: String
+    coords: Array[Number]
+  }
+- waypoints: Array[Object]
+- categories: Array[String]
+- transportModes: Array[String]
+- isFavorite: Boolean
+- tags: Array[String]
+- createdAt: Date
+- updatedAt: Date
+
+Relationship: users (1) -> (N) routes
+
+Рисунок 3.2 Информационно-логическая модель базы данных
+
+
+3.3 Диаграмма классов
+
+Диаграммы классов являются центральным элементом объектно-ориентированного моделирования. Они показывают классы системы, их атрибуты, операции и отношения между классами.
+
+На рисунке 3.3 представлена диаграмма классов системы Intelligent Trails.
+
+[ПРОМПТ ДЛЯ ГЕНЕРАЦИИ ДИАГРАММЫ 3.3 - Class Diagram]
+Create a UML class diagram with the following classes:
+
+Class "RouteStore" (Zustand store):
+Attributes:
+- isRouteBuilt: boolean
+- startPoint: Coordinates | null
+- startPointName: string | null
+- waypoints: FormWaypoint[]
+- endPoint: Coordinates | null
+- mapPoints: MapRoutePoint[]
+- userLocation: Coordinates | null
+Methods:
++ setIsRouteBuilt(val: boolean): void
++ setStartPoint(coords: Coordinates): void
++ setWaypoints(waypoints: FormWaypoint[]): void
++ setMapPoints(points: MapRoutePoint[]): void
+
+Class "FormWaypoint":
+Attributes:
+- id: string
+- type: "address" | "category" | "map"
+- value: string
+- coords: Coordinates
+- duration: number
+- modeToNext: RoutingMode
+- alternatives: PlaceOfInterest[]
+- selectedAlternativeIndex: number
+
+Class "MapRoutePoint":
+Attributes:
+- coordinates: Coordinates
+- modeToNext: RoutingMode
+- name: string
+- address: string
+- alternatives: PlaceOfInterest[]
+- stayDuration: number
+- distanceToNext: number
+- durationToNext: number
+
+Class "PlaceOfInterest":
+Attributes:
+- id: string
+- name: string
+- category: string
+- coordinates: Coordinates
+- address: string
+- rating: number
+- popularity: number
+- qualityScore: number
+- finalScore: number
+
+Class "PlaceRanking" (utility):
+Methods:
++ calculateQualityScore(place: PlaceOfInterest): number
++ isInDirectionCone(place, from, to: Coordinates): boolean
++ calculateFinalScore(place: PlaceOfInterest, options): number
++ rankPlaces(places: PlaceOfInterest[], options): PlaceOfInterest[]
++ selectDiverseAlternatives(places, max, radius): PlaceOfInterest[]
+
+Class "RouteBuilder" (service):
+Methods:
++ buildSmartRouteWithAlternatives(start, end, categories): Promise<BuiltStep[]>
++ geocodeAddress(address: string): Promise<Coordinates>
++ findPlacesByCategory(coords, category, radius): Promise<PlaceOfInterest[]>
+
+Class "OSMService":
+Methods:
++ searchPlaces(coords, category, radiuses): Promise<PlaceOfInterest[]>
++ queryOverpassAPI(query: string): Promise<any>
+
+Relationships:
+- RouteStore "1" -- "*" FormWaypoint: contains
+- RouteStore "1" -- "*" MapRoutePoint: contains
+- FormWaypoint "1" -- "*" PlaceOfInterest: has alternatives
+- MapRoutePoint "1" -- "*" PlaceOfInterest: has alternatives
+- RouteBuilder ..> PlaceRanking: uses
+- RouteBuilder ..> OSMService: uses
+- PlaceRanking ..> PlaceOfInterest: processes
+
+Рисунок 3.3 Диаграмма классов
+
+
+3.4 Блок-схема алгоритма ранжирования мест
+
+Блок-схемы используются для визуализации алгоритмов и логики работы программы. Они показывают последовательность операций и условные переходы.
+
+На рисунке 3.4 представлена блок-схема алгоритма ранжирования мест по качеству, направлению и разнообразию.
+
+[ПРОМПТ ДЛЯ ГЕНЕРАЦИИ ДИАГРАММЫ 3.4 - Flowchart for Place Ranking Algorithm]
+Create a flowchart for the place ranking algorithm:
+
+1. START
+2. Input: places[], currentPosition, destinationPosition, maxResults=5
+3. For each place in places:
+   - Calculate qualityScore (0-100):
+     * Base score = 50
+     * If has rating: +0 to +30 based on rating/5
+     * If has popularity: +0 to +20
+     * If has size (parks): +0 to +20 based on log10(size)
+4. Filter by direction cone:
+   - For each place, check if in ±90° cone toward destination
+   - If ≥3 places in cone: use only those
+   - Else: use all places
+5. For each filtered place:
+   - Calculate distance to currentPosition
+   - Apply distance penalty:
+     * 0-500m: no penalty
+     * 500-2000m: -10 to -30 points
+     * >2000m: -30 to -50 points
+   - Check direction: if in cone +15, else -20
+   - finalScore = qualityScore - distancePenalty + directionBonus
+6. Sort places by finalScore (descending)
+7. Select diverse alternatives:
+   - Take best place
+   - While selected.length < maxResults:
+     * For each remaining place:
+       - Find min distance to already selected
+       - diversityScore = qualityScore + (minDist/300m * 30)
+     * Add place with highest diversityScore
+8. Return selected places
+9. END
+
+Рисунок 3.4 Блок-схема алгоритма ранжирования мест
+
+
+3.5 Блок-схема алгоритма построения маршрута
+
+На рисунке 3.5 представлена блок-схема алгоритма построения интеллектуального маршрута с точками интереса.
+
+[ПРОМПТ ДЛЯ ГЕНЕРАЦИИ ДИАГРАММЫ 3.5 - Flowchart for Route Building Algorithm]
+Create a flowchart for the smart route building algorithm:
+
+1. START
+2. Input: startAddress, endAddress, categories[], transportMode
+3. Geocode startAddress -> startCoords
+4. If geocoding failed: return ERROR "Address not found"
+5. Geocode endAddress -> endCoords
+6. If geocoding failed: return ERROR "Address not found"
+7. Initialize: currentPosition = startCoords, builtSteps = []
+8. For each category in categories:
+   - radiuses = [200m, 800m, 2500m, 6000m]
+   - foundPlaces = []
+   - For each radius in radiuses:
+     * Query OSM Overpass API with (currentPosition, category, radius)
+     * If found ≥5 places: break
+   - If foundPlaces.length < 1: skip category
+   - Rank places using rankPlaces(foundPlaces, currentPosition, endCoords)
+   - Select top 5 alternatives
+   - Choose best alternative as waypoint
+   - Add to builtSteps with alternatives
+   - Update currentPosition = waypoint.coords
+9. Query Yandex Maps API to build route:
+   - Input: [startCoords, ...waypoints, endCoords], transportMode
+   - Get: geometry, distances[], durations[]
+10. Merge route data with builtSteps
+11. Return builtSteps with metrics
+12. END
+
+Рисунок 3.5 Блок-схема алгоритма построения маршрута
+
+
+3.6 Диаграмма последовательности
+
+Диаграммы последовательностей показывают взаимодействие объектов во времени. Они применяются для моделирования потока управления в системе.
+
+На рисунке 3.6 представлена диаграмма последовательностей для сценария построения и сохранения маршрута.
+
+[ПРОМПТ ДЛЯ ГЕНЕРАЦИИ ДИАГРАММЫ 3.6 - Sequence Diagram]
+Create a UML sequence diagram:
+
+Participants: Пользователь, Браузер, Next.js Server, Yandex Maps API, OpenStreetMap API, MongoDB
+
+Sequence:
+1. Пользователь -> Браузер: Открывает /map
+2. Браузер -> Next.js Server: GET /map
+3. Next.js Server -> Браузер: HTML страница
+4. Пользователь -> Браузер: Вводит данные, нажимает "Построить"
+5. Браузер -> Next.js Server: POST buildRoute(start, end, categories)
+6. Next.js Server -> OpenStreetMap API: Запрос мест (параллельно для каждой категории)
+7. OpenStreetMap API -> Next.js Server: Список мест с координатами
+8. Next.js Server -> Next.js Server: Ранжирование мест (качество, направление, расстояние)
+9. Next.js Server -> Yandex Maps API: Построить маршрут с точками
+10. Yandex Maps API -> Next.js Server: Геометрия, время, расстояние
+11. Next.js Server -> Браузер: Построенный маршрут с альтернативами
+12. Браузер -> Пользователь: Отображение на карте
+13. Пользователь -> Браузер: Нажимает "Сохранить"
+14. Браузер -> Next.js Server: POST saveRoute(encodedRoute)
+15. Next.js Server -> MongoDB: INSERT route document
+16. MongoDB -> Next.js Server: Подтверждение
+17. Next.js Server -> Браузер: Успех
+18. Браузер -> Пользователь: Уведомление "Сохранено"
+
+Рисунок 3.6 Диаграмма последовательности
+
+
+3.7 Диаграмма состояний
+
+Диаграммы состояний показывают поведение объекта на протяжении его жизненного цикла. Они применяются для моделирования динамического поведения элемента.
+
+На рисунке 3.7 представлена диаграмма состояний процесса построения маршрута.
+
+[ПРОМПТ ДЛЯ ГЕНЕРАЦИИ ДИАГРАММЫ 3.7 - State Diagram]
+Create a UML state diagram for route building process:
+
+States:
+- [Initial] (black circle)
+- "Ожидание ввода" (Waiting for Input)
+- "Геокодирование адресов" (Geocoding)
+- "Поиск мест" (Searching Places)
+- "Ранжирование" (Ranking)
+- "Построение маршрута" (Building Route)
+- "Отображение результата" (Displaying Result)
+- "Ошибка" (Error)
+- [Final] (black circle with ring)
+
+Transitions:
+- [Initial] -> "Ожидание ввода": Открытие /map
+- "Ожидание ввода" -> "Геокодирование адресов": Нажата кнопка "Построить"
+- "Геокодирование адресов" -> "Поиск мест": Адреса найдены
+- "Геокодирование адресов" -> "Ошибка": Адрес не найден
+- "Поиск мест" -> "Ранжирование": Найдены места
+- "Поиск мест" -> "Ошибка": Места не найдены
+- "Ранжирование" -> "Построение маршрута": Выбраны топ-5
+- "Построение маршрута" -> "Отображение результата": Маршрут построен
+- "Построение маршрута" -> "Ошибка": Ошибка API
+- "Отображение результата" -> "Ожидание ввода": Изменить маршрут
+- "Отображение результата" -> [Final]: Закрыть страницу
+- "Ошибка" -> "Ожидание ввода": Попробовать снова
+- "Ошибка" -> [Final]: Закрыть страницу
+
+Рисунок 3.7 Диаграмма состояний
+
+
+3.8 Диаграмма компонентов
+
+Диаграммы компонентов показывают организацию и зависимости между компонентами системы. Они применяются для моделирования статического вида системы с точки зрения реализации.
+
+На рисунке 3.8 представлена диаграмма компонентов системы Intelligent Trails.
+
+[ПРОМПТ ДЛЯ ГЕНЕРАЦИИ ДИАГРАММЫ 3.8 - Component Diagram]
+Create a UML component diagram:
+
+Components:
+1. "Frontend" package:
+   - React Components
+   - Zustand Store
+   - Yandex Maps Client
+
+2. "Backend (Next.js)" package:
+   - Server Actions
+   - API Routes
+   - NextAuth
+
+3. "Services" package:
+   - OSM Service
+   - Geocoding Service
+   - Route Builder Service
+
+4. "Database Layer" package:
+   - MongoDB Driver
+   - Repositories
+
+External:
+- Yandex Maps API
+- OpenStreetMap Overpass API
+- MongoDB Atlas
+
+Dependencies (<<use>>):
+- React Components -> Zustand Store
+- React Components -> Yandex Maps Client
+- React Components -> Server Actions
+- Server Actions -> Services
+- Server Actions -> Repositories
+- NextAuth -> Repositories
+- OSM Service -> OpenStreetMap Overpass API
+- Geocoding Service -> Yandex Maps API
+- Route Builder Service -> OSM Service
+- Route Builder Service -> Geocoding Service
+- Yandex Maps Client -> Yandex Maps API
+- Repositories -> MongoDB Driver
+- MongoDB Driver -> MongoDB Atlas
+
+Рисунок 3.8 Диаграмма компонентов
+
+
+3.9 Диаграмма размещения
+
+Диаграммы размещения показывают конфигурацию обрабатывающих узлов системы и размещённых на них компонентов. Они применяются для моделирования физической архитектуры системы.
+
+На рисунке 3.9 представлена диаграмма размещения системы Intelligent Trails.
+
+[ПРОМПТ ДЛЯ ГЕНЕРАЦИИ ДИАГРАММЫ 3.9 - Deployment Diagram]
+Create a UML deployment diagram:
+
+Nodes (3D boxes):
+
+1. "Клиентское устройство" (Client Device):
+   - Веб-браузер (Web Browser)
+     * React Application
+     * Yandex Maps SDK
+
+2. "Vercel / Хостинг":
+   - Next.js Server
+     * Server Components
+     * Server Actions
+     * API Routes
+   - Node.js Runtime
+
+3. "MongoDB Atlas":
+   - MongoDB Cluster
+     * users collection
+     * routes collection
+
+4. "Yandex Cloud":
+   - Yandex Maps API
+
+5. "OpenStreetMap Infrastructure":
+   - Overpass API
+
+Communication paths:
+- Клиентское устройство <-> Vercel: <<HTTPS>>
+- Клиентское устройство <-> Yandex Cloud: <<HTTPS>>
+- Vercel <-> MongoDB Atlas: <<TCP/IP, MongoDB Protocol>>
+- Vercel <-> Yandex Cloud: <<HTTPS>>
+- Vercel <-> OpenStreetMap Infrastructure: <<HTTPS>>
+
+Рисунок 3.9 Диаграмма размещения
+
+На диаграмме представлена физическая архитектура развёртывания системы:
+• Клиентское устройство запускает веб-браузер с React-приложением;
+• Next.js сервер развёрнут на платформе Vercel в среде Node.js;
+• База данных MongoDB развёрнута в облаке MongoDB Atlas;
+• Внешние API предоставляются облачными провайдерами.
+
+Все коммуникации защищены протоколом HTTPS, соединение с БД использует защищённый протокол MongoDB с SSL/TLS.
