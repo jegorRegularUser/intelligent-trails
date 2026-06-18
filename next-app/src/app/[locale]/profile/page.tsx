@@ -5,7 +5,7 @@ import { SecuritySettings } from "@/components/features/profile/SecuritySettings
 import { PreferencesSettings } from "@/components/features/profile/PreferencesSettings";
 import { auth } from "@/lib/auth/config";
 import { redirect } from "next/navigation";
-import { ToastProvider } from "@/contexts/ToastContext";
+
 
 export default async function ProfilePage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
@@ -42,7 +42,6 @@ export default async function ProfilePage({ params }: { params: Promise<{ locale
   };
 
   return (
-    <ToastProvider>
       <div className="min-h-screen bg-slate-50/50 py-12 px-4 sm:px-6">
         <div className="max-w-3xl mx-auto flex flex-col gap-8">
 
@@ -84,6 +83,5 @@ export default async function ProfilePage({ params }: { params: Promise<{ locale
 
         </div>
       </div>
-    </ToastProvider>
   );
 }

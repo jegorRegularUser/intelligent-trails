@@ -5,9 +5,11 @@ import { getDistanceInMeters } from "@/utils/geo";
 
 interface RankingOptions {
   currentPosition: Coordinates;
-  destinationPosition?: Coordinates; // Для конусной фильтрации
+  destinationPosition?: Coordinates;
   maxResults?: number;
-  diversityRadius?: number; // Минимальное расстояние между альтернативами (метры)
+  diversityRadius?: number;
+  nearbyThreshold?: number;
+  maxAlternativeDistanceFromPrimary?: number;
 }
 
 /**
@@ -65,6 +67,30 @@ function isInDirectionCone(
   return dotProduct > 0;
 }
 
+function distanceToRouteMeters(
+  point: Coordinates,
+  from: Coordinates,
+  to: Coordinates
+): number {
+  const [py, px] = point;
+  const [ay, ax] = from;
+  const [by, bx] = to;
+
+  const abx = bx - ax;
+  const aby = by - ay;
+  const apx = px - ax;
+  const apy = py - ay;
+  const abLenSq = abx * abx + aby * aby;
+
+  if (abLenSq === 0) {
+    return getDistanceInMeters(from, point);
+  }
+
+  const t = Math.max(0, Math.min(1, (apx * abx + apy * aby) / abLenSq));
+  const closest: Coordinates = [ay + t * aby, ax + t * abx];
+  return getDistanceInMeters(point, closest);
+}
+
 /**
  * Вычисляет итоговый балл места с учетом всех факторов
  */
@@ -83,8 +109,18 @@ function calculateFinalScore(
   // 500-2000м: -10 до -30 баллов
   // >2000м: -30 до -50 баллов
   if (distance > 500) {
-    const distancePenalty = Math.min((distance - 500) / 100, 50);
+    let distancePenalty = Math.min((distance - 500) / 50, 80);
+    if (place.category === 'park') {
+      distancePenalty *= 0.5;
+    }
     score -= distancePenalty;
+  }
+
+  if (place.category === 'park') {
+    const lower = place.name.toLowerCase();
+    if (lower.includes('пушкин') || lower.includes('кулибин')) {
+      score += 25;
+    }
   }
 
   // Бонус за направление к цели
@@ -94,11 +130,18 @@ function calculateFinalScore(
       options.currentPosition,
       options.destinationPosition
     );
-    if (inCone) {
-      score += 15; // Бонус за правильное направление
-    } else {
-      score -= 20; // Штраф за движение назад
-    }
+    const routeDistance = distanceToRouteMeters(
+      place.coordinates,
+      options.currentPosition,
+      options.destinationPosition
+    );
+
+    if (routeDistance < 400) score += 30;
+    else if (routeDistance < 800) score += 18;
+    else if (routeDistance < 1500) score += 8;
+
+    if (inCone) score += 12;
+    else score -= 15;
   }
 
   return score;
@@ -110,34 +153,40 @@ function calculateFinalScore(
 function selectDiverseAlternatives(
   places: PlaceOfInterest[],
   maxResults: number,
-  diversityRadius: number
+  diversityRadius: number,
+  anchor: Coordinates,
+  maxAlternativeDistance?: number
 ): PlaceOfInterest[] {
-  if (places.length <= maxResults) {
-    return places;
-  }
+  if (places.length === 0) return [];
+  if (places.length === 1) return places;
 
   const selected: PlaceOfInterest[] = [];
   const remaining = [...places];
+  const primary = remaining.shift()!;
+  selected.push(primary);
 
-  // Берем лучшее место
-  selected.push(remaining.shift()!);
+  const primaryDistance = getDistanceInMeters(anchor, primary.coordinates);
+  const maxDist = maxAlternativeDistance ?? Math.max(primaryDistance * 1.5, 1200);
 
-  // Выбираем остальные с учетом разнообразия
   while (selected.length < maxResults && remaining.length > 0) {
-    let bestIndex = 0;
+    let bestIndex = -1;
     let bestDiversityScore = -Infinity;
 
     for (let i = 0; i < remaining.length; i++) {
       const candidate = remaining[i];
+      const distanceFromAnchor = getDistanceInMeters(anchor, candidate.coordinates);
+      if (distanceFromAnchor > maxDist) continue;
 
-      // Минимальное расстояние до уже выбранных мест
       const minDistanceToSelected = Math.min(
-        ...selected.map(s => getDistanceInMeters(s.coordinates, candidate.coordinates))
+        ...selected.map((s) => getDistanceInMeters(s.coordinates, candidate.coordinates))
       );
 
-      // Балл разнообразия = качество + бонус за удаленность от выбранных
       const diversityBonus = Math.min(minDistanceToSelected / diversityRadius, 1) * 30;
-      const diversityScore = (candidate.qualityScore || 50) + diversityBonus;
+      const proximityPenalty = Math.max(0, (distanceFromAnchor - primaryDistance) / 200) * 12;
+      const diversityScore =
+        (candidate.finalScore || candidate.qualityScore || 50) +
+        diversityBonus -
+        proximityPenalty;
 
       if (diversityScore > bestDiversityScore) {
         bestDiversityScore = diversityScore;
@@ -145,6 +194,7 @@ function selectDiverseAlternatives(
       }
     }
 
+    if (bestIndex === -1) break;
     selected.push(remaining.splice(bestIndex, 1)[0]);
   }
 
@@ -177,7 +227,7 @@ export function rankPlaces(
 
     // Если в конусе есть хотя бы 3 места, используем только их
     // Иначе берем все (чтобы не остаться без вариантов)
-    if (inCone.length >= 3) {
+    if (inCone.length >= 2) {
       filtered = inCone;
     }
   }
@@ -188,12 +238,30 @@ export function rankPlaces(
     finalScore: calculateFinalScore(place, options),
   }));
 
-  // 4. Сортируем по итоговому баллу
   scored.sort((a, b) => b.finalScore - a.finalScore);
 
-  // 5. Выбираем разнообразные альтернативы
-  const maxResults = options.maxResults || 5;
-  const diversityRadius = options.diversityRadius || 300; // 300м между альтернативами
+  const nearbyThreshold =
+    options.nearbyThreshold ?? (scored[0]?.category === 'park' ? 3500 : 2000);
+  const hasNearby = scored.some(
+    (p) => getDistanceInMeters(options.currentPosition, p.coordinates) <= nearbyThreshold
+  );
+  const distanceFiltered = hasNearby
+    ? scored.filter(
+        (p) => getDistanceInMeters(options.currentPosition, p.coordinates) <= nearbyThreshold * 2.5
+      )
+    : scored;
 
-  return selectDiverseAlternatives(scored, maxResults, diversityRadius);
+  const maxResults = options.maxResults || 5;
+  const diversityRadius = options.diversityRadius || 300;
+  const candidates = distanceFiltered.length > 0 ? distanceFiltered : scored;
+
+  const result = selectDiverseAlternatives(
+    candidates,
+    maxResults,
+    diversityRadius,
+    options.currentPosition,
+    options.maxAlternativeDistanceFromPrimary
+  );
+
+  return result.length > 0 ? result : candidates.slice(0, maxResults);
 }

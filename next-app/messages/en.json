@@ -158,8 +158,18 @@
     "errorPasswordRequired": "Password is required",
     "errorPasswordShort": "Password must be at least 6 characters",
     "errorPasswordMismatch": "Passwords don't match",
-    "errorSignIn": "Sign in error. Check your email and password.",
-    "errorSignUp": "Sign up error. Try a different email."
+    "errorSignIn": "Invalid email or password. Please check your credentials and try again.",
+    "errorSignUp": "Could not create account. Please try again later.",
+    "errorEmailExists": "A user with this email already exists",
+    "errorOAuth": "Could not sign in with external provider. Please try again."
+  },
+  "LoginRequiredModal": {
+    "title": "Sign in to save",
+    "subtitle": "Saving routes is available for signed-in users",
+    "description": "Create an account or sign in — your route will stay on the map, and you can save it to history after logging in.",
+    "signInButton": "Sign in",
+    "signUpButton": "Create account",
+    "cancelButton": "Continue without saving"
   },
   "History": {
     "title": "Route History",
@@ -210,7 +220,7 @@
     "routeSaveError": "Error saving route",
     "loginToSave": "Sign in to save routes",
     "openInYandex": "Open in Yandex",
-    "loginToSaveAlert": "Sign in to save routes"
+    "loginToSaveAlert": "Sign in to save this route to your history"
   },
   "Landing": {
     "hero": {

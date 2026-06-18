@@ -8,12 +8,21 @@ import { signIn } from 'next-auth/react';
 import { useState, use } from 'react';
 import { Mail, Lock, User } from 'lucide-react';
 import { registerUserAction } from '@/actions/auth';
+import { isAuthErrorCode } from '@/types/auth';
+import { validateSignUpForm } from '@/utils/authValidation';
+
+type FieldErrors = {
+  email?: string;
+  password?: string;
+  confirmPassword?: string;
+  general?: string;
+};
 
 export default function SignUpPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = use(params);
   const t = useTranslations('Auth');
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -21,38 +30,45 @@ export default function SignUpPage({ params }: { params: Promise<{ locale: strin
     confirmPassword: '',
   });
 
+  const clearFieldError = (field: keyof FieldErrors) => {
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  };
+
   const handleOAuthSignIn = async (provider: 'yandex') => {
     setIsLoading(true);
+    setFieldErrors({});
     try {
       await signIn(provider, { callbackUrl: `/${locale}/profile` });
     } catch (error) {
       console.error('OAuth error:', error);
+      setFieldErrors({ general: t('errorOAuth') });
       setIsLoading(false);
     }
   };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setFieldErrors({});
 
-    // Валидация
-    if (!formData.email) {
-      setError(t('errorEmailRequired'));
-      return;
-    }
+    const validation = validateSignUpForm(
+      formData.email,
+      formData.password,
+      formData.confirmPassword
+    );
 
-    if (!formData.password) {
-      setError(t('errorPasswordRequired'));
-      return;
-    }
+    const errors: FieldErrors = {};
+    if (validation.email === 'required') errors.email = t('errorEmailRequired');
+    if (validation.email === 'invalid') errors.email = t('errorEmailInvalid');
+    if (validation.password === 'required') errors.password = t('errorPasswordRequired');
+    if (validation.password === 'short') errors.password = t('errorPasswordShort');
+    if (validation.confirmPassword === 'mismatch') errors.confirmPassword = t('errorPasswordMismatch');
 
-    if (formData.password.length < 6) {
-      setError(t('errorPasswordShort'));
-      return;
-    }
-
-    if (formData.password !== formData.confirmPassword) {
-      setError(t('errorPasswordMismatch'));
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
       return;
     }
 
@@ -60,32 +76,48 @@ export default function SignUpPage({ params }: { params: Promise<{ locale: strin
 
     try {
       const result = await registerUserAction({
-        email: formData.email,
+        email: formData.email.trim(),
         password: formData.password,
         name: formData.name || undefined,
       });
 
       if (!result.success) {
-        setError(result.error || t('errorSignUp'));
+        const errorMessages: Record<string, { field?: keyof FieldErrors; key: string }> = {
+          EMAIL_REQUIRED: { field: 'email', key: 'errorEmailRequired' },
+          PASSWORD_REQUIRED: { field: 'password', key: 'errorPasswordRequired' },
+          PASSWORD_TOO_SHORT: { field: 'password', key: 'errorPasswordShort' },
+          EMAIL_EXISTS: { field: 'email', key: 'errorEmailExists' },
+          REGISTRATION_FAILED: { key: 'errorSignUp' },
+        };
+
+        if (isAuthErrorCode(result.errorCode)) {
+          const mapping = errorMessages[result.errorCode];
+          if (mapping.field) {
+            setFieldErrors({ [mapping.field]: t(mapping.key as any) });
+          } else {
+            setFieldErrors({ general: t(mapping.key as any) });
+          }
+        } else {
+          setFieldErrors({ general: t('errorSignUp') });
+        }
         setIsLoading(false);
         return;
       }
 
-      // Автоматический вход после регистрации
       const signInResult = await signIn('credentials', {
-        email: formData.email,
+        email: formData.email.trim(),
         password: formData.password,
         redirect: false,
       });
 
       if (signInResult?.error) {
-        setError(t('errorSignIn'));
+        setFieldErrors({ general: t('errorSignIn') });
         setIsLoading(false);
       } else {
         window.location.href = `/${locale}/profile`;
       }
-    } catch (error) {
-      setError(t('errorSignUp'));
+    } catch {
+      setFieldErrors({ general: t('errorSignUp') });
       setIsLoading(false);
     }
   };
@@ -94,7 +126,6 @@ export default function SignUpPage({ params }: { params: Promise<{ locale: strin
     <div className="min-h-screen bg-gradient-to-br from-brand-50 via-white to-slate-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="bg-white rounded-3xl shadow-xl p-8 space-y-6">
-          {/* Хедер */}
           <div className="text-center space-y-2">
             <Link href={`/${locale}`} className="inline-block">
               <h1 className="text-3xl font-bold text-slate-900 hover:text-brand-600 transition-colors">
@@ -105,7 +136,12 @@ export default function SignUpPage({ params }: { params: Promise<{ locale: strin
             <p className="text-slate-600">{t('signUpSubtitle')}</p>
           </div>
 
-          {/* Форма регистрации */}
+          {fieldErrors.general && (
+            <div className="rounded-2xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-700">
+              {fieldErrors.general}
+            </div>
+          )}
+
           <form onSubmit={handleRegister} className="space-y-4">
             <Input
               type="text"
@@ -118,36 +154,43 @@ export default function SignUpPage({ params }: { params: Promise<{ locale: strin
               type="email"
               placeholder={t('emailPlaceholder')}
               value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              onChange={(e) => {
+                setFormData({ ...formData, email: e.target.value });
+                clearFieldError('email');
+              }}
               leftIcon={<Mail size={20} />}
-              required
-              error={!!error && error.includes('email')}
+              error={!!fieldErrors.email}
+              errorText={fieldErrors.email}
             />
             <Input
               type="password"
               placeholder={t('passwordPlaceholder')}
               value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              onChange={(e) => {
+                setFormData({ ...formData, password: e.target.value });
+                clearFieldError('password');
+              }}
               leftIcon={<Lock size={20} />}
-              required
-              error={!!error && error.includes('password')}
+              error={!!fieldErrors.password}
+              errorText={fieldErrors.password}
             />
             <Input
               type="password"
               placeholder={t('confirmPasswordPlaceholder')}
               value={formData.confirmPassword}
-              onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+              onChange={(e) => {
+                setFormData({ ...formData, confirmPassword: e.target.value });
+                clearFieldError('confirmPassword');
+              }}
               leftIcon={<Lock size={20} />}
-              required
-              error={!!error}
-              errorText={error}
+              error={!!fieldErrors.confirmPassword}
+              errorText={fieldErrors.confirmPassword}
             />
             <Button type="submit" variant="primary" size="lg" className="w-full" isLoading={isLoading}>
               {t('signUpButton')}
             </Button>
           </form>
 
-          {/* Разделитель */}
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-slate-200" />
@@ -157,7 +200,6 @@ export default function SignUpPage({ params }: { params: Promise<{ locale: strin
             </div>
           </div>
 
-          {/* OAuth кнопки */}
           <div className="space-y-3">
             <Button
               variant="outline"
@@ -175,7 +217,6 @@ export default function SignUpPage({ params }: { params: Promise<{ locale: strin
             </Button>
           </div>
 
-          {/* Условия использования */}
           <p className="text-xs text-center text-slate-500">
             {t('termsAgree')}{' '}
             <a href="#" className="text-brand-600 hover:text-brand-700">
@@ -187,7 +228,6 @@ export default function SignUpPage({ params }: { params: Promise<{ locale: strin
             </a>
           </p>
 
-          {/* Футер */}
           <div className="text-center text-sm text-slate-600">
             {t('hasAccount')}{' '}
             <Link href={`/${locale}/signin`} className="text-brand-600 hover:text-brand-700 font-medium">
@@ -195,7 +235,6 @@ export default function SignUpPage({ params }: { params: Promise<{ locale: strin
             </Link>
           </div>
         </div>
-
       </div>
     </div>
   );

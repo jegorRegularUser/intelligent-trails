@@ -6,6 +6,7 @@ import { Navigation } from '@/components/layout/Navigation';
 import { NavigationProvider } from '@/contexts/NavigationContext';
 import { PreferencesProvider } from '@/contexts/PreferencesContext';
 import { SessionProvider } from '@/components/providers/SessionProvider';
+import { ToastProvider } from '@/contexts/ToastContext';
 import { auth } from '@/lib/auth/config';
 import { getDb } from '@/lib/db/mongodb';
 import { ObjectId } from 'mongodb';
@@ -61,16 +62,18 @@ export default async function RootLayout({
       <body className={inter.className}>
         <SessionProvider>
           <NextIntlClientProvider messages={messages}>
-            <PreferencesProvider
-              distanceUnit={distanceUnit}
-              locale={locale as "ru" | "en"}
-              mapLocale={mapLocale}
-            >
-              <NavigationProvider>
-                <Navigation locale={locale} isAuthenticated={isAuthenticated} />
-                {children}
-              </NavigationProvider>
-            </PreferencesProvider>
+            <ToastProvider>
+              <PreferencesProvider
+                distanceUnit={distanceUnit}
+                locale={locale as "ru" | "en"}
+                mapLocale={mapLocale}
+              >
+                <NavigationProvider>
+                  <Navigation locale={locale} isAuthenticated={isAuthenticated} />
+                  {children}
+                </NavigationProvider>
+              </PreferencesProvider>
+            </ToastProvider>
           </NextIntlClientProvider>
         </SessionProvider>
       </body>

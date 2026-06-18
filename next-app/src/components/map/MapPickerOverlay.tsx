@@ -40,7 +40,7 @@ export function MapPickerOverlay() {
       </div>
 
       {/* Кнопка отмены */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 pointer-events-auto">
+      <div className="absolute bottom-32 left-1/2 -translate-x-1/2 pointer-events-auto md:bottom-6">
         <Button
           variant="outline"
           size="lg"

@@ -1,0 +1,12 @@
+---
+pid: 7916
+cwd: "E:\Sync\intelligent-trails\next-app"
+command: "cd \"E:\\Sync\\intelligent-trails\\next-app\"; npm install 2>&1"
+started_at: 2026-06-18T18:27:17.960Z
+running_for_ms: 1605010  
+---
+
+added 517 packages, and changed 7 packages in 4m
+
+172 packages are looking for funding
+  run `npm fund` for details

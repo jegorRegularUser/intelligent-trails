@@ -7,47 +7,77 @@ import { Input } from '@/components/ui/Input';
 import { signIn } from 'next-auth/react';
 import { useState, use } from 'react';
 import { Mail, Lock } from 'lucide-react';
+import { validateSignInForm } from '@/utils/authValidation';
+
+type FieldErrors = {
+  email?: string;
+  password?: string;
+  general?: string;
+};
 
 export default function SignInPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = use(params);
   const t = useTranslations('Auth');
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formData, setFormData] = useState({
     email: '',
     password: '',
   });
 
+  const clearFieldError = (field: keyof FieldErrors) => {
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  };
+
   const handleOAuthSignIn = async (provider: 'yandex') => {
     setIsLoading(true);
+    setFieldErrors({});
     try {
       await signIn(provider, { callbackUrl: `/${locale}/profile` });
     } catch (error) {
       console.error('OAuth error:', error);
+      setFieldErrors({ general: t('errorOAuth') });
       setIsLoading(false);
     }
   };
 
   const handleCredentialsSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setFieldErrors({});
+
+    const validation = validateSignInForm(formData.email, formData.password);
+    const errors: FieldErrors = {};
+
+    if (validation.email === 'required') errors.email = t('errorEmailRequired');
+    if (validation.email === 'invalid') errors.email = t('errorEmailInvalid');
+    if (validation.password === 'required') errors.password = t('errorPasswordRequired');
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      return;
+    }
+
     setIsLoading(true);
 
     try {
       const result = await signIn('credentials', {
-        email: formData.email,
+        email: formData.email.trim(),
         password: formData.password,
         redirect: false,
       });
 
       if (result?.error) {
-        setError(t('errorSignIn'));
+        setFieldErrors({ general: t('errorSignIn') });
         setIsLoading(false);
       } else {
         window.location.href = `/${locale}/profile`;
       }
-    } catch (error) {
-      setError(t('errorSignIn'));
+    } catch {
+      setFieldErrors({ general: t('errorSignIn') });
       setIsLoading(false);
     }
   };
@@ -56,7 +86,6 @@ export default function SignInPage({ params }: { params: Promise<{ locale: strin
     <div className="min-h-screen bg-gradient-to-br from-brand-50 via-white to-slate-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="bg-white rounded-3xl shadow-xl p-8 space-y-6">
-          {/* Хедер */}
           <div className="text-center space-y-2">
             <Link href={`/${locale}`} className="inline-block">
               <h1 className="text-3xl font-bold text-slate-900 hover:text-brand-600 transition-colors">
@@ -67,33 +96,42 @@ export default function SignInPage({ params }: { params: Promise<{ locale: strin
             <p className="text-slate-600">{t('signInSubtitle')}</p>
           </div>
 
-          {/* Форма email/пароль */}
+          {fieldErrors.general && (
+            <div className="rounded-2xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-700">
+              {fieldErrors.general}
+            </div>
+          )}
+
           <form onSubmit={handleCredentialsSignIn} className="space-y-4">
             <Input
               type="email"
               placeholder={t('emailPlaceholder')}
               value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              onChange={(e) => {
+                setFormData({ ...formData, email: e.target.value });
+                clearFieldError('email');
+              }}
               leftIcon={<Mail size={20} />}
-              required
-              error={!!error}
+              error={!!fieldErrors.email}
+              errorText={fieldErrors.email}
             />
             <Input
               type="password"
               placeholder={t('passwordPlaceholder')}
               value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              onChange={(e) => {
+                setFormData({ ...formData, password: e.target.value });
+                clearFieldError('password');
+              }}
               leftIcon={<Lock size={20} />}
-              required
-              error={!!error}
-              errorText={error}
+              error={!!fieldErrors.password}
+              errorText={fieldErrors.password}
             />
             <Button type="submit" variant="primary" size="lg" className="w-full" isLoading={isLoading}>
               {t('signInButton')}
             </Button>
           </form>
 
-          {/* Разделитель */}
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-slate-200" />
@@ -103,7 +141,6 @@ export default function SignInPage({ params }: { params: Promise<{ locale: strin
             </div>
           </div>
 
-          {/* OAuth кнопки */}
           <div className="space-y-3">
             <Button
               variant="outline"
@@ -121,7 +158,6 @@ export default function SignInPage({ params }: { params: Promise<{ locale: strin
             </Button>
           </div>
 
-          {/* Футер */}
           <div className="text-center text-sm text-slate-600">
             {t('noAccount')}{' '}
             <Link href={`/${locale}/signup`} className="text-brand-600 hover:text-brand-700 font-medium">

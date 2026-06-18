@@ -3,30 +3,36 @@
 'use server';
 
 import { usersRepo } from '@/lib/db/repositories/users';
+import { AuthErrorCode } from '@/types/auth';
 
 export async function registerUserAction(data: {
   email: string;
   password: string;
   name?: string;
-}) {
+}): Promise<
+  | { success: true; userId: string }
+  | { success: false; errorCode: AuthErrorCode }
+> {
   try {
-    // Валидация
-    if (!data.email || !data.password) {
-      return { success: false, error: 'Email and password are required' };
+    if (!data.email?.trim()) {
+      return { success: false, errorCode: 'EMAIL_REQUIRED' };
+    }
+
+    if (!data.password) {
+      return { success: false, errorCode: 'PASSWORD_REQUIRED' };
     }
 
     if (data.password.length < 6) {
-      return { success: false, error: 'Password must be at least 6 characters' };
+      return { success: false, errorCode: 'PASSWORD_TOO_SHORT' };
     }
 
-    // Создаем пользователя
     const userId = await usersRepo.createUser(data.email, data.password, data.name);
 
     return { success: true, userId };
   } catch (error: any) {
     if (error.message === 'User already exists') {
-      return { success: false, error: 'User with this email already exists' };
+      return { success: false, errorCode: 'EMAIL_EXISTS' };
     }
-    return { success: false, error: 'Registration failed' };
+    return { success: false, errorCode: 'REGISTRATION_FAILED' };
   }
 }

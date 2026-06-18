@@ -1,14 +1,14 @@
 import { RouteSidebarManager } from '@/components/features/RouteSidebarManager';
-import { RouteMap } from '@/components/map/RouteMap';
+import { RouteMapLoader } from '@/components/map/RouteMapLoader';
 import { MapPickerOverlay } from '@/components/map/MapPickerOverlay';
 
 export default function MapPage() {
   return (
-    <main className="relative w-full h-[calc(100vh-73px)] overflow-hidden">
+    <main className="relative w-full h-[100dvh] md:h-[calc(100vh-73px)] overflow-hidden">
 
       {/* Карта на заднем фоне (100% ширины и высоты) */}
       <div className="absolute inset-0 z-0">
-        <RouteMap />
+        <RouteMapLoader />
       </div>
 
       {/* Сайдбар поверх карты.
