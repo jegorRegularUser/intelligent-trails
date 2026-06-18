@@ -1,0 +1,21 @@
+---
+pid: 20280
+cwd: "E:\Sync\intelligent-trails\next-app"
+command: "cd \"E:\\Sync\\intelligent-trails\\next-app\"; npm run start 2>&1"
+started_at: 2026-06-18T15:38:50.133Z
+running_for_ms: 11895008 
+---
+
+> intelligent-trails@0.1.0 start
+> next start
+
+⨯ Failed to start server
+Error: listen EADDRINUSE: address already in use :::3000
+    at <unknown> (Error: listen EADDRINUSE: address already in use :::3000)
+    at new Promise (<anonymous>) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}

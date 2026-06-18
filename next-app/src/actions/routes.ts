@@ -14,10 +14,13 @@ export async function saveRouteAction(data: {
   name: string;
   encodedRoute: string;
   tags?: string[];
-}) {
+}): Promise<
+  | { success: true; routeId: string; isDuplicate: boolean }
+  | { success: false; errorCode: 'UNAUTHORIZED' | 'INVALID_ROUTE' }
+> {
   const session = await auth();
   if (!session?.user?.id) {
-    throw new Error('Unauthorized');
+    return { success: false, errorCode: 'UNAUTHORIZED' };
   }
 
   // Проверяем, не сохранен ли уже этот маршрут
@@ -29,7 +32,7 @@ export async function saveRouteAction(data: {
   // Декодируем маршрут для извлечения метаданных
   const decoded = decodeRouteFromUrl(data.encodedRoute);
   if (!decoded) {
-    throw new Error('Invalid route data');
+    return { success: false, errorCode: 'INVALID_ROUTE' };
   }
 
   // Извлекаем категории и транспорт

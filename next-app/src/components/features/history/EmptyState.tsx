@@ -4,10 +4,12 @@ import { Button } from "@/components/ui/Button";
 import { MapPin } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { usePreferences } from "@/contexts/PreferencesContext";
 
 export function EmptyState() {
   const router = useRouter();
   const t = useTranslations("History");
+  const { locale } = usePreferences();
 
   return (
     <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
@@ -23,7 +25,7 @@ export function EmptyState() {
       <Button
         variant="primary"
         size="lg"
-        onClick={() => router.push("/")}
+        onClick={() => router.push(`/${locale}/map`)}
       >
         {t("createFirstRoute")}
       </Button>

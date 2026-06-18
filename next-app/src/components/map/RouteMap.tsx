@@ -302,7 +302,7 @@ export function RouteMap() {
     const globalBounds = ymapsInstance.util.bounds.fromPoints(allCoords);
     mapInstance.setBounds(globalBounds, {
       checkZoomRange: true,
-      zoomMargin: [50, 50, 50, window.innerWidth > 768 ? 450 : 80],
+      zoomMargin: [50, 50, 50, window.innerWidth > 768 ? 450 : 120],
       duration: 500
     });
 
@@ -335,11 +335,6 @@ export function RouteMap() {
             suppressObsoleteBrowserNotifier: true // Убирает уведомление о старом браузере
           }}
         />
-        <style jsx global>{`
-          [class*="ymaps"][class*="transport-pin"] {
-            display: none !important;
-          }
-        `}</style>
       </div>
     </YMaps>
   );

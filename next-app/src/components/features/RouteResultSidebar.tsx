@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { useSession } from "next-auth/react";
 import { RoutePanel } from "@/components/ui/RoutePanel";
 import { Button } from "@/components/ui/Button";
 import { WaypointItem } from "@/components/features/WaypointItem";
@@ -14,18 +14,19 @@ import { useToast } from "@/contexts/ToastContext";
 import { useRouteUrlSync } from "@/hooks/useRouteUrlSync";
 import { usePreferences } from "@/contexts/PreferencesContext";
 import { formatDistance } from "@/utils/format";
-import { RefreshCw, ArrowLeft, Bookmark, Share2 } from "lucide-react";
+import { ArrowLeft, Bookmark, Share2 } from "lucide-react";
+import { LoginRequiredModal } from "@/components/features/LoginRequiredModal";
 
 interface RouteResultSidebarProps {
   isNavigationOpen?: boolean;
 }
 
 export function RouteResultSidebar({ isNavigationOpen = false }: RouteResultSidebarProps) {
-  const router = useRouter();
   const t = useTranslations("BuilderSidebar");
   const tHistory = useTranslations("History");
   const { showToast } = useToast();
   const { distanceUnit, locale } = usePreferences();
+  const { status: sessionStatus } = useSession();
 
   // Автоматическая синхронизация URL с метриками от Яндекса
   useRouteUrlSync();
@@ -42,6 +43,7 @@ export function RouteResultSidebar({ isNavigationOpen = false }: RouteResultSide
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   // Сбрасываем флаг сохранения при изменении маршрута
   useEffect(() => {
@@ -114,6 +116,11 @@ export function RouteResultSidebar({ isNavigationOpen = false }: RouteResultSide
   };
 
   const handleSaveRoute = async () => {
+    if (sessionStatus === "unauthenticated") {
+      setShowLoginModal(true);
+      return;
+    }
+
     setIsSaving(true);
 
     try {
@@ -131,26 +138,36 @@ export function RouteResultSidebar({ isNavigationOpen = false }: RouteResultSide
         tags: [],
       });
 
+      if (!result.success) {
+        if (result.errorCode === 'UNAUTHORIZED') {
+          setShowLoginModal(true);
+        } else {
+          showToast(tHistory('routeSaveError'), 'error');
+        }
+        return;
+      }
+
       if (result.isDuplicate) {
-        showToast(tHistory('routeAlreadySaved'), 'info');
+        showToast(tHistory('routeAlreadySaved'), 'warning');
       } else {
         showToast(tHistory('routeSaved'), 'success');
         setIsSaved(true);
       }
-    } catch (error: any) {
-      if (error.message === 'Unauthorized') {
-        showToast(tHistory('loginToSaveAlert'), 'info');
-      } else {
-        showToast(tHistory('routeSaveError'), 'error');
-      }
+    } catch {
+      showToast(tHistory('routeSaveError'), 'error');
     } finally {
       setIsSaving(false);
     }
   };
 
   return (
+    <>
+    <LoginRequiredModal
+      isOpen={showLoginModal}
+      onClose={() => setShowLoginModal(false)}
+      locale={locale}
+    />
     <RoutePanel
-      className="pb-[20px]"
       isNavigationOpen={isNavigationOpen}
       header={
         <div className="flex items-center justify-between w-full">
@@ -530,5 +547,6 @@ export function RouteResultSidebar({ isNavigationOpen = false }: RouteResultSide
 
       </div>
     </RoutePanel>
+    </>
   );
 }

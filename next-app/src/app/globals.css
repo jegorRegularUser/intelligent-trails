@@ -40,6 +40,15 @@
   background-color: #64748b; /* slate-500 */
 }
 
+.mobile-panel-scroll {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Yandex Maps: скрываем транспортные пины маршрутизатора */
+[class*="ymaps"][class*="transport-pin"] {
+  display: none !important;
+}
+
 /* Скрытие скроллбара для каруселей */
 .scrollbar-hide {
   -ms-overflow-style: none;  /* IE and Edge */

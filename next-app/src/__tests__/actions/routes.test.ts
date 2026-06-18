@@ -126,24 +126,24 @@ describe('saveRouteAction', () => {
     expect(routesRepo.saveRoute).not.toHaveBeenCalled();
   });
 
-  it('should throw error if not authenticated', async () => {
+  it('should return UNAUTHORIZED if not authenticated', async () => {
     vi.mocked(auth).mockResolvedValue(null);
 
-    await expect(
-      saveRouteAction({ name: 'Test', encodedRoute: 'enc', tags: [] })
-    ).rejects.toThrow('Unauthorized');
+    const result = await saveRouteAction({ name: 'Test', encodedRoute: 'enc', tags: [] });
+
+    expect(result).toEqual({ success: false, errorCode: 'UNAUTHORIZED' });
   });
 
-  it('should throw error if route data is invalid', async () => {
+  it('should return INVALID_ROUTE if route data is invalid', async () => {
     vi.mocked(auth).mockResolvedValue({
       user: { id: testUserId, email: 'test@example.com' },
     } as any);
 
     vi.mocked(decodeRouteFromUrl).mockReturnValue(null);
 
-    await expect(
-      saveRouteAction({ name: 'Test', encodedRoute: 'invalid', tags: [] })
-    ).rejects.toThrow('Invalid route data');
+    const result = await saveRouteAction({ name: 'Test', encodedRoute: 'invalid', tags: [] });
+
+    expect(result).toEqual({ success: false, errorCode: 'INVALID_ROUTE' });
   });
 
   it('should extract categories from waypoints', async () => {

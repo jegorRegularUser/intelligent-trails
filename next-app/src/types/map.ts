@@ -13,6 +13,7 @@ export interface PlaceOfInterest {
   popularity?: number; // Количество отзывов/упоминаний
   tags?: Record<string, string>; // Все OSM теги для анализа
   qualityScore?: number; // Итоговый балл качества (0-100)
+  finalScore?: number;
 }
 
 export interface TransportOption {

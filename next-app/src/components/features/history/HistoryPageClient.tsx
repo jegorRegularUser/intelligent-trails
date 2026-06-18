@@ -9,7 +9,8 @@ import { RouteSortDropdown } from "@/components/features/history/RouteSortDropdo
 import { RecentRoutesCarousel } from "@/components/features/history/RecentRoutesCarousel";
 import { RouteStatsCard } from "@/components/features/history/RouteStatsCard";
 import { EmptyState } from "@/components/features/history/EmptyState";
-import { ToastProvider, useToast } from "@/contexts/ToastContext";
+import { useToast } from "@/contexts/ToastContext";
+import { usePreferences } from "@/contexts/PreferencesContext";
 import { useTranslations } from "next-intl";
 import { toggleFavoriteAction, updateRouteAction, deleteRouteAction } from "@/actions/routes";
 
@@ -20,6 +21,7 @@ interface HistoryPageClientProps {
 function HistoryPageContent({ initialRoutes }: HistoryPageClientProps) {
   const t = useTranslations("History");
   const { showToast } = useToast();
+  const { locale } = usePreferences();
 
   const [routes, setRoutes] = useState<SavedRoute[]>(
     initialRoutes.map((r) => ({
@@ -148,7 +150,7 @@ function HistoryPageContent({ initialRoutes }: HistoryPageClientProps) {
   const handleShare = (id: string) => {
     const route = routes.find((r) => r.id === id);
     if (route) {
-      const url = `${window.location.origin}/?r=${route.encodedRoute}`;
+      const url = `${window.location.origin}/${locale}/map?r=${route.encodedRoute}`;
       navigator.clipboard.writeText(url);
       showToast(t("linkCopied"), "success");
     }
@@ -228,9 +230,5 @@ function HistoryPageContent({ initialRoutes }: HistoryPageClientProps) {
 }
 
 export function HistoryPageClient({ initialRoutes }: HistoryPageClientProps) {
-  return (
-    <ToastProvider>
-      <HistoryPageContent initialRoutes={initialRoutes} />
-    </ToastProvider>
-  );
+  return <HistoryPageContent initialRoutes={initialRoutes} />;
 }

@@ -1,0 +1,37 @@
+---
+pid: 8044
+cwd: "E:\Sync\intelligent-trails\next-app"
+command: "cd \"E:\\Sync\\intelligent-trails\\next-app\"; Remove-Item -Recurse -Force node_modules -ErrorAction SilentlyContinue; npm install --dry-run 2>&1"
+started_at: 2026-06-18T18:23:14.673Z
+running_for_ms: 1910001  
+---
+npm error code ERESOLVE
+npm error ERESOLVE could not resolve
+npm error
+npm error While resolving: @auth/mongodb-adapter@3.11.2
+npm error Found: mongodb@7.1.1
+npm error node_modules/mongodb
+npm error   mongodb@"^7.1.1" from the root project
+npm error   mongodb@"^7.0.0" from mongodb-memory-server-core@11.0.1
+npm error   node_modules/mongodb-memory-server-core
+npm error     mongodb-memory-server-core@"11.0.1" from mongodb-memory-server@11.0.1
+npm error     node_modules/mongodb-memory-server
+npm error       dev mongodb-memory-server@"^11.0.1" from the root project
+npm error
+npm error Could not resolve dependency:
+npm error peer mongodb@"^6" from @auth/mongodb-adapter@3.11.2
+npm error node_modules/@auth/mongodb-adapter
+npm error   @auth/mongodb-adapter@"^3.11.2" from the root project
+npm error
+npm error Conflicting peer dependency: mongodb@6.21.0
+npm error node_modules/mongodb
+npm error   peer mongodb@"^6" from @auth/mongodb-adapter@3.11.2
+npm error   node_modules/@auth/mongodb-adapter
+npm error     @auth/mongodb-adapter@"^3.11.2" from the root project
+npm error
+npm error Fix the upstream dependency conflict, or retry this command with --force or --legacy-peer-deps to accept an incorrect (and potentially broken) dependency resolution.
+npm error
+npm error
+npm error For a full report see:
+npm error C:\Users\dvoin\AppData\Local\npm-cache\_logs\2026-06-18T18_26_13_715Z-eresolve-report.txt
+npm error A complete log of this run can be found in: C:\Users\dvoin\AppData\Local\npm-cache\_logs\2026-06-18T18_26_13_715Z-debug-0.log

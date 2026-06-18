@@ -7,7 +7,7 @@ import { RouteBuilderSidebar } from "./RouteBuilderSidebar";
 import { RouteResultSidebar } from "./RouteResultSidebar";
 import { decodeRouteFromUrl } from "@/utils/routeCodec";
 import { useNavigation } from "@/contexts/NavigationContext";
-import { ToastProvider } from "@/contexts/ToastContext";
+
 
 export function RouteSidebarManager() {
   const searchParams = useSearchParams();
@@ -113,7 +113,7 @@ export function RouteSidebarManager() {
 
   if (isInitializing) {
     return (
-      <div className="absolute left-6 top-6 w-[400px] bg-white p-10 rounded-3xl shadow-float z-40 flex flex-col items-center gap-4">
+      <div className="fixed left-4 right-4 bottom-28 md:absolute md:left-6 md:right-auto md:top-6 md:bottom-auto md:w-[400px] bg-white p-8 md:p-10 rounded-3xl shadow-float z-40 flex flex-col items-center gap-4">
          <div className="w-12 h-12 border-4 border-brand-100 border-t-brand-500 rounded-full animate-spin" />
          <p className="text-slate-600 font-bold text-lg">Загружаем маршрут...</p>
       </div>
@@ -121,9 +121,7 @@ export function RouteSidebarManager() {
   }
 
   return (isRouteBuilt && routeParam) ? (
-    <ToastProvider>
-      <RouteResultSidebar isNavigationOpen={isMobileMenuOpen} />
-    </ToastProvider>
+    <RouteResultSidebar isNavigationOpen={isMobileMenuOpen} />
   ) : (
     <RouteBuilderSidebar isNavigationOpen={isMobileMenuOpen} />
   );

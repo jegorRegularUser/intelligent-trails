@@ -36,7 +36,7 @@ export function RouteCard({ route, onToggleFavorite, onRename, onDelete, onShare
   const [editedName, setEditedName] = useState(route.name);
 
   const handleOpen = () => {
-    router.push(`/?r=${route.encodedRoute}`);
+    router.push(`/${locale}/map?r=${route.encodedRoute}`);
   };
 
   const handleOpenInYandex = () => {

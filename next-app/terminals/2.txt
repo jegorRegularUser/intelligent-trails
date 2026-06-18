@@ -1,0 +1,23 @@
+---
+pid: 32840
+cwd: "E:\Sync\intelligent-trails\next-app"
+command: "cd \"E:\\Sync\\intelligent-trails\\next-app\"; $env:PORT=3001; npm run start 2>&1"
+started_at: 2026-06-18T15:39:12.544Z
+running_for_ms: 11870013 
+---
+
+> intelligent-trails@0.1.0 start
+> next start
+
+▲ Next.js 16.1.6
+- Local:         http://localhost:3001
+- Network:       http://172.19.0.1:3001
+
+✓ Starting...
+✓ Ready in 1172ms
+MongoDB connected successfully
+[auth][error] UntrustedHost: Host must be trusted. URL was: http://localhost:3000/api/auth/session. Read more at https://errors.authjs.dev#untrustedhost
+    at E:\Sync\intelligent-trails\next-app\.next\server\chunks\ssr\_9e0ea126._.js:418:52397
+    at fJ (E:\Sync\intelligent-trails\next-app\.next\server\chunks\ssr\_9e0ea126._.js:418:55062)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+MongoDB connected successfully
