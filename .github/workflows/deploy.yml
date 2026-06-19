@@ -1,50 +1,50 @@
-name: 🚀 Deploy to Beget
+name: Deploy to Beget VPS
 
 on:
   push:
-    branches:
-      - main
-    paths:
-      - 'php-frontend/**'
+    branches: [main, master]
   workflow_dispatch:
 
 jobs:
   deploy:
-    name: 🎉 Deploy PHP Frontend
     runs-on: ubuntu-latest
-    
+
     steps:
-      - name: 🚚 Get latest code
+      - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          fetch-depth: 2
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: next-app/package-lock.json
 
-      - name: 📋 Display changed files
+      - name: Install dependencies & Build
+        working-directory: next-app
         run: |
-          echo "Files changed in this commit:"
-          git diff --name-only HEAD^ HEAD || echo "No changes detected"
+          npm ci
+          npm run build
 
-      - name: 📂 Deploy via FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.6
+      - name: Deploy to server
+        uses: appleboy/scp-action@v0.1.7
         with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: ./php-frontend/
-          server-dir: ./dvoinydx.beget.tech/public_html/
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/node_modules/**
-            **/.vscode/**
-            **/.idea/**
-            **/tests/**
-            **/*.md
-            **/config.php
-            **/.env
-          dry-run: false
+          host: 5.35.86.145
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "next-app/"
+          target: "/root/intelligent-trails/"
+          strip_components: 1
+          rm: true
 
-      - name: ✅ Deployment Complete
-        run: |
-          echo "🎉 Deployment to Beget successful!"
-          echo "🌐 Site: http://dvoinydx.beget.tech"
+      - name: Restart application on server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 5.35.86.145
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /root/intelligent-trails/next-app
+            npm install --production
+            pm2 restart intelligent-trails || pm2 start npm --name "intelligent-trails" -- start
+            pm2 save
