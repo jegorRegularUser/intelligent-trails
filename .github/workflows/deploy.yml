@@ -17,19 +17,17 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
-          cache-dependency-path: next-app/package-lock.json
 
       - name: Install dependencies & Build
         working-directory: next-app
         run: |
-          npm ci
+          npm install
           npm run build
 
       - name: Deploy to server
         uses: appleboy/scp-action@v0.1.7
         with:
-          host: 5.35.86.145
+          host: ${{ secrets.SERVER_HOST }}
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: "next-app/"
@@ -37,10 +35,10 @@ jobs:
           strip_components: 1
           rm: true
 
-      - name: Restart application on server
+      - name: Install dependencies and restart app on server
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: 5.35.86.145
+          host: ${{ secrets.SERVER_HOST }}
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
