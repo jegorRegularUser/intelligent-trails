@@ -37,12 +37,11 @@ jobs:
           host: ***REMOVED-SSH-HOST***
           username: root
           password: ***REMOVED***
-          source: "next-app/"
+          source: "next-app"
           target: "/root/intelligent-trails/"
-          strip_components: 1
           rm: true
 
-      - name: Setup env and restart on server
+      - name: Setup environment and restart app
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ***REMOVED-SSH-HOST***
@@ -51,6 +50,7 @@ jobs:
           script: |
             cd /root/intelligent-trails/next-app
             
+            # Создаём .env.local на сервере
             cat > .env.local << 'EOF'
             ${{ secrets.ENV_FILE }}
             EOF
