@@ -18,10 +18,12 @@ jobs:
         with:
           node-version: 20
 
-      - name: Create .env.local file
+      - name: Create .env.local for build
         working-directory: next-app
         run: |
-          echo "${{ secrets.ENV_FILE }}" > .env.local
+          cat > .env.local << 'EOF'
+          ${{ secrets.ENV_FILE }}
+          EOF
 
       - name: Install dependencies & Build
         working-directory: next-app
@@ -34,20 +36,25 @@ jobs:
         with:
           host: 5.35.86.145
           username: root
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          password: zZ3U8x8s%QAo
           source: "next-app/"
           target: "/root/intelligent-trails/"
           strip_components: 1
           rm: true
 
-      - name: Install production dependencies and restart app
+      - name: Setup env and restart on server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: 5.35.86.145
           username: root
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          password: zZ3U8x8s%QAo
           script: |
             cd /root/intelligent-trails/next-app
+            
+            cat > .env.local << 'EOF'
+            ${{ secrets.ENV_FILE }}
+            EOF
+            
             npm install --production
             pm2 restart intelligent-trails || pm2 start npm --name "intelligent-trails" -- start
             pm2 save
