@@ -18,6 +18,11 @@ jobs:
         with:
           node-version: 20
 
+      - name: Create .env.local file
+        working-directory: next-app
+        run: |
+          echo "${{ secrets.ENV_FILE }}" > .env.local
+
       - name: Install dependencies & Build
         working-directory: next-app
         run: |
@@ -27,7 +32,7 @@ jobs:
       - name: Deploy to server
         uses: appleboy/scp-action@v0.1.7
         with:
-          host: ${{ secrets.SERVER_HOST }}
+          host: 5.35.86.145
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: "next-app/"
@@ -35,10 +40,10 @@ jobs:
           strip_components: 1
           rm: true
 
-      - name: Install dependencies and restart app on server
+      - name: Install production dependencies and restart app
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.SERVER_HOST }}
+          host: 5.35.86.145
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
