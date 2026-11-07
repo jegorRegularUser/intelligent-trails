@@ -72,6 +72,9 @@ describe('isRoadKind', () => {
     expect(isRoadKind('street')).toBe(true);
     expect(isRoadKind('road')).toBe(true);
     expect(isRoadKind('footway')).toBe(true);
+    expect(isRoadKind('residential')).toBe(true);
+    expect(isRoadKind('living_street')).toBe(true);
+    expect(isRoadKind('service')).toBe(true);
     expect(isRoadKind('cafe')).toBe(false);
     expect(isRoadKind(undefined)).toBe(false);
     expect(isRoadKind(null)).toBe(false);

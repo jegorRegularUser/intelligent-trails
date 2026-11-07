@@ -173,8 +173,36 @@ export const LANDMARK_KINDS: ReadonlySet<string> = new Set([
   'beach',
 ]);
 
-/** Дороги — отдельная ветка приоритетов, именованными объектами не считаются. */
-export const ROAD_KINDS: ReadonlySet<string> = new Set(['street', 'road', 'footway', 'path']);
+/**
+ * Дороги — отдельная ветка приоритетов, именованными объектами не считаются.
+ * Набор — типовые значения highway= из OSM: геокодеры (Nominatim/Photon)
+ * отдают дорогу любым из этих типов, не только 'street'.
+ */
+export const ROAD_KINDS: ReadonlySet<string> = new Set([
+  'motorway',
+  'motorway_link',
+  'trunk',
+  'trunk_link',
+  'primary',
+  'primary_link',
+  'secondary',
+  'secondary_link',
+  'tertiary',
+  'tertiary_link',
+  'unclassified',
+  'residential',
+  'living_street',
+  'service',
+  'pedestrian',
+  'footway',
+  'path',
+  'cycleway',
+  'steps',
+  'track',
+  'road',
+  'street',
+  'crossing',
+]);
 
 export function isRoadKind(kind: string | undefined | null): boolean {
   return !!kind && ROAD_KINDS.has(kind);
@@ -187,7 +215,7 @@ export function kindFromTags(tags: Record<string, string> | undefined): string |
   if (tags.tourism) return tags.tourism;
   if (tags.leisure) return tags.leisure;
   if (tags.historic) return tags.historic;
-  if (tags.shop) return tags.shop === 'mall' ? 'mall' : tags.shop;
+  if (tags.shop) return tags.shop;
   if (tags.railway === 'station' && tags.station === 'subway') return 'subway_station';
   if (tags.railway === 'station') return 'train_station';
   if (tags.highway === 'bus_stop') return 'bus_stop';

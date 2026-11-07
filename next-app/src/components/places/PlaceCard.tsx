@@ -60,6 +60,9 @@ export function PlaceCard({ card, reason, className }: PlaceCardProps) {
   const t = useTranslations('Places');
   const Icon = card.icon;
   const hasMetaLine = Boolean(card.address || card.distanceLabel);
+  // Подпись kind, дословно повторяющая имя («МЕСТО» над «Место») — шум.
+  const showKindLabel =
+    card.kindLabel !== '' && card.kindLabel.toLowerCase() !== card.displayName.trim().toLowerCase();
 
   return (
     <section
@@ -72,7 +75,7 @@ export function PlaceCard({ card, reason, className }: PlaceCardProps) {
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            {card.kindLabel ? (
+            {showKindLabel ? (
               <span className="text-xs font-medium uppercase tracking-wide text-slate-400">
                 {card.kindLabel}
               </span>

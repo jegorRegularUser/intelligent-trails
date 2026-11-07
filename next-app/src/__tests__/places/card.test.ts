@@ -114,6 +114,35 @@ describe('buildPlaceCard — приоритеты', () => {
     expect(card.kind).toBe('house');
   });
 
+  it('дорога нестандартного highway-типа (residential) тоже подчиняется правилу 5 м', () => {
+    const card = buildPlaceCard(
+      geo({ kind: 'house', address: 'ул. Ленина, 5', distanceMeters: 10 }),
+      [],
+      geo({ kind: 'residential', name: 'Проезд Вешних Вод', distanceMeters: 12 }),
+      { locale: 'ru' },
+    );
+    expect(card.kind).toBe('house');
+
+    const onRoad = buildPlaceCard(
+      geo({ kind: 'house', address: 'ул. Ленина, 5', distanceMeters: 10 }),
+      [],
+      geo({ kind: 'residential', name: 'Проезд Вешних Вод', distanceMeters: 4 }),
+      { locale: 'ru' },
+    );
+    expect(onRoad.kind).toBe('street');
+  });
+
+  it('дом без известной дистанции не становится fallback-«ближайшим»', () => {
+    const card = buildPlaceCard(
+      geo({ kind: 'postcode', tags: { 'addr:postcode': '101000' }, distanceMeters: 0 }),
+      [geo({ kind: 'house', osmId: 'w-no-dist' })],
+      undefined,
+      { locale: 'ru' },
+    );
+    // Дистанция неизвестна — «ближайший» недоказуем → честное «не знаем».
+    expect(card.kind).toBe('unknown');
+  });
+
   it('дубликат по osmId не рассматривается дважды', () => {
     const reversed = geo({ kind: 'cafe', name: 'Кофейня «Зима»', distanceMeters: 5, osmId: 'w1' });
     const card = buildPlaceCard(

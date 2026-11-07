@@ -199,10 +199,11 @@ function selectPrimary(candidates: Candidate[], locale: PlaceLocale): Selection 
   });
   if (addressed) return { candidate: addressed, kind: resolvedKind(addressed.source) ?? 'house' };
 
-  // 4a. Fallback — ближайший дом (любой дистанции, без ограничения 20 м).
+  // 4a. Fallback — ближайший дом (любой дистанции, без ограничения 20 м);
+  //     дом с неизвестной дистанцией «ближайшим» не доказуем → не берём.
   const house = findNearest(candidates, (c) => {
     const kind = resolvedKind(c.source);
-    return !isRoadKind(kind) && kind === 'house';
+    return !isRoadKind(kind) && kind === 'house' && Number.isFinite(c.distance);
   });
   if (house) return { candidate: house, kind: 'house' };
 
