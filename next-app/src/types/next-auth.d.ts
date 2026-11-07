@@ -2,6 +2,9 @@
 
 import 'next-auth';
 
+/** Способы входа в этом приложении (словарь SecuritySettings). */
+export type AuthProvider = 'local' | 'yandex' | 'google' | 'github';
+
 declare module 'next-auth' {
   interface Session {
     user: {
@@ -9,6 +12,8 @@ declare module 'next-auth' {
       email: string;
       name?: string | null;
       image?: string | null;
+      /** Чем вошёл юзер: прокидывается из jwt callback (account.provider). */
+      provider?: AuthProvider;
     };
   }
 
@@ -23,5 +28,7 @@ declare module 'next-auth' {
 declare module 'next-auth/jwt' {
   interface JWT {
     sub: string;
+    /** Сырое имя провайдера из account.provider ('credentials', 'yandex', ...). */
+    provider?: string;
   }
 }

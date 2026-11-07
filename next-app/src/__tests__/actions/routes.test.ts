@@ -95,6 +95,7 @@ describe('saveRouteAction', () => {
     });
 
     expect(result.success).toBe(true);
+    if (!result.success) throw new Error('saveRoute должен вернуть success');
     expect(result.routeId).toBe('route123');
     expect(result.isDuplicate).toBe(false);
     expect(routesRepo.saveRoute).toHaveBeenCalledWith(testUserId, expect.objectContaining({
@@ -121,13 +122,14 @@ describe('saveRouteAction', () => {
     });
 
     expect(result.success).toBe(true);
+    if (!result.success) throw new Error('saveRoute должен вернуть success');
     expect(result.isDuplicate).toBe(true);
     expect(result.routeId).toBe('existing123');
     expect(routesRepo.saveRoute).not.toHaveBeenCalled();
   });
 
   it('should return UNAUTHORIZED if not authenticated', async () => {
-    vi.mocked(auth).mockResolvedValue(null);
+    vi.mocked(auth).mockResolvedValue(null as never);
 
     const result = await saveRouteAction({ name: 'Test', encodedRoute: 'enc', tags: [] });
 
@@ -223,7 +225,7 @@ describe('getUserRoutesAction', () => {
   });
 
   it('should throw error if not authenticated', async () => {
-    vi.mocked(auth).mockResolvedValue(null);
+    vi.mocked(auth).mockResolvedValue(null as never);
 
     await expect(getUserRoutesAction()).rejects.toThrow('Unauthorized');
   });
@@ -244,7 +246,7 @@ describe('deleteRouteAction', () => {
   });
 
   it('should throw error if not authenticated', async () => {
-    vi.mocked(auth).mockResolvedValue(null);
+    vi.mocked(auth).mockResolvedValue(null as never);
 
     await expect(deleteRouteAction('route123')).rejects.toThrow('Unauthorized');
   });
@@ -301,7 +303,7 @@ describe('toggleFavoriteAction', () => {
   });
 
   it('should throw error if not authenticated', async () => {
-    vi.mocked(auth).mockResolvedValue(null);
+    vi.mocked(auth).mockResolvedValue(null as never);
 
     await expect(toggleFavoriteAction('route123')).rejects.toThrow('Unauthorized');
   });
@@ -339,7 +341,7 @@ describe('updateRouteAction', () => {
   });
 
   it('should throw error if not authenticated', async () => {
-    vi.mocked(auth).mockResolvedValue(null);
+    vi.mocked(auth).mockResolvedValue(null as never);
 
     await expect(
       updateRouteAction('route123', { name: 'New Name' })

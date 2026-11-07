@@ -20,7 +20,7 @@ export default async function ProfilePage() {
   }
 
   // Провайдер прокидывается через JWT при входе (jwt callback в auth config)
-  const provider = (session.user as { provider?: string }).provider ?? "local";
+  const provider = session.user.provider ?? "local";
 
   // Получаем настройки пользователя из базы данных
   const { getDb } = await import("@/lib/db/mongodb");
@@ -32,7 +32,7 @@ export default async function ProfilePage() {
   const user = {
     name: session.user.name || "Пользователь",
     email: session.user.email || "",
-    provider: provider as "local" | "google" | "github" | "yandex",
+    provider,
     locale: locale as "ru" | "en",
     avatarUrl: session.user.image || null,
     distanceUnit: (dbUser?.preferences?.distanceUnit as "km" | "mi") || "km",

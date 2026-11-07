@@ -1,9 +1,13 @@
 // scripts/test-mongodb.ts
 import { MongoClient } from 'mongodb';
 
-const uri = process.env.MONGODB_URI || "mongodb+srv://***REMOVED-ATLAS-CREDS***@***REMOVED-ATLAS-HOST***/intelligent-trails?retryWrites=true&w=majority&appName=Cluster0";
+const uri = process.env.MONGODB_URI;
+if (!uri) {
+  console.error('Задай MONGODB_URI в окружении');
+  process.exit(1);
+}
 
-async function testConnection() {
+async function testConnection(uri: string) {
   console.log('🔍 Тестирование подключения к MongoDB...\n');
   console.log('URI:', uri.replace(/:[^:@]+@/, ':****@')); // Скрываем пароль
   console.log('');
@@ -70,4 +74,4 @@ async function testConnection() {
   }
 }
 
-testConnection();
+testConnection(uri);

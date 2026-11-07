@@ -42,7 +42,7 @@ export async function updateNameAction(name: string) {
     });
 
     if (result.modifiedCount > 0) {
-      revalidatePath('/[locale]/profile', 'page');
+      revalidatePath('/profile', 'page');
       console.log('[updateNameAction] Success - revalidated path');
       return { success: true };
     }
@@ -123,7 +123,7 @@ export async function updateDistanceUnitAction(unit: 'km' | 'mi') {
     console.log('[updateDistanceUnitAction] Update result:', result.modifiedCount);
 
     if (result.modifiedCount > 0) {
-      revalidatePath('/[locale]/profile', 'page');
+      revalidatePath('/profile', 'page');
       console.log('[updateDistanceUnitAction] Success');
       return { success: true };
     }
@@ -165,7 +165,7 @@ export async function updateMapLocaleAction(useCustom: boolean, mapLocale?: 'ru'
     console.log('[updateMapLocaleAction] Update result:', result.modifiedCount);
 
     if (result.modifiedCount > 0) {
-      revalidatePath('/[locale]/profile', 'page');
+      revalidatePath('/profile', 'page');
       console.log('[updateMapLocaleAction] Success');
       return { success: true };
     }

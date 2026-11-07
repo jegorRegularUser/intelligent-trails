@@ -58,9 +58,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async session({ session, token }) {
       if (session.user && token.sub) {
         session.user.id = token.sub;
-        // Способ входа (yandex/credentials) запоминается в jwt callback
-        (session.user as { provider?: string }).provider =
-          (token as { provider?: string }).provider ?? 'credentials';
+        // Способ входа запоминается в jwt callback; 'credentials' мапится
+        // в 'local' — словарь UI (SecuritySettings: локальные проходят по паролю)
+        session.user.provider =
+          token.provider === 'credentials' || !token.provider
+            ? 'local'
+            : (token.provider as 'yandex' | 'google' | 'github');
 
         // Подтягиваем свежие данные из БД при каждом запросе сессии
         try {
@@ -84,7 +87,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       }
       // При самом входе запоминаем провайдера, чтобы профиль показывал верный способ входа
       if (account?.provider) {
-        (token as { provider?: string }).provider = account.provider;
+        token.provider = account.provider;
       }
 
       // При обновлении сессии (trigger === 'update'), обновляем данные в токене

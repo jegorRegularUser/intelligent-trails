@@ -78,7 +78,7 @@ describe('updateNameAction', () => {
   });
 
   it('should throw error if not authenticated', async () => {
-    vi.mocked(auth).mockResolvedValue(null);
+    vi.mocked(auth).mockResolvedValue(null as never);
 
     await expect(updateNameAction('New Name')).rejects.toThrow('Unauthorized');
   });
@@ -132,7 +132,7 @@ describe('updatePasswordAction', () => {
   });
 
   it('should throw error if not authenticated', async () => {
-    vi.mocked(auth).mockResolvedValue(null);
+    vi.mocked(auth).mockResolvedValue(null as never);
 
     await expect(
       updatePasswordAction('oldpass', 'newpass')
