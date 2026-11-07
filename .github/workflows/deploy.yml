@@ -34,9 +34,9 @@ jobs:
       - name: Deploy to server
         uses: appleboy/scp-action@v0.1.7
         with:
-          host: ***REMOVED-SSH-HOST***
-          username: root
-          password: ***REMOVED***
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          password: ${{ secrets.SSH_PASSWORD }}
           source: "next-app"
           target: "/root/intelligent-trails/"
           rm: true
@@ -44,9 +44,9 @@ jobs:
       - name: Setup environment and restart app
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ***REMOVED-SSH-HOST***
-          username: root
-          password: ***REMOVED***
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          password: ${{ secrets.SSH_PASSWORD }}
           script: |
             cd /root/intelligent-trails/next-app
             
