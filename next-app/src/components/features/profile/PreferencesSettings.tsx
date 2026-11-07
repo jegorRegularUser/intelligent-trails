@@ -2,13 +2,14 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { Dropdown, DropdownOption } from "@/components/ui/Dropdown";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/utils/cn";
 import { updateDistanceUnitAction, updateMapLocaleAction } from "@/actions/profile";
 import { useToast } from "@/contexts/ToastContext";
+import { LOCALE_COOKIE } from "@/lib/locale";
 import { signOut } from "next-auth/react";
 import { LogOut } from "lucide-react";
 
@@ -27,7 +28,6 @@ export const PreferencesSettings = ({
 }: PreferencesSettingsProps) => {
   const t = useTranslations("Profile");
   const router = useRouter();
-  const pathname = usePathname();
   const { showToast } = useToast();
 
   const [selectedUnit, setSelectedUnit] = useState<"km" | "mi">(distanceUnit);
@@ -39,9 +39,11 @@ export const PreferencesSettings = ({
 
   const [isSigningOut, setIsSigningOut] = useState(false);
 
+  // Локаль живёт в cookie (не в URL): меняем cookie и перезапрашиваем
+  // серверные компоненты, чтобы i18n подхватил новый язык.
   const handleLocaleChange = (newLocale: string) => {
-    const newPathname = pathname.replace(`/${currentLocale}`, `/${newLocale}`);
-    router.push(newPathname);
+    document.cookie = `${LOCALE_COOKIE}=${newLocale}; path=/; max-age=31536000; samesite=lax`;
+    router.refresh();
   };
 
   const handleUnitChange = async (newUnit: "km" | "mi") => {
@@ -104,7 +106,7 @@ export const PreferencesSettings = ({
   const handleSignOut = async () => {
     setIsSigningOut(true);
     try {
-      await signOut({ callbackUrl: `/${currentLocale}/signin` });
+      await signOut({ callbackUrl: "/signin" });
     } catch (error) {
       console.error("Error signing out:", error);
       showToast(t("signOutError"), "error");

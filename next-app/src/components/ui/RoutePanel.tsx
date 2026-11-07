@@ -26,11 +26,15 @@ export function RoutePanel({ children, className, header, isNavigationOpen = fal
     return () => window.removeEventListener("resize", syncViewport);
   }, []);
 
-  useEffect(() => {
+  // Сворачиваем панель при активации выбора точки на карте (мобильные) —
+  // подгон состояния во время рендера вместо эффекта
+  const [prevPickerActive, setPrevPickerActive] = useState(isMapPickerActive);
+  if (isMapPickerActive !== prevPickerActive) {
+    setPrevPickerActive(isMapPickerActive);
     if (isMapPickerActive && isMobile) {
       setIsExpanded(false);
     }
-  }, [isMapPickerActive, isMobile]);
+  }
 
   const handleToggle = useCallback((event: MouseEvent<HTMLElement>) => {
     if (!isMobile) return;

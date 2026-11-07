@@ -52,25 +52,26 @@ export function WaypointItem({
   // Локальное состояние для редактирования (черновик)
   const [draft, setDraft] = useState<Partial<WaypointData> & { coords?: any }>({});
 
-  // Сброс черновика при открытии/закрытии редактора
-  useEffect(() => {
+  // Сброс черновика при открытии редактора — подгон состояния во время рендера
+  // (паттерн из доков React вместо эффекта, чтобы не было каскадных рендеров)
+  const [prevEditing, setPrevEditing] = useState(isEditing);
+  if (isEditing !== prevEditing) {
+    setPrevEditing(isEditing);
     if (isEditing) {
       setDraft({});
     }
-  }, [isEditing]);
+  }
 
-  // Синхронизация с внешними изменениями (например, выбор с карты)
-  useEffect(() => {
-    if (isEditing && data.coords && !draft.coords) {
-      // Если пришли координаты извне (с карты), обновляем черновик
-      setDraft(prev => ({
-        ...prev,
-        coords: data.coords,
-        value: data.value,
-        type: data.type
-      }));
-    }
-  }, [data.coords, data.value, data.type, isEditing, draft.coords]);
+  // Синхронизация с внешними изменениями (например, выбор с карты):
+  // координаты пришли извне, а в черновике их ещё нет
+  if (isEditing && data.coords && !draft.coords) {
+    setDraft(prev => ({
+      ...prev,
+      coords: data.coords,
+      value: data.value,
+      type: data.type
+    }));
+  }
 
   /**
    * ЛОГИКА ЗАГОЛОВКОВ (Согласно ТЗ)

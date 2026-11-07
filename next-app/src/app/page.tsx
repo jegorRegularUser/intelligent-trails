@@ -4,20 +4,15 @@ import { TutorialSection } from '@/components/landing/TutorialSection';
 import { CTASection } from '@/components/landing/CTASection';
 import { Footer } from '@/components/landing/Footer';
 
-export default async function LandingPage({
-  params
-}: {
-  params: Promise<{ locale: string }>;
-}) {
-  const { locale } = await params;
+export default async function LandingPage() {
 
   return (
     <main className="min-h-screen">
-      <HeroSection locale={locale} />
+      <HeroSection />
       <FeaturesSection />
       <TutorialSection />
-      <CTASection locale={locale} />
-      <Footer locale={locale} />
+      <CTASection />
+      <Footer />
     </main>
   );
 }

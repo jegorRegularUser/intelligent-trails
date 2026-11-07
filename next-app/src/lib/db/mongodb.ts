@@ -1,12 +1,8 @@
 // src/lib/db/mongodb.ts
-
+// Клиент создаётся лениво при первом обращении, а не на этапе импорта модуля:
+// иначе `next build` (сборка страниц без БД) падает без MONGODB_URI.
 import { MongoClient, Db } from 'mongodb';
 
-if (!process.env.MONGODB_URI) {
-  throw new Error('MONGODB_URI не найден в .env.local');
-}
-
-const uri = process.env.MONGODB_URI;
 const options = {
   maxPoolSize: 10,
   minPoolSize: 2,
@@ -17,39 +13,17 @@ const options = {
   retryReads: true,
 };
 
-let client: MongoClient;
-let clientPromise: Promise<MongoClient>;
-
-if (process.env.NODE_ENV === 'development') {
-  // В dev режиме используем глобальную переменную для hot reload
-  let globalWithMongo = global as typeof globalThis & {
-    _mongoClientPromise?: Promise<MongoClient>;
-    _mongoClient?: MongoClient;
-  };
-
-  if (!globalWithMongo._mongoClientPromise) {
-    client = new MongoClient(uri, options);
-    globalWithMongo._mongoClient = client;
-    globalWithMongo._mongoClientPromise = client.connect()
-      .then((client) => {
-        console.log('MongoDB connected successfully');
-        return client;
-      })
-      .catch((error) => {
-        console.error('MongoDB connection error:', error.message);
-        // Очищаем промис при ошибке, чтобы можно было переподключиться
-        globalWithMongo._mongoClientPromise = undefined;
-        throw error;
-      });
+function connect(): Promise<MongoClient> {
+  const uri = process.env.MONGODB_URI;
+  if (!uri) {
+    throw new Error('MONGODB_URI не найден в .env.local');
   }
-  clientPromise = globalWithMongo._mongoClientPromise;
-} else {
-  // В production создаем новый клиент
-  client = new MongoClient(uri, options);
-  clientPromise = client.connect()
-    .then((client) => {
+  const client = new MongoClient(uri, options);
+  return client
+    .connect()
+    .then((connected) => {
       console.log('MongoDB connected successfully');
-      return client;
+      return connected;
     })
     .catch((error) => {
       console.error('MongoDB connection error:', error.message);
@@ -57,9 +31,37 @@ if (process.env.NODE_ENV === 'development') {
     });
 }
 
+if (process.env.NODE_ENV === 'development') {
+  // В dev режиме используем глобальную переменную для hot reload
+  const globalWithMongo = global as typeof globalThis & {
+    _mongoClientPromise?: Promise<MongoClient>;
+  };
+
+  if (!globalWithMongo._mongoClientPromise) {
+    globalWithMongo._mongoClientPromise = connect().catch(() => {
+      // Очищаем промис при ошибке, чтобы можно было переподключиться
+      globalWithMongo._mongoClientPromise = undefined;
+      throw new Error('MongoDB connection failed');
+    });
+  }
+}
+
+let clientPromise: Promise<MongoClient> | null = null;
+
+function getClientPromise(): Promise<MongoClient> {
+  if (process.env.NODE_ENV === 'development') {
+    return (global as typeof globalThis & { _mongoClientPromise?: Promise<MongoClient> })
+      ._mongoClientPromise!;
+  }
+  if (!clientPromise) {
+    clientPromise = connect();
+  }
+  return clientPromise;
+}
+
 export async function getDb(): Promise<Db> {
   try {
-    const client = await clientPromise;
+    const client = await getClientPromise();
     return client.db('intelligent-trails'); // Имя БД
   } catch (error: any) {
     console.error('Failed to get database:', error.message);
@@ -67,4 +69,10 @@ export async function getDb(): Promise<Db> {
   }
 }
 
-export default clientPromise;
+export function getClientPromiseForAuth(): Promise<MongoClient> {
+  // Отложенный промис: MongoDBAdapter создаётся на уровне модуля при сборке,
+  // а реальное подключение должно стартовать только при первом обращении.
+  return new Promise<MongoClient>((resolve, reject) => {
+    process.nextTick(() => getClientPromise().then(resolve, reject));
+  });
+}

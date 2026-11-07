@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { NextIntlClientProvider } from 'next-intl';
-import { getMessages } from 'next-intl/server';
+import { getLocale, getMessages } from 'next-intl/server';
 import { Navigation } from '@/components/layout/Navigation';
 import { NavigationProvider } from '@/contexts/NavigationContext';
 import { PreferencesProvider } from '@/contexts/PreferencesContext';
@@ -10,7 +10,7 @@ import { ToastProvider } from '@/contexts/ToastContext';
 import { auth } from '@/lib/auth/config';
 import { getDb } from '@/lib/db/mongodb';
 import { ObjectId } from 'mongodb';
-import "../globals.css";
+import "./globals.css";
 
 const inter = Inter({ subsets: ["latin", "cyrillic"] });
 
@@ -23,13 +23,11 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({
-  children,
-  params
+  children
 }: Readonly<{
   children: React.ReactNode;
-  params: Promise<{ locale: string }>;
 }>) {
-  const { locale } = await params;
+  const locale = await getLocale();
   const messages = await getMessages();
   const session = await auth();
   const isAuthenticated = !!session?.user;
@@ -69,7 +67,7 @@ export default async function RootLayout({
                 mapLocale={mapLocale}
               >
                 <NavigationProvider>
-                  <Navigation locale={locale} isAuthenticated={isAuthenticated} />
+                  <Navigation isAuthenticated={isAuthenticated} />
                   {children}
                 </NavigationProvider>
               </PreferencesProvider>

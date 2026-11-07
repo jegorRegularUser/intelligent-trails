@@ -5,11 +5,7 @@ import Image from 'next/image';
 import { useTranslations } from 'next-intl';
 import { FolderGit2, Mail, MapPin } from 'lucide-react';
 
-interface FooterProps {
-  locale: string;
-}
-
-export function Footer({ locale }: FooterProps) {
+export function Footer() {
   const t = useTranslations('Footer');
   const currentYear = new Date().getFullYear();
 
@@ -51,17 +47,17 @@ export function Footer({ locale }: FooterProps) {
             <h3 className="text-white font-bold mb-4">{t('navigation')}</h3>
             <ul className="space-y-2">
               <li>
-                <Link href={`/${locale}/map`} className="hover:text-brand-400 transition-colors">
+                <Link href={`/map`} className="hover:text-brand-400 transition-colors">
                   {t('map')}
                 </Link>
               </li>
               <li>
-                <Link href={`/${locale}/history`} className="hover:text-brand-400 transition-colors">
+                <Link href={`/history`} className="hover:text-brand-400 transition-colors">
                   {t('history')}
                 </Link>
               </li>
               <li>
-                <Link href={`/${locale}/profile`} className="hover:text-brand-400 transition-colors">
+                <Link href={`/profile`} className="hover:text-brand-400 transition-colors">
                   {t('profile')}
                 </Link>
               </li>
@@ -78,12 +74,12 @@ export function Footer({ locale }: FooterProps) {
                 </a>
               </li>
               <li>
-                <Link href={`/${locale}/signin`} className="hover:text-brand-400 transition-colors">
+                <Link href={`/signin`} className="hover:text-brand-400 transition-colors">
                   {t('signIn')}
                 </Link>
               </li>
               <li>
-                <Link href={`/${locale}/signup`} className="hover:text-brand-400 transition-colors">
+                <Link href={`/signup`} className="hover:text-brand-400 transition-colors">
                   {t('signUp')}
                 </Link>
               </li>

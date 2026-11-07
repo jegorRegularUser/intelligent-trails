@@ -5,11 +5,7 @@ import { useTranslations } from 'next-intl';
 import { ArrowRight, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 
-interface CTASectionProps {
-  locale: string;
-}
-
-export function CTASection({ locale }: CTASectionProps) {
+export function CTASection() {
   const t = useTranslations('Landing.cta');
 
   return (
@@ -34,7 +30,7 @@ export function CTASection({ locale }: CTASectionProps) {
           {t('subtitle')}
         </p>
 
-        <Link href={`/${locale}/map`}>
+        <Link href={`/map`}>
           <Button
             variant="outline"
             size="lg"

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 import dynamic from 'next/dynamic';
 
 const RouteMap = dynamic(
@@ -16,12 +16,11 @@ function MapLoadingPlaceholder() {
   );
 }
 
-export function RouteMapLoader() {
-  const [mounted, setMounted] = useState(false);
+const noopSubscribe = () => () => {};
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+export function RouteMapLoader() {
+  // Гидрационный гард без setState-в-эффекте: false на сервере, true на клиенте
+  const mounted = useSyncExternalStore(noopSubscribe, () => true, () => false);
 
   if (!mounted) {
     return <MapLoadingPlaceholder />;

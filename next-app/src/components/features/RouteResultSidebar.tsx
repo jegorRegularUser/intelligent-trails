@@ -165,7 +165,6 @@ export function RouteResultSidebar({ isNavigationOpen = false }: RouteResultSide
     <LoginRequiredModal
       isOpen={showLoginModal}
       onClose={() => setShowLoginModal(false)}
-      locale={locale}
     />
     <RoutePanel
       isNavigationOpen={isNavigationOpen}
@@ -344,7 +343,7 @@ export function RouteResultSidebar({ isNavigationOpen = false }: RouteResultSide
                 onMapPickerClick={() => setMapPickerActive(true, wp.id)}
                 onSave={async (u) => {
                   let updatedWaypoints = waypoints;
-                  let newMapPoints = [...mapPoints];
+                  const newMapPoints = [...mapPoints];
 
                   // Обновляем данные точки
                   if (u.coords) {

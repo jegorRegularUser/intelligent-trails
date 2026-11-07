@@ -25,7 +25,7 @@ export function EmptyState() {
       <Button
         variant="primary"
         size="lg"
-        onClick={() => router.push(`/${locale}/map`)}
+        onClick={() => router.push(`/map`)}
       >
         {t("createFirstRoute")}
       </Button>

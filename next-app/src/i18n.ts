@@ -1,20 +1,27 @@
 // src/i18n.ts
-import { notFound } from 'next/navigation';
+// Локаль НЕ живёт в URL: URL маршрута должен быть каноничным для шеринга
+// ("/map?r=..."), а язык читается из cookie + Accept-Language при первом визите.
+// Cookie ставит proxy.ts (сервер, первый визит) и PreferencesSettings (свитчер).
+import { cookies, headers } from 'next/headers';
 import { getRequestConfig } from 'next-intl/server';
+import { LOCALE_COOKIE, defaultLocale, isLocale, pickLocaleFromAcceptLanguage, type Locale } from '@/lib/locale';
 
-export const locales = ['ru', 'en'];
+export { locales, defaultLocale, LOCALE_COOKIE, isLocale, pickLocaleFromAcceptLanguage } from '@/lib/locale';
+export type { Locale } from '@/lib/locale';
 
-// Теперь next-intl передает requestLocale, который является Promise!
-export default getRequestConfig(async ({ requestLocale }) => {
-  // 1. Обязательно "распаковываем" Promise
-  const locale = await requestLocale;
+export default getRequestConfig(async () => {
+  const cookieStore = await cookies();
+  const cookieLocale = cookieStore.get(LOCALE_COOKIE)?.value;
 
-  // 2. Проверяем валидность языка
-  if (!locale || !locales.includes(locale as any)) {
-    notFound();
+  let locale: Locale;
+  if (isLocale(cookieLocale)) {
+    locale = cookieLocale;
+  } else {
+    // Первый визит без cookie — смотрим на язык браузера (без редиректов)
+    const headerStore = await headers();
+    locale = pickLocaleFromAcceptLanguage(headerStore.get('accept-language') ?? '');
   }
 
-  // 3. Возвращаем правильный объект
   return {
     locale,
     messages: (await import(`../messages/${locale}.json`)).default

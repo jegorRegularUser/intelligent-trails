@@ -3,13 +3,12 @@ import { getUserRoutesAction } from '@/actions/routes';
 import { redirect } from 'next/navigation';
 import { HistoryPageClient } from '@/components/features/history/HistoryPageClient';
 
-export default async function HistoryPage({ params }: { params: Promise<{ locale: string }> }) {
-  const { locale } = await params;
+export default async function HistoryPage() {
   const session = await auth();
 
   // Если не авторизован - редирект на страницу входа
   if (!session?.user) {
-    redirect(`/${locale}/signin`);
+    redirect("/signin");
   }
 
   // Загружаем последние 3 маршрута

@@ -9,10 +9,9 @@ import { Button } from "@/components/ui/Button";
 interface LoginRequiredModalProps {
   isOpen: boolean;
   onClose: () => void;
-  locale: string;
 }
 
-export function LoginRequiredModal({ isOpen, onClose, locale }: LoginRequiredModalProps) {
+export function LoginRequiredModal({ isOpen, onClose }: LoginRequiredModalProps) {
   const t = useTranslations("LoginRequiredModal");
 
   return (
@@ -35,12 +34,12 @@ export function LoginRequiredModal({ isOpen, onClose, locale }: LoginRequiredMod
 
       <ModalFooter className="flex-col gap-3 !justify-stretch">
         <div className="flex flex-col sm:flex-row gap-3 w-full">
-          <Link href={`/${locale}/signup`} className="flex-1 w-full">
+          <Link href={`/signup`} className="flex-1 w-full">
             <Button variant="outline" size="md" leftIcon={<UserPlus size={18} />} className="w-full">
               {t("signUpButton")}
             </Button>
           </Link>
-          <Link href={`/${locale}/signin`} className="flex-1 w-full">
+          <Link href={`/signin`} className="flex-1 w-full">
             <Button variant="primary" size="md" leftIcon={<LogIn size={18} />} className="w-full">
               {t("signInButton")}
             </Button>

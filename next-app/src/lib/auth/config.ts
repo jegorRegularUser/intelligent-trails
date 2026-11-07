@@ -4,13 +4,13 @@ import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import YandexProvider from 'next-auth/providers/yandex';
 import { MongoDBAdapter } from '@auth/mongodb-adapter';
-import clientPromise from '@/lib/db/mongodb';
+import { getClientPromiseForAuth } from '@/lib/db/mongodb';
 import { usersRepo } from '@/lib/db/repositories/users';
 import { getDb } from '@/lib/db/mongodb';
 import { ObjectId } from 'mongodb';
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
-  adapter: MongoDBAdapter(clientPromise, {
+  adapter: MongoDBAdapter(getClientPromiseForAuth(), {
     databaseName: 'intelligent-trails',
   }),
   providers: [
@@ -58,6 +58,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async session({ session, token }) {
       if (session.user && token.sub) {
         session.user.id = token.sub;
+        // Способ входа (yandex/credentials) запоминается в jwt callback
+        (session.user as { provider?: string }).provider =
+          (token as { provider?: string }).provider ?? 'credentials';
 
         // Подтягиваем свежие данные из БД при каждом запросе сессии
         try {
@@ -75,9 +78,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       }
       return session;
     },
-    async jwt({ token, user, trigger }) {
+    async jwt({ token, user, account, trigger }) {
       if (user) {
         token.sub = user.id;
+      }
+      // При самом входе запоминаем провайдера, чтобы профиль показывал верный способ входа
+      if (account?.provider) {
+        (token as { provider?: string }).provider = account.provider;
       }
 
       // При обновлении сессии (trigger === 'update'), обновляем данные в токене
@@ -100,6 +107,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     },
   },
   pages: {
-    signIn: '/auth/signin',
+    signIn: '/signin',
   },
 });

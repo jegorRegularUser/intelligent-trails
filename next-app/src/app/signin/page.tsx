@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { signIn } from 'next-auth/react';
-import { useState, use } from 'react';
+import { useState } from 'react';
 import { Mail, Lock } from 'lucide-react';
 import { validateSignInForm } from '@/utils/authValidation';
 
@@ -15,8 +15,7 @@ type FieldErrors = {
   general?: string;
 };
 
-export default function SignInPage({ params }: { params: Promise<{ locale: string }> }) {
-  const { locale } = use(params);
+export default function SignInPage() {
   const t = useTranslations('Auth');
   const [isLoading, setIsLoading] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -37,7 +36,7 @@ export default function SignInPage({ params }: { params: Promise<{ locale: strin
     setIsLoading(true);
     setFieldErrors({});
     try {
-      await signIn(provider, { callbackUrl: `/${locale}/profile` });
+      await signIn(provider, { callbackUrl: `/profile` });
     } catch (error) {
       console.error('OAuth error:', error);
       setFieldErrors({ general: t('errorOAuth') });
@@ -74,7 +73,7 @@ export default function SignInPage({ params }: { params: Promise<{ locale: strin
         setFieldErrors({ general: t('errorSignIn') });
         setIsLoading(false);
       } else {
-        window.location.href = `/${locale}/profile`;
+        window.location.href = `/profile`;
       }
     } catch {
       setFieldErrors({ general: t('errorSignIn') });
@@ -87,7 +86,7 @@ export default function SignInPage({ params }: { params: Promise<{ locale: strin
       <div className="w-full max-w-md">
         <div className="bg-white rounded-3xl shadow-xl p-8 space-y-6">
           <div className="text-center space-y-2">
-            <Link href={`/${locale}`} className="inline-block">
+            <Link href="/" className="inline-block">
               <h1 className="text-3xl font-bold text-slate-900 hover:text-brand-600 transition-colors">
                 Intelligent Trails
               </h1>
@@ -160,7 +159,7 @@ export default function SignInPage({ params }: { params: Promise<{ locale: strin
 
           <div className="text-center text-sm text-slate-600">
             {t('noAccount')}{' '}
-            <Link href={`/${locale}/signup`} className="text-brand-600 hover:text-brand-700 font-medium">
+            <Link href={`/signup`} className="text-brand-600 hover:text-brand-700 font-medium">
               {t('signUpLink')}
             </Link>
           </div>

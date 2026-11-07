@@ -95,7 +95,9 @@ describe('routeCodec v2', () => {
     const alts = decoded.waypoints[0].alternatives;
     expect(alts).toBeTruthy();
     expect(alts).toHaveLength(2);
-    expect(alts[0].name).toMatch(/^Вариант 1/);
-    expect(alts[0].coordinates).toEqual(expect.any(Array));
+    // Имена альтернатив переживают round-trip; плейсхолдер «Вариант N»
+    // подставляется только когда имя отсутствует (routeCodec.ts:113)
+    expect(alts![0].name).toBe('Alt1');
+    expect(alts![0].coordinates).toEqual(expect.any(Array));
   });
 });

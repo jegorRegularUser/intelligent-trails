@@ -5,11 +5,7 @@ import { useTranslations } from 'next-intl';
 import { ArrowRight, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 
-interface HeroSectionProps {
-  locale: string;
-}
-
-export function HeroSection({ locale }: HeroSectionProps) {
+export function HeroSection() {
   const t = useTranslations('Landing.hero');
 
   const scrollToTutorial = () => {
@@ -40,7 +36,7 @@ export function HeroSection({ locale }: HeroSectionProps) {
         </p>
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <Link href={`/${locale}/map`}>
+          <Link href={`/map`}>
             <Button variant="primary" size="lg" className="text-lg px-8 py-4">
               {t('cta')}
               <ArrowRight size={20} className="ml-2" />

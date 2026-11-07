@@ -21,7 +21,7 @@ interface HistoryPageClientProps {
 function HistoryPageContent({ initialRoutes }: HistoryPageClientProps) {
   const t = useTranslations("History");
   const { showToast } = useToast();
-  const { locale } = usePreferences();
+  const { distanceUnit } = usePreferences();
 
   const [routes, setRoutes] = useState<SavedRoute[]>(
     initialRoutes.map((r) => ({
@@ -150,7 +150,7 @@ function HistoryPageContent({ initialRoutes }: HistoryPageClientProps) {
   const handleShare = (id: string) => {
     const route = routes.find((r) => r.id === id);
     if (route) {
-      const url = `${window.location.origin}/${locale}/map?r=${route.encodedRoute}`;
+      const url = `${window.location.origin}/map?r=${route.encodedRoute}`;
       navigator.clipboard.writeText(url);
       showToast(t("linkCopied"), "success");
     }

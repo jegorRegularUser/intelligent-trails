@@ -1,4 +1,4 @@
-import { getTranslations } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 import { Avatar } from "@/components/ui/Avatar";
 import { ProfileSettings } from "@/components/features/profile/ProfileSettings";
 import { SecuritySettings } from "@/components/features/profile/SecuritySettings";
@@ -7,8 +7,8 @@ import { auth } from "@/lib/auth/config";
 import { redirect } from "next/navigation";
 
 
-export default async function ProfilePage({ params }: { params: Promise<{ locale: string }> }) {
-  const { locale } = await params;
+export default async function ProfilePage() {
+  const locale = await getLocale();
   const t = await getTranslations("Profile");
 
   // Получаем сессию пользователя
@@ -16,12 +16,11 @@ export default async function ProfilePage({ params }: { params: Promise<{ locale
 
   // Если не авторизован - редирект на страницу входа
   if (!session?.user) {
-    redirect(`/${locale}/signin`);
+    redirect("/signin");
   }
 
-  // Определяем provider: если есть image (аватар от OAuth), значит OAuth, иначе local
-  // Это упрощенная эвристика, но работает для большинства случаев
-  const provider = session.user.image ? "google" : "local";
+  // Провайдер прокидывается через JWT при входе (jwt callback в auth config)
+  const provider = (session.user as { provider?: string }).provider ?? "local";
 
   // Получаем настройки пользователя из базы данных
   const { getDb } = await import("@/lib/db/mongodb");
