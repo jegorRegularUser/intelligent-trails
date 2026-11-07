@@ -111,7 +111,8 @@ id уникальны; тексты непустые на обоих языка�
 
 `indoorBias` **0.6** — остановки крытые, но переходы между ними уличные.
 `shadePriority` **0.3** — тень приятна, но кофейня и так крыша. `stayMinutes`:
-cafe **30** (главная сидячая), restaurant 35, прочие 10–25.
+cafe **30** (главная сидячая), restaurant 35, cinema 120 (сеанс есть сеанс),
+bar 30, прочие 10–25.
 
 ### 3.3 evening — «Вечерняя»
 
@@ -238,7 +239,8 @@ cafe/restaurant/bar 30–35, park/viewpoint 5.
 
 `fetchWeatherContext(lat, lng, opts?) → Promise<WeatherContext | null>`:
 `current=temperature_2m,precipitation,weather_code,is_day` + `hourly=` те же
-поля на 24 ч, `timezone=auto`. Любая ошибка (сеть, не-2xx, кривой JSON,
+поля на 2 суток (`forecast_days=2` — супермножество требуемых 24 ч, запас на
+сдвиг часового пояса), `timezone=auto`. Любая ошибка (сеть, не-2xx, кривой JSON,
 пустые поля) → **null**, функция не бросает (PRODUCT.md: «честная деградация»).
 
 ```ts
