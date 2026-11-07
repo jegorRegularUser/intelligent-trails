@@ -340,5 +340,11 @@
     "recommendation": "We recommend using the app for routes within a city (up to 30-50 km).",
     "cancelButton": "Change Route",
     "proceedButton": "Build Anyway"
+  },
+  "Places": {
+    "open": "Open",
+    "closed": "Closed",
+    "hoursUnknown": "Hours unknown",
+    "whyTitle": "Why here"
   }
 }

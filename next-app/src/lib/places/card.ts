@@ -106,10 +106,6 @@ function resolvedKind(r: ReverseGeocodeResult): string | undefined {
   return undefined;
 }
 
-function byDistance(a: Candidate, b: Candidate): number {
-  return a.distance - b.distance;
-}
-
 function findNearest(list: Candidate[], predicate: (c: Candidate) => boolean): Candidate | undefined {
   let best: Candidate | undefined;
   for (const candidate of list) {
