@@ -1,39 +1,64 @@
 # Intelligent Trails
 
+Генератор прогулок: человек говорит, сколько у него времени и какое настроение —
+сайт строит готовый пешеходный маршрут (петлю или A→B) с осмысленными остановками,
+честным таймингом и учётом контекста (погода, тень, вечер). Продуктовая логика
+и принципы — в [docs/PRODUCT.md](docs/PRODUCT.md).
+
+## Структура репозитория
+
+```
+next-app/    — единственное живое приложение (Next.js 16, App Router)
+docs/        — продуктовая документация
+.github/     — CI (build+lint+tests) и деплой на VPS
+```
+
+Исторические поколения проекта (PHP-дипломная версия, FastAPI-прокси, Vite-SPA)
+удалены — они жили в `backend/`, `php-frontend/`, `frontend/` до фазы очистки.
+
 ## Локальный запуск
 
-### Backend (FastAPI)
-
-1. Установите зависимости:
 ```bash
-cd backend
-pip install -r requirements.txt
+cd next-app
+cp .env.example .env.local   # заполни ключи
+npm install
+npm run dev                  # http://localhost:3000
 ```
 
-2. Создайте файл `.env` в папке `backend/`:
-```
-YANDEX_API_KEY=ваш_ключ_geocoder
-YANDEX_SUGGEST_API_KEY=ваш_ключ_suggest
-PORT=8000
-```
+### Переменные окружения
 
-3. Получение API ключей Yandex:
-   - Перейдите на https://developer.tech.yandex.ru/
-   - Зарегистрируйтесь или войдите в аккаунт
-   - Создайте новое приложение в разделе "API Геокодера" → получите `YANDEX_API_KEY`
-   - Создайте приложение в разделе "API Геосаджеста" → получите `YANDEX_SUGGEST_API_KEY`
-   - Вставьте полученные ключи в файл `.env`
+| Переменная | Зачем |
+|---|---|
+| `MONGODB_URI` | MongoDB (маршруты, юзеры, NextAuth-адаптер) |
+| `AUTH_SECRET` | Секрет NextAuth v5 (`openssl rand -base64 32`) |
+| `YANDEX_CLIENT_ID` / `YANDEX_CLIENT_SECRET` | OAuth Яндекс |
+| `NEXT_PUBLIC_YANDEX_API_KEY` | JS API Яндекс.Карт (отрисовка карты) |
+| `NEXT_PUBLIC_YANDEX_SUGGEST_API_KEY` | Подсказки адресов (опционально) |
 
-4. Запустите сервер:
-(все также находясь в /backend)
+## Стек
+
+- **Next.js 16** (App Router, React Compiler, Server Actions) + React 19
+- **Tailwind CSS 4**, zustand, next-intl (ru/en — локаль в cookie, не в URL)
+- **MongoDB** (сессии, сохранённые маршруты), next-auth v5 (Yandex OAuth + credentials)
+- Карта: Яндекс.Карты JS API (миграция на MapLibre + собственные тайлы — в планах)
+
+## Команды
+
 ```bash
-python main.py
+npm run dev      # разработка
+npm run build    # production-сборка
+npm run lint     # eslint
+npm test         # vitest (юнит-тесты)
 ```
 
-Backend будет доступен на http://localhost:8000
+Интеграционный тест Overpass (`*.integration.test.ts`) ходит в живую сеть —
+в CI он исключён, запускается локально вручную: `npx vitest run`.
 
-### Frontend (PHP)
+## Дорожная карта
 
-1. После установки mysql, импортируйте базу данных db.sql
-
-2. Запустите PHP сервер
+1. ✅ Фаза 0 — уборка легаси, cookie-локаль, CI, кредиты вне репозитория
+2. Geo-provider слой: облачные источники (любой город) + пакеты регионов как ускоритель
+3. Движок прогулки v2: серверный роутинг, матрица расстояний, петли, бюджет времени
+4. Карточки мест: reverse-geocode с landmark-обогащением, viewport-загрузка POI
+5. Формула прогулки: сценарии-архетипы, тень/зелень (ESA WorldCover), погода
+6. Карта: MapLibre + собственные векторные тайлы
