@@ -159,7 +159,8 @@ describe('ORS matrix: чанкинг ≤40 источников + ВСЕ цел�
     return createFakeFetch((url, init) => {
       const body = parseBody(init);
       const sources = body.sources as number[];
-      const targets = body.targets as number[];
+      // ORS ждёт destinations, не targets (живой запрос: с 'targets' — код 6011)
+      const targets = body.destinations as number[];
       const locations = body.locations as number[][];
       calls.push({ url, sources, targets, locations });
 

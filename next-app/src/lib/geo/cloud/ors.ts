@@ -232,7 +232,9 @@ export class OrsRoutingAdapter {
     const body = {
       locations,
       sources: Array.from({ length: sourceCount }, (_, index) => index),
-      targets: Array.from({ length: targetCount }, (_, index) => sourceCount + index),
+      // В API ORS параметр называется destinations, не targets (проверено
+      // живым запросом: с 'targets' ORS отвечает 6011 Unknown parameter)
+      destinations: Array.from({ length: targetCount }, (_, index) => sourceCount + index),
       metrics: ['distance', 'duration'],
     };
 
