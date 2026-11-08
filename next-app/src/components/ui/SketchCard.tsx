@@ -63,8 +63,11 @@ export function SketchCard({ children, sketch = false, seed = 7, className }: Sk
     );
   }
 
+  // Формула стиля (фидбек владельца): сплошная светло-зелёная заливка-полигон
+  // как фон + обводка тёмно-зелёным «рисованным» контуром, слегка смещённым
+  // относительно фона. Дрожание контура — feTurbulence+feDisplacementMap.
   return (
-    <div className={cn("relative rounded-3xl bg-white", className)}>
+    <div className={cn("relative rounded-2xl", className)} style={{ backgroundColor: "#eaf5e4" }}>
       <div className="pointer-events-none absolute inset-0 z-10" aria-hidden>
         <svg
           className="h-full w-full overflow-visible"
@@ -75,31 +78,31 @@ export function SketchCard({ children, sketch = false, seed = 7, className }: Sk
             <filter id={filterId}>
               <feTurbulence
                 type="fractalNoise"
-                baseFrequency="0.06"
+                baseFrequency="0.05"
                 numOctaves="2"
                 seed={seed}
                 result="noise"
               />
-              <feDisplacementMap in="SourceGraphic" in2="noise" scale="2.5" />
+              <feDisplacementMap in="SourceGraphic" in2="noise" scale="2.2" />
             </filter>
           </defs>
+          {/* Фон-полигон: светло-зелёная сплошная заливка, свой контур */}
           <path
-            d={sketchRectPath(seed)}
-            fill="none"
-            stroke="#1e293b"
-            strokeWidth={1.6}
-            strokeLinejoin="round"
-            vectorEffect="non-scaling-stroke"
+            d={sketchRectPath(seed + 31, 1.1)}
+            fill="#e2efdb"
+            stroke="none"
             filter={`url(#${filterId})`}
           />
+          {/* Обводка: тёмно-зелёный рисованный контур, слегка смещён от фона */}
           <path
-            d={sketchRectPath(seed + 13)}
+            d={sketchRectPath(seed, 1.8)}
             fill="none"
-            stroke="#10b981"
-            strokeWidth={1.2}
+            stroke="#2e6b34"
+            strokeWidth={2.4}
             strokeLinejoin="round"
-            opacity={0.55}
+            strokeLinecap="round"
             vectorEffect="non-scaling-stroke"
+            transform="translate(0.9 1.3)"
             filter={`url(#${filterId})`}
           />
         </svg>

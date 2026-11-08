@@ -300,7 +300,7 @@ export function QuickWalkContainer() {
 
   return (
     <section
-      className="fixed bottom-0 left-0 right-0 z-30 max-h-[85dvh] overflow-y-auto rounded-t-3xl border border-slate-200 bg-white p-5 shadow-float md:bottom-4 md:left-4 md:right-auto md:max-w-[440px] md:rounded-3xl md:p-6"
+      className="fixed bottom-0 left-0 right-0 z-30 max-h-[85dvh] overflow-y-auto rounded-t-3xl border border-slate-200 bg-white p-5 shadow-float md:bottom-4 md:left-auto md:right-6 md:max-w-[440px] md:rounded-3xl md:p-6"
       aria-label={t("screenTitle")}
     >
       <button
