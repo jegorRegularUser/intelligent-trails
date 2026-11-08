@@ -42,6 +42,7 @@ export function PlaceMiniCard({
   onExpand,
   reason,
   placement = 'auto',
+  variant = 'chip',
   className,
 }: PlaceMiniCardProps) {
   const { cardRef, style } = useAnchoredPosition({ anchor, containerRef, placement });
@@ -50,30 +51,36 @@ export function PlaceMiniCard({
 
   return (
     <>
-      {/* Десктоп: компактная карточка у якоря. */}
+      {/* Десктоп: у якоря — компактный чип или богатая карточка (variant='full'). */}
       <div
         ref={cardRef}
         style={style}
         className={cn('absolute z-20 hidden md:block', className)}
       >
-        <button
-          type="button"
-          onClick={onExpand}
-          className="flex max-w-[260px] items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-left shadow-float transition-colors hover:border-brand-200"
-        >
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
-            <Icon className="h-4 w-4" aria-hidden />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-semibold text-slate-900">
-              {card.displayName}
+        {variant === 'full' ? (
+          <div className="w-[300px] rounded-2xl border border-slate-200 bg-white shadow-float">
+            <PlaceCard card={card} reason={reason} />
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={onExpand}
+            className="flex max-w-[260px] items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-left shadow-float transition-colors hover:border-brand-200"
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
+              <Icon className="h-4 w-4" aria-hidden />
             </span>
-            {metaLine ? (
-              <span className="block truncate text-xs text-slate-500">{metaLine}</span>
-            ) : null}
-          </span>
-          <OpenBadge state={card.openState} />
-        </button>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-semibold text-slate-900">
+                {card.displayName}
+              </span>
+              {metaLine ? (
+                <span className="block truncate text-xs text-slate-500">{metaLine}</span>
+              ) : null}
+            </span>
+            <OpenBadge state={card.openState} />
+          </button>
+        )}
       </div>
 
       {/* Мобильный: bottom sheet с полной карточкой. */}

@@ -76,7 +76,7 @@ export function AddressInput({ placeholder = "Введите адрес...", onS
     try {
       // Идем в твой action geocoder.ts
       const coords = await getCoordinatesFromAddress(fullAddress);
-      
+
       if (coords) {
         onSelect(coords, fullAddress);
       } else {
@@ -88,9 +88,30 @@ export function AddressInput({ placeholder = "Введите адрес...", onS
     }
   };
 
+  // Enter без подсказок (нет ключа Suggest / публичный Photon) — геокодируем
+  // введённый текст напрямую, чтобы ввод адреса не был тупиком.
+  const handleKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Enter") return;
+    const text = query.trim();
+    if (text.length < 2 || isLoading) return;
+    setIsOpen(false);
+    setIsLoading(true);
+    try {
+      const coords = await getCoordinatesFromAddress(text);
+      if (coords) {
+        onSelect(coords, text);
+      } else {
+        console.error("Не удалось найти координаты для:", text);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div ref={wrapperRef} className="relative w-full">
       <Input
+        onKeyDown={handleKeyDown}
         value={query}
         onChange={(e) => {
           setQuery(e.target.value);

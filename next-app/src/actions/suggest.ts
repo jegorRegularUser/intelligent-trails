@@ -1,6 +1,7 @@
 "use server";
 
 import { Coordinates } from "@/types/map";
+import { CloudProvider } from "@/lib/geo";
 
 export interface YandexSuggestResult {
   title: string;
@@ -21,55 +22,56 @@ export async function getAddressSuggestions(query: string, userLocation?: Coordi
     return cached.results;
   }
 
+  const results = await fetchYandexSuggestions(query, userLocation)
+    .catch(() => [] as YandexSuggestResult[]);
+
+  // Универсальный фолбэк: Photon публичный — работает без ключей в любом городе
+  const finalResults = results.length > 0 ? results : await fetchPhotonSuggestions(query, userLocation).catch(() => []);
+
+  if (finalResults.length > 0) {
+    suggestCache.set(cacheKey, { results: finalResults, timestamp: Date.now() });
+  }
+  return finalResults;
+}
+
+/** Яндекс Suggest (нужен ключ; ключа нет — пусто, дальше фолбэк). */
+async function fetchYandexSuggestions(
+  query: string,
+  userLocation?: Coordinates | null,
+): Promise<YandexSuggestResult[]> {
   const apiKey = process.env.NEXT_PUBLIC_YANDEX_SUGGEST_API_KEY || process.env.YANDEX_SUGGEST_API_KEY;
+  if (!apiKey) return [];
 
-  if (!apiKey) {
-    console.error("Не задан ключ API Яндекс Подсказок");
-    return [];
+  let url = `https://suggest-maps.yandex.ru/v1/suggest?apikey=${apiKey}&text=${encodeURIComponent(query)}&results=7`;
+  if (userLocation) {
+    const [lat, lon] = userLocation;
+    url += `&ll=${lon},${lat}`; // Яндекс API использует формат lon,lat
   }
 
-  try {
-    // Правильный URL для HTTP API Подсказок Яндекса (v1)
-    let url = `https://suggest-maps.yandex.ru/v1/suggest?apikey=${apiKey}&text=${encodeURIComponent(query)}&results=7`; // Уменьшили с 10 до 7
+  const response = await fetch(url, { next: { revalidate: 300 } });
+  if (!response.ok) throw new Error("Ошибка API Подсказок");
 
-    // Если есть геолокация пользователя, добавляем параметр ll для приоритизации результатов рядом
-    if (userLocation) {
-      const [lat, lon] = userLocation;
-      url += `&ll=${lon},${lat}`; // Яндекс API использует формат lon,lat
-    }
+  const data = await response.json();
+  if (!data.results) return [];
 
-    const response = await fetch(url, {
-      next: { revalidate: 300 } // Кэшируем на 5 минут
-    });
+  return data.results.map((item: any) => ({
+    title: item.title?.text || "",
+    subtitle: item.subtitle?.text || "",
+  }));
+}
 
-    if (!response.ok) throw new Error("Ошибка API Подсказок");
-
-    const data = await response.json();
-
-    if (!data.results) return [];
-
-    // Возвращаем только чистый текст
-    const results = data.results.map((item: any) => ({
-      title: item.title?.text || "",
-      subtitle: item.subtitle?.text || "",
+/** Photon public: мировой геокодер без ключа, bias по точке пользователя. */
+async function fetchPhotonSuggestions(
+  query: string,
+  userLocation?: Coordinates | null,
+): Promise<YandexSuggestResult[]> {
+  const provider = new CloudProvider({});
+  const items = await provider.suggest(query, userLocation ?? undefined);
+  return items
+    .filter((item) => item.title)
+    .slice(0, 7)
+    .map((item) => ({
+      title: item.title,
+      subtitle: item.subtitle ?? "",
     }));
-
-    // Сохраняем в кэш
-    suggestCache.set(cacheKey, { results, timestamp: Date.now() });
-
-    // Очищаем старые записи из кэша (если больше 100)
-    if (suggestCache.size > 100) {
-      const now = Date.now();
-      for (const [key, value] of suggestCache.entries()) {
-        if (now - value.timestamp > CACHE_TTL) {
-          suggestCache.delete(key);
-        }
-      }
-    }
-
-    return results;
-  } catch (error) {
-    console.error("Ошибка при получении подсказок:", error);
-    return [];
-  }
 }

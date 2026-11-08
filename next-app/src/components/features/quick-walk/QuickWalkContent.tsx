@@ -107,6 +107,8 @@ export function QuickWalkContent() {
     async (minutes: number, vibeId: QuickVibe, opts?: { manualStart?: [number, number] }) => {
       dispatch({ type: "START_BUILD" });
       setErrorMessage(null);
+      // Запоминаем параметры сразу: Retry после отказа геолокации должен работать
+      setLastInput((prev) => ({ minutes, vibe: vibeId, start: opts?.manualStart ?? prev?.start ?? [0, 0] }));
       try {
         const start = opts?.manualStart ?? (await getCurrentStart());
         const result = await buildQuickWalk({
@@ -171,6 +173,12 @@ export function QuickWalkContent() {
 
   const handleRetry = useCallback(() => {
     if (!lastInput) return;
+    const hasStart = addressStart != null || (lastInput.start[0] !== 0 || lastInput.start[1] !== 0);
+    if (!hasStart) {
+      // Старт ещё не решён (отказ геолокации без адреса) — открываем фолбэк
+      setNeedsAddress(true);
+      return;
+    }
     dispatch({ type: "RETRY" });
     void runBuild(lastInput.minutes, lastInput.vibe, addressStart ? { manualStart: addressStart } : undefined);
   }, [addressStart, lastInput, runBuild]);

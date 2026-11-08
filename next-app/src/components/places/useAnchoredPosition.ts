@@ -66,23 +66,44 @@ export function useAnchoredPosition({
   const [measured, setMeasured] = useState(false);
 
   useLayoutEffect(() => {
-    const card = cardRef.current;
-    const container = containerRef.current;
-    if (!card || !container) return undefined;
+    let disposed = false;
+    let observer: ResizeObserver | null = null;
+    let raf = 0;
+    let measure: () => void = () => {};
 
-    const measure = () => {
-      setCardSize({ width: card.offsetWidth, height: card.offsetHeight });
-      setContainerSize({ width: container.clientWidth, height: container.clientHeight });
-      setMeasured(true);
+    // Контейнер ищем эффектом с ретраем, а не зависимостями: карточка — прямой
+    // ребёнок контейнера карты, но на момент самого первого layout-эффекта ref
+    // родителя ещё может не прикрепиться (deps [containerRef] стабильны — эффект
+    // больше не перезапустится и карточка навсегда оставалась невидимой).
+    const attach = () => {
+      if (disposed) return;
+      const card = cardRef.current;
+      const container =
+        containerRef.current ?? card?.parentElement ?? null;
+      if (!card || !container) {
+        raf = requestAnimationFrame(attach);
+        return;
+      }
+
+      measure = () => {
+        if (disposed) return;
+        setCardSize({ width: card.offsetWidth, height: card.offsetHeight });
+        setContainerSize({ width: container.clientWidth, height: container.clientHeight });
+        setMeasured(true);
+      };
+      measure();
+
+      observer = new ResizeObserver(measure);
+      observer.observe(card);
+      observer.observe(container);
+      window.addEventListener('resize', measure);
     };
-    measure();
+    attach();
 
-    const observer = new ResizeObserver(measure);
-    observer.observe(card);
-    observer.observe(container);
-    window.addEventListener('resize', measure);
     return () => {
-      observer.disconnect();
+      disposed = true;
+      cancelAnimationFrame(raf);
+      observer?.disconnect();
       window.removeEventListener('resize', measure);
     };
   }, [containerRef]);

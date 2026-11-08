@@ -19,7 +19,7 @@ export function RouteSidebarManager({ sketch = false }: { sketch?: boolean } = {
     setMapPoints, setStartPoint, setWaypoints,
     setEndPoint, setStartTransport, setStartPointName, setEndPointName,
     setEndPointType, setEndPointCategory,
-    isRouteBuilt, setIsRouteBuilt
+    isRouteBuilt, setIsRouteBuilt, walkMode
   } = useRouteStore();
 
   const [isInitializing, setIsInitializing] = useState(false);
@@ -121,9 +121,12 @@ export function RouteSidebarManager({ sketch = false }: { sketch?: boolean } = {
     );
   }
 
-  return (isRouteBuilt && routeParam) ? (
-    <RouteResultSidebar isNavigationOpen={isMobileMenuOpen} />
-  ) : (
-    <RouteBuilderSidebar isNavigationOpen={isMobileMenuOpen} />
-  );
+  // Просмотр чужого маршрута по ссылке — приоритет над режимом панели
+  if (isRouteBuilt && routeParam) {
+    return <RouteResultSidebar isNavigationOpen={isMobileMenuOpen} />;
+  }
+  if (walkMode === "quick") {
+    return <QuickWalkPanel isNavigationOpen={isMobileMenuOpen} sketch={sketch} />;
+  }
+  return <RouteBuilderSidebar isNavigationOpen={isMobileMenuOpen} />;
 }

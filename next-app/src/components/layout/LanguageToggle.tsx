@@ -1,10 +1,10 @@
 "use client";
 
-// Переключатель языка: локаль живёт в cookie (не в URL, ADR интеграции локали),
-// смена = cookie + router.refresh(). Подписи RU/EN самоназванные — i18n не нужен.
+// Переключатель языка: локаль живёт в cookie (не в URL), смена через server
+// action + router.refresh(). Стиль — часть навигации: текстовые RU/EN без
+// плашки, высота строки совпадает со ссылками меню.
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import { Languages } from "lucide-react";
 import { setLocaleAction } from "@/actions/locale";
 import { cn } from "@/utils/cn";
 
@@ -22,22 +22,25 @@ export function LanguageToggle({ className }: { className?: string }) {
     <div
       role="group"
       aria-label={t("language")}
-      className={cn("flex items-center gap-0.5 rounded-full border border-slate-200 p-0.5", className)}
+      className={cn("flex items-center gap-1", className)}
     >
-      <Languages size={13} className="ml-1.5 text-slate-400" aria-hidden />
-      {(["ru", "en"] as const).map((code) => (
-        <button
-          key={code}
-          type="button"
-          aria-pressed={locale === code}
-          onClick={() => switchTo(code)}
-          className={cn(
-            "rounded-full px-2 py-0.5 text-xs font-bold uppercase transition-colors",
-            locale === code ? "bg-brand-500 text-white" : "text-slate-500 hover:text-slate-700",
-          )}
-        >
-          {code}
-        </button>
+      {(["ru", "en"] as const).map((code, index) => (
+        <span key={code} className="flex items-center">
+          {index > 0 && <span className="mx-1 text-slate-300 select-none" aria-hidden>/</span>}
+          <button
+            type="button"
+            aria-pressed={locale === code}
+            onClick={() => switchTo(code)}
+            className={cn(
+              "px-0.5 py-1 text-sm font-medium uppercase tracking-wide transition-colors",
+              locale === code
+                ? "text-brand-600 font-bold"
+                : "text-slate-500 hover:text-slate-800",
+            )}
+          >
+            {code}
+          </button>
+        </span>
       ))}
     </div>
   );
