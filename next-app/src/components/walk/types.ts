@@ -52,4 +52,6 @@ export interface WalkPlan {
    */
   legs: WalkLeg[];
   totals: WalkPlanTotals;
+  /** Все гейты качества движка пройдены (бюджет ±10%, якоря, ноги, улицы). */
+  gatesPass?: boolean;
 }

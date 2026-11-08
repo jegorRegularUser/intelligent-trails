@@ -64,6 +64,7 @@ export function enginePlanToUiPlan(
     legs,
     // Пересчитаны из округлённых минут UI — чтобы шапка совпадала с таймлайном
     totals: { walkMin, stayMin, totalMin: walkMin + stayMin },
+    gatesPass: engine.allGatesPass,
   };
 }
 

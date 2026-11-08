@@ -1,6 +1,12 @@
 "use client";
 
-import { useState, useMemo } from "react";
+// История: данные живут на сервере (фильтры/поиск/сортировка/пагинация —
+// MongoDB-запросы, см. routesRepo.getUserRoutes), клиент отправляет запрос
+// с дебаунсом и держит оптимистичные мутации (избранное/имя/удаление).
+// Раньше страница грузила 3 маршрута и фильтровала их на клиенте — серверный
+// $text-поиск и пагинация были недостижимы из UI.
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { SavedRoute, RouteFilters, SortOption } from "@/types/history";
 import { RouteCard } from "@/components/features/history/RouteCard";
 import { RouteSearchBar } from "@/components/features/history/RouteSearchBar";
@@ -10,28 +16,33 @@ import { RecentRoutesCarousel } from "@/components/features/history/RecentRoutes
 import { RouteStatsCard } from "@/components/features/history/RouteStatsCard";
 import { EmptyState } from "@/components/features/history/EmptyState";
 import { useToast } from "@/contexts/ToastContext";
-import { usePreferences } from "@/contexts/PreferencesContext";
-import { useTranslations } from "next-intl";
+import { fetchHistoryAction } from "@/actions/historyPage";
 import { toggleFavoriteAction, updateRouteAction, deleteRouteAction } from "@/actions/routes";
+
+const PAGE_SIZE = 12;
+const REFETCH_DEBOUNCE_MS = 400;
 
 interface HistoryPageClientProps {
   initialRoutes: any[];
+  initialTotal: number;
 }
 
-function HistoryPageContent({ initialRoutes }: HistoryPageClientProps) {
+function toSavedRoute(r: any): SavedRoute {
+  return {
+    ...r,
+    id: r._id,
+    createdAt: new Date(r.createdAt).toISOString(),
+    updatedAt: new Date(r.updatedAt).toISOString(),
+  };
+}
+
+function HistoryPageContent({ initialRoutes, initialTotal }: HistoryPageClientProps) {
   const t = useTranslations("History");
   const { showToast } = useToast();
-  const { distanceUnit } = usePreferences();
 
-  const [routes, setRoutes] = useState<SavedRoute[]>(
-    initialRoutes.map((r) => ({
-      ...r,
-      id: r._id,
-      createdAt: new Date(r.createdAt).toISOString(),
-      updatedAt: new Date(r.updatedAt).toISOString(),
-    }))
-  );
-
+  const [routes, setRoutes] = useState<SavedRoute[]>(initialRoutes.map(toSavedRoute));
+  const [total, setTotal] = useState(initialTotal);
+  const [isLoading, setIsLoading] = useState(false);
   const [filters, setFilters] = useState<RouteFilters>({
     search: "",
     categories: [],
@@ -41,71 +52,47 @@ function HistoryPageContent({ initialRoutes }: HistoryPageClientProps) {
     showFavorites: false,
   });
   const [sortBy, setSortBy] = useState<SortOption>("date-desc");
+  const isFirstFilterChange = useRef(true);
 
-  // Фильтрация и сортировка
-  const filteredAndSortedRoutes = useMemo(() => {
-    let result = [...routes];
+  const recentRoutes = routes.slice(0, 3);
 
-    // Поиск
-    if (filters.search) {
-      const searchLower = filters.search.toLowerCase();
-      result = result.filter((r) =>
-        r.name.toLowerCase().includes(searchLower) ||
-        r.tags.some((tag) => tag.toLowerCase().includes(searchLower))
-      );
-    }
-
-    // Категории
-    if (filters.categories.length > 0) {
-      result = result.filter((r) =>
-        filters.categories.some((cat) => r.categories.includes(cat))
-      );
-    }
-
-    // Транспорт
-    if (filters.transportModes.length > 0) {
-      result = result.filter((r) =>
-        filters.transportModes.some((mode) => r.transportModes.includes(mode))
-      );
-    }
-
-    // Избранное
-    if (filters.showFavorites) {
-      result = result.filter((r) => r.isFavorite);
-    }
-
-    // Сортировка
-    result.sort((a, b) => {
-      switch (sortBy) {
-        case "date-desc":
-          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-        case "date-asc":
-          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-        case "name-asc":
-          return a.name.localeCompare(b.name);
-        case "name-desc":
-          return b.name.localeCompare(a.name);
-        case "distance-asc":
-          return a.metrics.totalDistance - b.metrics.totalDistance;
-        case "distance-desc":
-          return b.metrics.totalDistance - a.metrics.totalDistance;
-        case "duration-asc":
-          return a.metrics.totalDuration - b.metrics.totalDuration;
-        case "duration-desc":
-          return b.metrics.totalDuration - a.metrics.totalDuration;
-        default:
-          return 0;
+  const refetch = useCallback(
+    async (opts?: { append?: boolean }) => {
+      setIsLoading(true);
+      try {
+        const skip = opts?.append ? routes.length : 0;
+        const { routes: fresh, total: freshTotal } = await fetchHistoryAction(
+          filters,
+          sortBy,
+          PAGE_SIZE,
+          skip,
+        );
+        setTotal(freshTotal);
+        setRoutes((prev) =>
+          opts?.append ? [...prev, ...fresh.map(toSavedRoute)] : fresh.map(toSavedRoute),
+        );
+      } catch {
+        showToast(t("loadError"), "error");
+      } finally {
+        setIsLoading(false);
       }
-    });
+    },
+    // routes.length замыканием: append должен знать актуальную длину списка
+    [filters, routes.length, sortBy, showToast, t],
+  );
 
-    return result;
-  }, [routes, filters, sortBy]);
-
-  const recentRoutes = useMemo(() => {
-    return [...routes]
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 3);
-  }, [routes]);
+  // Смена фильтров/сортировки → перезагрузка первой страницы с дебаунсом
+  useEffect(() => {
+    if (isFirstFilterChange.current) {
+      isFirstFilterChange.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      void refetch();
+    }, REFETCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters, sortBy]);
 
   const handleToggleFavorite = async (id: string) => {
     try {
@@ -140,6 +127,7 @@ function HistoryPageContent({ initialRoutes }: HistoryPageClientProps) {
       const result = await deleteRouteAction(id);
       if (result.success) {
         setRoutes((prev) => prev.filter((r) => r.id !== id));
+        setTotal((prev) => Math.max(0, prev - 1));
         showToast(t("routeDeleted"), "success");
       }
     } catch (error) {
@@ -160,7 +148,7 @@ function HistoryPageContent({ initialRoutes }: HistoryPageClientProps) {
     setFilters((prev) => ({ ...prev, ...newFilters }));
   };
 
-  if (routes.length === 0) {
+  if (total === 0 && routes.length === 0 && !isLoading) {
     return (
       <div className="min-h-screen bg-slate-50 p-4 sm:p-8">
         <div className="max-w-7xl mx-auto">
@@ -180,16 +168,18 @@ function HistoryPageContent({ initialRoutes }: HistoryPageClientProps) {
         </div>
 
         {/* Статистика */}
-        <RouteStatsCard routes={routes} />
+        {routes.length > 0 && <RouteStatsCard routes={routes} />}
 
         {/* Последние маршруты */}
-        <RecentRoutesCarousel
-          routes={recentRoutes}
-          onToggleFavorite={handleToggleFavorite}
-          onRename={handleRename}
-          onDelete={handleDelete}
-          onShare={handleShare}
-        />
+        {recentRoutes.length > 0 && (
+          <RecentRoutesCarousel
+            routes={recentRoutes}
+            onToggleFavorite={handleToggleFavorite}
+            onRename={handleRename}
+            onDelete={handleDelete}
+            onShare={handleShare}
+          />
+        )}
 
         {/* Поиск и сортировка */}
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
@@ -206,29 +196,52 @@ function HistoryPageContent({ initialRoutes }: HistoryPageClientProps) {
         <RouteFiltersPanel filters={filters} onChange={handleFiltersChange} />
 
         {/* Список маршрутов */}
-        {filteredAndSortedRoutes.length === 0 ? (
+        {routes.length === 0 && isLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-56 rounded-3xl bg-slate-200/60 animate-pulse" />
+            ))}
+          </div>
+        ) : routes.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-slate-600">{t("noResults")}</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredAndSortedRoutes.map((route) => (
-              <RouteCard
-                key={route.id}
-                route={route}
-                onToggleFavorite={handleToggleFavorite}
-                onRename={handleRename}
-                onDelete={handleDelete}
-                onShare={handleShare}
-              />
-            ))}
-          </div>
+          <>
+            <p className="text-sm text-slate-400">
+              {t("resultsCount", { loaded: routes.length, total })}
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {routes.map((route) => (
+                <RouteCard
+                  key={route.id}
+                  route={route}
+                  onToggleFavorite={handleToggleFavorite}
+                  onRename={handleRename}
+                  onDelete={handleDelete}
+                  onShare={handleShare}
+                />
+              ))}
+            </div>
+            {routes.length < total && (
+              <div className="flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => void refetch({ append: true })}
+                  disabled={isLoading}
+                  className="rounded-full border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-700 transition-colors hover:border-brand-500 hover:text-brand-600 disabled:opacity-50"
+                >
+                  {isLoading ? t("loading") : t("showMore")}
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
   );
 }
 
-export function HistoryPageClient({ initialRoutes }: HistoryPageClientProps) {
-  return <HistoryPageContent initialRoutes={initialRoutes} />;
+export function HistoryPageClient(props: HistoryPageClientProps) {
+  return <HistoryPageContent {...props} />;
 }

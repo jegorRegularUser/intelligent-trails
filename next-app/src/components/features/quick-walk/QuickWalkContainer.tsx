@@ -414,6 +414,9 @@ export function QuickWalkContainer() {
           {fastMode && cardPhase === "ready" && (
             <p className="mt-2 text-xs font-semibold text-brand-600">fast mode</p>
           )}
+          {plan?.gatesPass && cardPhase === "ready" && (
+            <p className="mt-1 text-xs text-slate-400">{t("qualityOk")}</p>
+          )}
         </>
       ) : null}
 

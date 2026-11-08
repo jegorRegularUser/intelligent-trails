@@ -20,10 +20,29 @@ export interface ReasonFacts {
 /** Рейтинг, достойный упоминания. */
 const NOTABLE_RATING = 4.5;
 
+/** Русские названия категорий для причин: реестр categories тянет lucide-react,
+ *  движок UI-зависимостей не имеет — держим лёгкий словарь имён. */
+const CATEGORY_RU: Record<string, string> = {
+  cafe: 'кафе',
+  restaurant: 'ресторан',
+  park: 'парк',
+  museum: 'музей',
+  cinema: 'кинотеатр',
+  bar: 'бар',
+  shopping: 'магазин',
+  viewpoint: 'смотровая площадка',
+  attraction: 'достопримечательность',
+  waterfront: 'набережная',
+  market: 'рынок',
+};
+function categoryRu(category: string): string {
+  return CATEGORY_RU[category] ?? category;
+}
+
 export function buildAnchorReason(facts: ReasonFacts): string {
   const parts: string[] = [];
   if (facts.isBestOfCategory) {
-    parts.push(`Лучший скор категории «${facts.place.category}» в ${facts.zoneWord}`);
+    parts.push(`Лучший скор категории «${categoryRu(facts.place.category)}» в ${facts.zoneWord}`);
   }
   if ((facts.place.rating ?? 0) >= NOTABLE_RATING) {
     parts.push(`высокий рейтинг (${facts.place.rating!.toFixed(1)})`);
@@ -37,7 +56,7 @@ export function buildAnchorReason(facts: ReasonFacts): string {
           : `Минимальный крюк с линии маршрута (~${meters} м)`,
       );
     } else {
-      parts.push(`Заходит в план по весу категории «${facts.place.category}»`);
+      parts.push(`Заходит в план по весу категории «${categoryRu(facts.place.category)}»`);
     }
   }
   return parts.join(', ');

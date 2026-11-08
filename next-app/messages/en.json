@@ -72,7 +72,8 @@
     "saveError": "Failed to save — please try again",
     "walkName": "Walk · {minutes} min",
     "startFromAddress": "Where do we start?",
-    "addressHint": "Geolocation unavailable — enter a start address"
+    "addressHint": "Geolocation unavailable — enter a start address",
+    "qualityOk": "All quality gates passed"
   },
   "Builder": {
     "title": "Intelligent Route Planner",
@@ -295,61 +296,65 @@
     "routeSaveError": "Error saving route",
     "loginToSave": "Sign in to save routes",
     "openInYandex": "Open in Yandex",
-    "loginToSaveAlert": "Sign in to save this route to your history"
+    "loginToSaveAlert": "Sign in to save this route to your history",
+    "showMore": "Show more",
+    "loading": "Loading…",
+    "resultsCount": "Showing {loaded} of {total}",
+    "loadError": "Failed to load history"
   },
   "Landing": {
     "hero": {
-      "title": "Smart Routes for Your Walks",
-      "subtitle": "Plan perfect routes with interesting places. Cafes, parks, museums — everything on your way.",
-      "cta": "Start Planning",
-      "ctaSecondary": "See How It Works"
+      "title": "Don't know where to go? The walk finds itself",
+      "subtitle": "Tell it how much time you have and what mood you are in — get a ready-made walking route through real streets, with meaningful stops and honest timing.",
+      "cta": "Build my walk",
+      "ctaSecondary": "How it works"
     },
     "features": {
-      "title": "Features",
-      "subtitle": "Everything you need for a perfect walk",
+      "title": "Why it works",
+      "subtitle": "A walk generator, not a nearest-place connector",
       "smartRouting": {
-        "title": "Smart Route Building",
-        "description": "Just tell where you want to stop by — the algorithm will find suitable places near your route and build an optimal path"
+        "title": "Loops on real streets",
+        "description": "A server-side engine builds the route: pedestrian distance matrix, stop reordering, loop closure and quality gates — budget ±10%, no leg too long"
       },
       "categories": {
-        "title": "Interesting Places Along the Way",
-        "description": "Want to visit a cafe, walk through a park, or see a museum? Choose the type of place — the app will find options on your route"
+        "title": "Anchors with reasons",
+        "description": "Every stop is a specific place with a reason to visit, how long to stay, and whether it is open right now. Not \"a cafe category\" but \"Coffee Shop X — top rated\""
       },
       "transport": {
-        "title": "Different Transport Modes",
-        "description": "Walking, driving, or public transport — choose the convenient way for each part of your journey"
+        "title": "Weather and time of day",
+        "description": "Rain — indoor places first, heat — shade and greenery, evening — lit and lively streets. The walk adapts to context instead of ignoring it"
       },
       "sharing": {
-        "title": "Share Routes",
-        "description": "Send a link to friends — the route opens immediately on the map with all details"
+        "title": "Link = walk",
+        "description": "Send a link to a friend — they open the same walk, each in their own language. Plus a \"Go\" button hands the route straight to Yandex Maps"
       },
       "history": {
-        "title": "Route History",
-        "description": "All your walks are saved automatically. Filter, sort, add to favorites"
+        "title": "One-tap swaps",
+        "description": "Don't like the cafe — swap it. Don't like the courtyard — rebuild. A segment changes, not the whole walk. Like it — save to history"
       },
       "alternatives": {
-        "title": "Multiple Options to Choose",
-        "description": "For each point, the app suggests several places — choose what you like more by rating, photos, or location"
+        "title": "Alternatives with zero waiting",
+        "description": "The engine prepares several walk variants at once — switch between them instantly, no rebuild required"
       }
     },
     "tutorial": {
-      "title": "How to Use",
-      "subtitle": "Simple guide to main features",
+      "title": "How it works",
+      "subtitle": "From \"nothing to do\" to a walk in three steps",
       "step1": {
-        "title": "Set Starting Point",
-        "description": "Enter the address where you'll start your walk. You can select a place on the map or use your current geolocation"
+        "title": "Pick your time",
+        "description": "30 minutes, an hour or ninety — the time budget sets the radius and the number of stops. Everything fits your range within ±10%"
       },
       "step2": {
-        "title": "Add Interesting Places",
-        "description": "Click 'Add place' and choose what you want to visit along the way: cafe, park, museum, or other. You can add multiple places in a row — the app will build a route through all points"
+        "title": "Pick your vibe",
+        "description": "Green parks, a coffee quest, a quiet evening, a rainy indoor option, or \"surprise me\""
       },
       "step3": {
-        "title": "Choose Transport Mode",
-        "description": "For each route segment, specify how you'll get there: walking, driving, or public transport. This affects time calculation and route building"
+        "title": "Get your walk",
+        "description": "A loop on real streets from your location, with anchor stops, reasons and a timeline. Dislike a stop — swap it, the route rebuilds locally"
       },
       "step4": {
-        "title": "Build the Route",
-        "description": "Click 'Build Route' button — the algorithm will find suitable places near your path and build an optimal route considering distances and direction"
+        "title": "Walk and share",
+        "description": "Save the walk to history or send a friend the link — it opens in their language. The \"Go\" button hands the route to Yandex Maps"
       },
       "step5": {
         "title": "Choose from Multiple Options",
@@ -361,10 +366,10 @@
       }
     },
     "cta": {
-      "badge": "Start Right Now",
-      "title": "Ready to Plan Your Walk?",
-      "subtitle": "Create your first route in a couple of minutes. It's free and doesn't require registration.",
-      "button": "Try Now"
+      "badge": "No signup needed",
+      "title": "Got a free hour?",
+      "subtitle": "Pick time and vibe — the walk assembles in seconds. An account is only needed to save walks to history.",
+      "button": "Take a walk"
     },
     "stats": {
       "title": "Trusted by Thousands",
