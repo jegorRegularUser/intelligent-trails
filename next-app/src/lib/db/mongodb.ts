@@ -1,6 +1,8 @@
 // src/lib/db/mongodb.ts
-// Клиент создаётся лениво при первом обращении, а не на этапе импорта модуля:
-// иначе `next build` (сборка страниц без БД) падает без MONGODB_URI.
+// Подключение ленивое в любом окружении: ни `next build`, ни `next dev`
+// без MONGODB_URI не должны падать на импорте модуля — отсутствие БД
+// обнаруживается при первом реальном обращении (getDb/адаптер NextAuth)
+// и деградирует как ошибка запроса, а не как падение страницы.
 import { MongoClient, Db } from 'mongodb';
 
 const options = {
@@ -16,7 +18,8 @@ const options = {
 function connect(): Promise<MongoClient> {
   const uri = process.env.MONGODB_URI;
   if (!uri) {
-    throw new Error('MONGODB_URI не найден в .env.local');
+    // Промис-отказ, не throw: getClientPromise() могут звать на уровне модуля
+    return Promise.reject(new Error('MONGODB_URI не найден в .env.local'));
   }
   const client = new MongoClient(uri, options);
   return client
@@ -31,32 +34,28 @@ function connect(): Promise<MongoClient> {
     });
 }
 
-if (process.env.NODE_ENV === 'development') {
-  // В dev режиме используем глобальную переменную для hot reload
-  const globalWithMongo = global as typeof globalThis & {
-    _mongoClientPromise?: Promise<MongoClient>;
-  };
+const globalForMongo = global as typeof globalThis & {
+  _mongoClientPromise?: Promise<MongoClient>;
+};
 
-  if (!globalWithMongo._mongoClientPromise) {
-    globalWithMongo._mongoClientPromise = connect().catch(() => {
-      // Очищаем промис при ошибке, чтобы можно было переподключиться
-      globalWithMongo._mongoClientPromise = undefined;
-      throw new Error('MongoDB connection failed');
-    });
-  }
-}
-
-let clientPromise: Promise<MongoClient> | null = null;
+let prodClientPromise: Promise<MongoClient> | null = null;
 
 function getClientPromise(): Promise<MongoClient> {
   if (process.env.NODE_ENV === 'development') {
-    return (global as typeof globalThis & { _mongoClientPromise?: Promise<MongoClient> })
-      ._mongoClientPromise!;
+    // Dev: глобальная переменная, чтобы переживать hot reload.
+    // Провалившийся промис сбрасываем — следующий вызов попробует снова.
+    if (!globalForMongo._mongoClientPromise) {
+      globalForMongo._mongoClientPromise = connect().catch((error) => {
+        globalForMongo._mongoClientPromise = undefined;
+        throw error;
+      });
+    }
+    return globalForMongo._mongoClientPromise;
   }
-  if (!clientPromise) {
-    clientPromise = connect();
+  if (!prodClientPromise) {
+    prodClientPromise = connect();
   }
-  return clientPromise;
+  return prodClientPromise;
 }
 
 export async function getDb(): Promise<Db> {

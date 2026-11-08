@@ -87,6 +87,7 @@ export function QuickWalkContainer() {
   const excludedRef = useRef<Set<string>>(new Set());
 
   const plan = plans && planIndex < plans.length ? plans[planIndex] : null;
+  const alternativesCount = plans?.length ?? 0;
 
   useEffect(() => {
     const goOffline = () => dispatch({ type: "OFFLINE" });
@@ -373,6 +374,12 @@ export function QuickWalkContainer() {
 
       {showCard ? (
         <>
+          {/* Индикатор цикла альтернатив: «Пересобрать» листает планы мгновенно */}
+          {cardPhase === "ready" && alternativesCount > 1 && (
+            <p className="pt-8 text-xs font-semibold uppercase tracking-wider text-slate-400">
+              {t("variantOf", { index: planIndex + 1, count: alternativesCount })}
+            </p>
+          )}
           <WalkSummaryCard
             phase={cardPhase === "ready" || cardPhase === "error" ? cardPhase : "building"}
             plan={plan}

@@ -73,7 +73,8 @@
     "walkName": "Прогулка · {minutes} мин",
     "startFromAddress": "Откуда пойдём?",
     "addressHint": "Геолокация недоступна — введите адрес старта",
-    "qualityOk": "Все проверки качества пройдены"
+    "qualityOk": "Все проверки качества пройдены",
+    "variantOf": "Вариант {index} из {count}"
   },
   "BuilderSidebar": {
     "title": "План прогулки",

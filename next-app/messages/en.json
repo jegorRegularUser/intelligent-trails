@@ -73,7 +73,8 @@
     "walkName": "Walk · {minutes} min",
     "startFromAddress": "Where do we start?",
     "addressHint": "Geolocation unavailable — enter a start address",
-    "qualityOk": "All quality gates passed"
+    "qualityOk": "All quality gates passed",
+    "variantOf": "Variant {index} of {count}"
   },
   "Builder": {
     "title": "Intelligent Route Planner",
