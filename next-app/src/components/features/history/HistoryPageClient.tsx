@@ -53,6 +53,8 @@ function HistoryPageContent({ initialRoutes, initialTotal }: HistoryPageClientPr
   });
   const [sortBy, setSortBy] = useState<SortOption>("date-desc");
   const isFirstFilterChange = useRef(true);
+  // Гвард гонок: late-ответ append после сменившихся фильтров не перезапишет список
+  const fetchSeq = useRef(0);
 
   const recentRoutes = routes.slice(0, 3);
 

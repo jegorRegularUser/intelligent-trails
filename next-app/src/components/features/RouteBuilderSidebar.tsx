@@ -106,6 +106,38 @@ export function RouteBuilderSidebar({ isNavigationOpen = false }: RouteBuilderSi
     setWaypoints((prev) => prev.filter(wp => wp.id !== id));
   };
 
+  // «Оптимизировать порядок»: матрица пешеходных времён (CloudProvider) +
+  // NN/2-opt из движка прогулок. Старт и (опциональный) финиш фиксированы,
+  // промежуточные точки переупорядочиваются; точки без координат уходят в конец.
+  const [isOptimizing, setIsOptimizing] = useState(false);
+  const handleOptimizeOrder = async () => {
+    const movable = waypoints.filter((wp) => wp.coords);
+    if (movable.length < 2 || !startPoint) return;
+    setIsOptimizing(true);
+    try {
+      const result = await optimizeRouteOrderAction({
+        start: startPoint,
+        points: movable.map((wp) => ({ id: wp.id, coords: wp.coords! })),
+        end: endPointType === "address" && endPoint ? endPoint : null,
+      });
+      if (result.ok) {
+        const byId = new Map(waypoints.map((wp) => [wp.id, wp]));
+        const reordered = result.orderedIds
+          .map((id) => byId.get(id))
+          .filter((wp): wp is FormWaypoint => !!wp);
+        const withoutCoords = waypoints.filter((wp) => !wp.coords);
+        setWaypoints([...reordered, ...withoutCoords]);
+        showToast(t("optimizeDone", { minutes: result.totalMinutes }), "success");
+      } else {
+        showToast(result.error, "error");
+      }
+    } catch {
+      showToast(t("optimizeError"), "error");
+    } finally {
+      setIsOptimizing(false);
+    }
+  };
+
   const updateWaypoint = (id: string, updates: Partial<FormWaypoint>) => {
     setWaypoints((prev) => prev.map(wp => wp.id === id ? { ...wp, ...updates } : wp));
   };
@@ -441,6 +473,18 @@ export function RouteBuilderSidebar({ isNavigationOpen = false }: RouteBuilderSi
             )}
           </div>
         </div>
+
+        {waypoints.filter((wp) => wp.coords).length >= 2 && (
+          <button
+            type="button"
+            onClick={() => void handleOptimizeOrder()}
+            disabled={isOptimizing || !startPoint || isGenerating}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 py-3 text-sm font-semibold text-slate-700 transition-colors hover:border-brand-500 hover:text-brand-600 disabled:opacity-50"
+          >
+            <Wand2 size={16} />
+            {isOptimizing ? t("optimizing") : t("optimizeOrder")}
+          </button>
+        )}
 
         <div className="relative z-0">
           <Button size="lg" className="w-full shadow-md" disabled={!startPoint} isLoading={isGenerating} onClick={handleBuildRoute} rightIcon={<Navigation size={20} />}>

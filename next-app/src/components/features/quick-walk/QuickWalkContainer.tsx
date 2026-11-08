@@ -132,9 +132,12 @@ export function QuickWalkContainer() {
           error instanceof Error &&
           (error.message === "geolocation-denied" || error.message === "geolocation-unavailable");
         if (denied) {
-          // Честный фолбэк: пусть человек скажет, откуда пойдёт
+          // Честный фолбэк: пусть человек скажет, откуда пойдёт.
+          // Машину выводим из building через BUILD_FAILED (PARAMS_TOUCHED из
+          // building — но-оп, экран залип бы в спиннере); блок ввода адреса
+          // рендерим в фазе error рядом с кнопкой Retry.
           setNeedsAddress(true);
-          dispatch({ type: "PARAMS_TOUCHED" });
+          dispatch({ type: "BUILD_FAILED" });
           return;
         }
         setErrorMessage(t("errorGeneric"));
@@ -209,14 +212,16 @@ export function QuickWalkContainer() {
             mapStore.setWalk(planPolyline(result.plans[0], start), "Старт прогулки");
             dispatch({ type: "BUILD_SUCCESS" });
           } else {
-            // Заменить не получилось — оставляем старый план и честно сообщаем
+            // Заменить не получилось — оставляем старый план и честно сообщаем.
+            // BUILD_FAILED из фазы ready — но-оп машины, поэтому тост.
             excludedRef.current.delete(stopId);
-            setErrorMessage(result.error);
-            dispatch({ type: "BUILD_FAILED" });
+            dispatch({ type: "BUILD_SUCCESS" });
+            showToast(result.error, "error");
           }
         } catch {
           excludedRef.current.delete(stopId);
-          dispatch({ type: "BUILD_FAILED" });
+          dispatch({ type: "BUILD_SUCCESS" });
+          showToast(t("errorGeneric"), "error");
         } finally {
           setSwappingIds((prev) => prev.filter((id) => id !== stopId));
         }
@@ -339,31 +344,32 @@ export function QuickWalkContainer() {
             forecast={forecast}
             className="pt-8"
           />
-
-          {/* Фолбэк старта: геолокацию не дали — пусть человек введёт адрес */}
-          {needsAddress && (
-            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-sm font-medium text-slate-900">{t("startFromAddress")}</p>
-              <p className="mt-0.5 text-xs text-slate-500">{t("addressHint")}</p>
-              <div className="mt-3">
-                <AddressInput
-                  placeholder={t("startFromAddress")}
-                  onSelect={(coords) => {
-                    setAddressStart(coords);
-                    setNeedsAddress(false);
-                  }}
-                />
-              </div>
-              {addressStart && (
-                <p className="mt-2 flex items-center gap-1 text-xs font-semibold text-brand-600">
-                  <MapPin size={12} />
-                  {addressStart[0].toFixed(4)}, {addressStart[1].toFixed(4)}
-                </p>
-              )}
-            </div>
-          )}
         </>
       ) : null}
+
+      {/* Фолбэк старта: геолокацию не дали — пусть человек введёт адрес.
+          Виден и в фазе error (после BUILD_FAILED), и в параметрах */}
+      {needsAddress && (showPanel || cardPhase === "error") && (
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <p className="text-sm font-medium text-slate-900">{t("startFromAddress")}</p>
+          <p className="mt-0.5 text-xs text-slate-500">{t("addressHint")}</p>
+          <div className="mt-3">
+            <AddressInput
+              placeholder={t("startFromAddress")}
+              onSelect={(coords) => {
+                setAddressStart(coords);
+                setNeedsAddress(false);
+              }}
+            />
+          </div>
+          {addressStart && (
+            <p className="mt-2 flex items-center gap-1 text-xs font-semibold text-brand-600">
+              <MapPin size={12} />
+              {addressStart[0].toFixed(4)}, {addressStart[1].toFixed(4)}
+            </p>
+          )}
+        </div>
+      )}
 
       {showCard ? (
         <>
