@@ -323,57 +323,68 @@ export function QuickWalkContent() {
       {phase === "offline" && <OfflineBanner />}
 
       {showPanel ? (
-        <QuickStartPanel
-          selectedMinutes={selectedMinutes}
-          isCustomActive={isCustomActive}
-          customMinutes={customMinutes}
-          onSelectPreset={(minutes) => {
-            touchParams();
-            setIsCustomActive(false);
-            setSelectedMinutes(minutes);
-          }}
-          onCustomActivate={() => {
-            touchParams();
-            setIsCustomActive(true);
-            setCustomMinutes((prev) => prev ?? DEFAULT_CUSTOM_MINUTES);
-          }}
-          onCustomChange={(minutes) => {
-            touchParams();
-            setCustomMinutes(normalizeCustomMinutes(minutes));
-          }}
-          selectedVibe={vibe}
-          onSelectVibe={(next) => {
-            touchParams();
-            setVibe(next);
-          }}
-          onStart={handleStart}
-          isBuilding={phase === "building"}
-          disabled={phase === "offline"}
-          forecast={forecast}
-        />
-      ) : null}
+        <>
+          <QuickStartPanel
+            selectedMinutes={selectedMinutes}
+            isCustomActive={isCustomActive}
+            customMinutes={customMinutes}
+            onSelectPreset={(minutes) => {
+              touchParams();
+              setIsCustomActive(false);
+              setSelectedMinutes(minutes);
+            }}
+            onCustomActivate={() => {
+              touchParams();
+              setIsCustomActive(true);
+              setCustomMinutes((prev) => prev ?? DEFAULT_CUSTOM_MINUTES);
+            }}
+            onCustomChange={(minutes) => {
+              touchParams();
+              setCustomMinutes(normalizeCustomMinutes(minutes));
+            }}
+            selectedVibe={vibe}
+            onSelectVibe={(next) => {
+              touchParams();
+              setVibe(next);
+            }}
+            onStart={handleStart}
+            isBuilding={phase === "building"}
+            disabled={phase === "offline"}
+            forecast={forecast}
+          />
 
-      {/* Фолбэк старта: геолокацию не дали — пусть человек введёт адрес.
-          Виден и в фазе error (после BUILD_FAILED), и в параметрах */}
-      {needsAddress && (showPanel || cardPhase === "error") && (
-        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-          <p className="text-sm font-medium text-slate-900">{t("startFromAddress")}</p>
-          <p className="mt-0.5 text-xs text-slate-500">{t("addressHint")}</p>
-          <div className="mt-3">
+          {/* Тот же AddressInput, что и в эксперт-маршруте: необязательный старт.
+              Геолокация по умолчанию; поле — чтобы стартовать не отсюда */}
+          <div className="mt-4">
             <AddressInput
-              placeholder={t("startFromAddress")}
+              placeholder={needsAddress ? t("startFromAddress") : t("startFromAddressOptional")}
               onSelect={(coords) => {
                 setAddressStart(coords);
                 setNeedsAddress(false);
               }}
             />
+            {addressStart ? (
+              <p className="mt-2 flex items-center gap-1 text-xs font-semibold text-brand-600">
+                <MapPin size={12} />
+                {addressStart[0].toFixed(4)}, {addressStart[1].toFixed(4)}
+              </p>
+            ) : needsAddress ? (
+              <p className="mt-2 text-xs text-slate-500">{t("addressHint")}</p>
+            ) : null}
           </div>
-          {addressStart && (
-            <p className="mt-2 flex items-center gap-1 text-xs font-semibold text-brand-600">
-              <MapPin size={12} />
-              {addressStart[0].toFixed(4)}, {addressStart[1].toFixed(4)}
-            </p>
-          )}
+        </>
+      ) : null}
+
+      {/* После неудачной сборки адрес тоже нужен — показываем в фазе error */}
+      {needsAddress && cardPhase === "error" && (
+        <div className="mt-4">
+          <AddressInput
+            placeholder={t("startFromAddress")}
+            onSelect={(coords) => {
+              setAddressStart(coords);
+              setNeedsAddress(false);
+            }}
+          />
         </div>
       )}
 

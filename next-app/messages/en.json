@@ -76,7 +76,8 @@
     "qualityOk": "All quality gates passed",
     "variantOf": "Variant {index} of {count}",
     "modeQuick": "Quick walk",
-    "modeRoute": "Route"
+    "modeRoute": "Route",
+    "startFromAddressOptional": "Where do we start? (optional — otherwise from geolocation)"
   },
   "Builder": {
     "title": "Intelligent Route Planner",

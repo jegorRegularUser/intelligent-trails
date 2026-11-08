@@ -76,7 +76,8 @@
     "qualityOk": "Все проверки качества пройдены",
     "variantOf": "Вариант {index} из {count}",
     "modeQuick": "Быстрая прогулка",
-    "modeRoute": "Маршрут"
+    "modeRoute": "Маршрут",
+    "startFromAddressOptional": "Откуда пойдём? (необязательно — иначе от геолокации)"
   },
   "BuilderSidebar": {
     "title": "План прогулки",
