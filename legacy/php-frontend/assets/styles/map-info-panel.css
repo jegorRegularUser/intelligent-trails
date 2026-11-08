@@ -1,0 +1,261 @@
+.route-info-panel {
+    position: fixed;
+    left: 0;
+    top: 60px;
+    width: 350px;
+    height: calc(100vh - 60px);
+    background: white;
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    overflow-y: auto;
+    transition: transform 0.3s ease;
+}
+
+.route-info-panel.hidden {
+    transform: translateX(-100%);
+}
+
+.route-info-header {
+    padding: 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.route-info-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.close-panel-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    font-size: 24px;
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.close-panel-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.route-info-stats {
+    padding: 20px;
+    display: grid;
+    gap: 12px;
+}
+
+.stat-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: #f8f9fa;
+    border-radius: 10px;
+}
+
+.stat-icon {
+    font-size: 28px;
+}
+
+.stat-label {
+    font-size: 12px;
+    color: #6c757d;
+    margin-bottom: 2px;
+}
+
+.stat-value {
+    font-size: 18px;
+    font-weight: 600;
+    color: #2d3748;
+}
+
+.route-stages-list {
+    padding: 0 20px 20px;
+}
+
+.stages-header {
+    font-size: 16px;
+    font-weight: 600;
+    color: #2d3748;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #e9ecef;
+}
+
+.stage-card {
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 10px;
+    padding: 15px;
+    margin-bottom: 12px;
+    transition: all 0.2s ease;
+}
+
+.stage-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.stage-header {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+}
+
+.stage-icon {
+    font-size: 28px;
+    flex-shrink: 0;
+}
+
+.stage-info {
+    flex: 1;
+}
+
+.stage-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #2d3748;
+    margin-bottom: 4px;
+}
+
+.stage-details {
+    font-size: 13px;
+    color: #718096;
+}
+
+.stage-variants {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #e9ecef;
+}
+
+.variants-slider {
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 10px;
+}
+
+.variant-option {
+    display: none;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.variant-option.active {
+    display: block;
+}
+
+.variant-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #2d3748;
+    margin-bottom: 4px;
+}
+
+.variant-category {
+    font-size: 12px;
+    color: #718096;
+}
+
+.variant-time {
+    font-size: 12px;
+    color: #667eea;
+    margin-top: 4px;
+}
+
+.slider-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.slider-btn {
+    background: #667eea;
+    color: white;
+    border: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.slider-btn:hover {
+    background: #5568d3;
+}
+
+.slider-btn:disabled {
+    background: #cbd5e0;
+    cursor: not-allowed;
+}
+
+.slider-counter {
+    font-size: 13px;
+    color: #718096;
+}
+
+.warnings-section {
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 2px solid #e9ecef;
+}
+
+.warnings-header {
+    font-size: 14px;
+    font-weight: 600;
+    color: #f59e0b;
+    margin-bottom: 10px;
+}
+
+.warning-item {
+    background: #fef3c7;
+    border-left: 3px solid #f59e0b;
+    padding: 10px;
+    margin-bottom: 8px;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #92400e;
+}
+
+@media (max-width: 768px) {
+    .route-info-panel {
+        width: 100%;
+    }
+}
+
+
+.stat-card.action-card {
+    background: white;
+    border: 2px solid #667eea;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.stat-card.action-card:hover {
+    background: #f0f4ff;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+}
+
+.stat-card.action-card .stat-icon {
+    color: #667eea;
+}
+
+.stat-card.action-card .stat-value {
+    color: #667eea;
+}

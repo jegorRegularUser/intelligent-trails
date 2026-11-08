@@ -1,0 +1,11 @@
+/* ============================================
+   Главный файл стилей приложения
+   ============================================ */
+
+@import url('styles/base.css');
+@import url('styles/navigation.css');
+@import url('styles/forms.css');
+@import url('styles/map-page.css');
+@import url('styles/map-info-panel.css');
+@import url('styles/animations.css');
+@import url('styles/responsive.css');

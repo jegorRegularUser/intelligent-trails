@@ -1,0 +1,12 @@
+/* ============================================
+   Главный файл стилей модальных окон
+   ============================================ */
+
+@import url('styles/modal-base.css');
+@import url('styles/modal-components.css');
+@import url('styles/modal-selectors.css');
+@import url('styles/modal-activities.css');
+@import url('styles/map-info-panel.css');
+@import url('styles/notifications.css');
+@import url('styles/animations.css');
+@import url('styles/responsive.css');

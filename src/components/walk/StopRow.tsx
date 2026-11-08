@@ -67,10 +67,12 @@ export function StopRow({
   const Icon = KIND_ICONS[stop.kind];
 
   return (
-    <div className={cn("flex gap-3", className)} aria-busy={isSwapping || undefined}>
+    <div className={cn("relative flex gap-3", className)} aria-busy={isSwapping || undefined}>
+      {/* Круг как в эксперт-модели (w-10, border-white, z-10): непрерывная
+          линия таймлайна рисуется родителем позади этих кругов */}
       <div
         className={cn(
-          "flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-white shadow-sm",
+          "relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-white shadow-sm",
           isSwapping ? "animate-pulse bg-slate-200 text-slate-400" : "bg-brand-100 text-brand-600"
         )}
       >
@@ -120,15 +122,13 @@ export interface WalkLegRowProps {
   className?: string;
 }
 
-/** Перегон между остановками: «N мин пешком» на пунктире */
+/** Перегон между остановками: «N мин пешком» — текст на линии таймлайна
+ *  (линию рисует родитель сплошной, как в эксперт-модели; отступ = круг 40px + gap 12px) */
 export function WalkLegRow({ walkMin, label, className }: WalkLegRowProps) {
   const t = useTranslations("WalkUI");
   return (
-    <div className={cn("flex items-center gap-2 py-1", className)}>
-      <span className="flex w-9 shrink-0 justify-center">
-        <span aria-hidden className="block h-4 w-0 border-l-2 border-dotted border-slate-300" />
-      </span>
-      <span className="text-xs text-slate-400">{label ?? t("legWalk", { minutes: walkMin })}</span>
+    <div className={cn("py-1.5 pl-[52px] text-xs text-slate-400", className)}>
+      {label ?? t("legWalk", { minutes: walkMin })}
     </div>
   );
 }

@@ -8,18 +8,16 @@
 ## Структура репозитория
 
 ```
-next-app/    — единственное живое приложение (Next.js 16, App Router)
-docs/        — продуктовая документация
+/            — Next.js 16 приложение в корне репо (App Router)
+docs/        — продуктовая документация (PRODUCT.md, ADR, промпты)
+legacy/      — исторические поколения: php-frontend/ (дипломная PHP-версия),
+               backend/ (FastAPI-прокси) — сохранены для истории
 .github/     — CI (build+lint+tests) и деплой на VPS
 ```
-
-Исторические поколения проекта (PHP-дипломная версия, FastAPI-прокси, Vite-SPA)
-удалены — они жили в `backend/`, `php-frontend/`, `frontend/` до фазы очистки.
 
 ## Локальный запуск
 
 ```bash
-cd next-app
 cp .env.example .env.local   # заполни ключи
 npm install
 npm run dev                  # http://localhost:3000

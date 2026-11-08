@@ -19,14 +19,12 @@ jobs:
           node-version: 20
 
       - name: Create .env.local for build
-        working-directory: next-app
         run: |
           cat > .env.local << 'EOF'
           ${{ secrets.ENV_FILE }}
           EOF
 
       - name: Install dependencies & Build
-        working-directory: next-app
         run: |
           npm install
           npm run build
@@ -37,9 +35,12 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           password: ${{ secrets.SSH_PASSWORD }}
-          source: "next-app"
-          target: "/root/intelligent-trails/"
+          # Приложение в корне репо; исключаем тяжёлое и приватное
+          source: "."
           rm: true
+          strip_components: 0
+          overwrite: true
+          exclude: ".git,node_modules,.next,legacy,.env.local"
 
       - name: Setup environment and restart app
         uses: appleboy/ssh-action@v1.0.3
@@ -48,7 +49,7 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           password: ${{ secrets.SSH_PASSWORD }}
           script: |
-            cd /root/intelligent-trails/next-app
+            cd /root/intelligent-trails
             
             # Создаём .env.local на сервере
             cat > .env.local << 'EOF'

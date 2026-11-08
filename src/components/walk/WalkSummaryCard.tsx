@@ -97,30 +97,39 @@ export function WalkSummaryCard({
 
           {/* Таймлайн остановок */}
           <div className="flex flex-col">
-            <h4 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">
+            <h4 className="relative z-10 mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">
               {t("timelineTitle")}
             </h4>
-            {plan.stops.map((stop, index) => (
-              <div key={stop.id}>
-                {index > 0 && (
-                  <WalkLegRow walkMin={plan.legs[index]?.walkMin ?? 0} className="mb-1" />
-                )}
-                <StopRow
-                  stop={stop}
-                  isSwapping={swappingStopIds.includes(stop.id)}
-                  swapDisabled={interactionsDisabled}
-                  onSwapRequest={onSwapRequest}
-                  className="pb-1"
-                />
-              </div>
-            ))}
-            {plan.type === "loop" && plan.legs.length > 0 && (
-              <WalkLegRow
-                walkMin={plan.legs[plan.legs.length - 1].walkMin}
-                label={t("legWalkBack", { minutes: plan.legs[plan.legs.length - 1].walkMin })}
-                className="mt-1"
+            <div className="relative">
+              {/* Сплошная линия таймлайна позади кругов — модель эксперт-билдера:
+                  круги w-10 с border-white перекрывают линию, leg-тексты по
+                  выравниванию кругов (pl-52px) */}
+              <div
+                aria-hidden
+                className="absolute left-[19px] top-5 bottom-8 w-0.5 bg-slate-200"
               />
-            )}
+              {plan.stops.map((stop, index) => (
+                <div key={stop.id} className="relative">
+                  {index > 0 && (
+                    <WalkLegRow walkMin={plan.legs[index]?.walkMin ?? 0} />
+                  )}
+                  <StopRow
+                    stop={stop}
+                    isSwapping={swappingStopIds.includes(stop.id)}
+                    swapDisabled={interactionsDisabled}
+                    onSwapRequest={onSwapRequest}
+                    className="pb-4"
+                  />
+                </div>
+              ))}
+              {plan.type === "loop" && plan.legs.length > 0 && (
+                <WalkLegRow
+                  walkMin={plan.legs[plan.legs.length - 1].walkMin}
+                  label={t("legWalkBack", { minutes: plan.legs[plan.legs.length - 1].walkMin })}
+                  className="pb-6"
+                />
+              )}
+            </div>
           </div>
 
           {/* Действия: одна первичная кнопка, всегда в зоне большого пальца */}
