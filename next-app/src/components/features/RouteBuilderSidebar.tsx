@@ -20,6 +20,7 @@ import { useRouter } from 'next/navigation';
 import { encodeRouteToUrl } from '@/utils/routeCodec';
 import { Navigation, Footprints, Car, Bus, Plus, Trash2, MapPin, Flag, Wand2 } from "lucide-react";
 import { PLACE_CATEGORIES } from "@/constants/categories";
+import { WalkModeSwitcher } from "@/components/features/walk-mode/WalkModeSwitcher";
 import { optimizeRouteOrderAction } from "@/actions/optimizeOrder";
 import { useToast } from "@/contexts/ToastContext";
 
@@ -315,9 +316,12 @@ export function RouteBuilderSidebar({ isNavigationOpen = false }: RouteBuilderSi
           </div>
         }
       >
-      <div className="flex flex-col relative pb-4">
-        
-        <div className="absolute left-[20px] top-4 bottom-14 w-0.5 bg-slate-200 z-0" />
+      <div className="flex flex-col relative pb-4 gap-4">
+
+        {/* Свитчер режимов единой панели: быстрый старт ↔ эксперт-маршрут */}
+        <WalkModeSwitcher />
+
+        <div className="absolute left-[20px] top-16 bottom-14 w-0.5 bg-slate-200 z-0" />
 
         {/* --- СТАРТОВАЯ ТОЧКА --- */}
         <div className="relative mb-6" style={{ zIndex: 60 }}>

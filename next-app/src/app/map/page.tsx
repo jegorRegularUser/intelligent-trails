@@ -1,18 +1,17 @@
 import { RouteSidebarManager } from '@/components/features/RouteSidebarManager';
-import { DevMapPanel } from '@/components/features/dev/DevMapPanel';
-import { QuickWalkContainer } from '@/components/features/quick-walk/QuickWalkContainer';
 import { RouteMapLoader } from '@/components/map/RouteMapLoader';
 import { MapPickerOverlay } from '@/components/map/MapPickerOverlay';
 
-// ?dev=1 — dev-панель (демо главного экрана + sketch-эксперименты) блоком
-// на карте; в проде параметр игнорируется целиком.
+// Единая панель «План прогулки» слева: свитчер «Быстрая прогулка ↔ Маршрут»
+// (docs/PRODUCT.md входы №1 и №3), shell и компоненты — общие.
+// ?sketch=1 (только вне production) оборачивает быстрый режим в SketchCard.
 export default async function MapPage({
   searchParams
 }: {
-  searchParams: Promise<{ dev?: string }>;
+  searchParams: Promise<{ sketch?: string }>;
 }) {
-  const { dev } = await searchParams;
-  const devMode = dev === '1' && process.env.NODE_ENV !== 'production';
+  const { sketch } = await searchParams;
+  const sketchMode = sketch === '1' && process.env.NODE_ENV !== 'production';
 
   return (
     <main className="relative w-full h-[100dvh] md:h-[calc(100vh-73px)] overflow-hidden">
@@ -22,18 +21,8 @@ export default async function MapPage({
         <RouteMapLoader />
       </div>
 
-      {/* Сайдбар поверх карты.
-          Он использует fixed-позиционирование внутри себя,
-          так что тут мы просто рендерим его в DOM */}
-      <RouteSidebarManager />
-
-      {/* Главный сценарий «Прогуляться сейчас» (docs/PRODUCT.md, вход №1).
-          Эксперт-режим занимает левый край — быстрый старт живёт справа.
-          В dev-режиме скрываем, чтобы демо-панель не конкурировала за экран */}
-      {!devMode && <QuickWalkContainer />}
-
-      {/* Dev-панель: только ?dev=1 и вне production */}
-      {devMode && <DevMapPanel />}
+      {/* Единая панель режимов прогулки (fixed внутри себя) */}
+      <RouteSidebarManager sketch={sketchMode} />
 
       {/* Оверлей для выбора точки на карте */}
       <MapPickerOverlay />

@@ -244,7 +244,7 @@ export function CardsDemo() {
             />
           </YMaps>
           {/* Якорная мини-карточка поверх карты */}
-          <PlaceMiniCard card={miniCard} anchor={anchor} containerRef={mapRef} />
+          <PlaceMiniCard card={miniCard} anchor={anchor} containerRef={mapRef} variant="full" />
         </div>
       </section>
 

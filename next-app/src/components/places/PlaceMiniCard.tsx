@@ -27,6 +27,11 @@ export interface PlaceMiniCardProps {
   /** Слот «почему сюда» для мобильного bottom sheet. */
   reason?: ReactNode;
   placement?: 'auto' | 'above' | 'below';
+  /**
+   * 'chip' — компактная карточка у якоря; 'full' — богатая карточка
+   * (как в фикстурах) в якорном попапе, для демо и пинов прогулки.
+   */
+  variant?: 'chip' | 'full';
   className?: string;
 }
 

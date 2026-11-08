@@ -1,59 +1,134 @@
 "use client";
 
-import { ReactNode, useId } from "react";
+// SketchCard — рисованная карточка через roughjs (паттерн jegor-landing:
+// rough.svg(mount) + rc.polygon({seed, roughness, bowing, fill, fillStyle})).
+// Формула владельца: сплошная светло-зелёная заливка-полигон + слегка
+// смещённый тёмно-зелёный рисованный контур. Никаких SVG-фильтров.
+import { ReactNode, useLayoutEffect, useRef } from "react";
+import rough from "roughjs";
 import { cn } from "@/utils/cn";
 
-/**
- * Эксперимент с hand-drawn рамкой. Демо — только на dev-странице (/dev),
- * по умолчанию выключен (sketch=false → обычная карточка).
- *
- * rough.js сознательно не добавлялся: эффект собран из нативных SVG-фильтров
- * (feTurbulence + feDisplacementMap) и дрожащего пути, ноль новых зависимостей.
- * Если стиль зайдёт в продукт — заменить на rough-рисование (см. docs/ux-main-screen.md,
- * открытые вопросы).
- */
+const FILL_COLOR = "#e2efdb"; // светло-зелёная заливка
+const STROKE_COLOR = "#2e6b34"; // тёмно-зелёная обводка
 
-/** Детерминированный ГПСЧ — рамка не «пляшет» между рендерами */
-function mulberry32(seed: number) {
+/** Детерминированный PRNG — джиттер вершин воспроизводится same-seed redraw'ом. */
+function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
   return () => {
     a = (a + 0x6d2b79f5) | 0;
     let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    t = Math.imul(t ^ (t >>> 7), 61 | t);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
 
-/**
- * Дрожащий прямоугольник в координатах 0..100. Рисуется через
- * preserveAspectRatio="none" + non-scaling-stroke: не нужно мерить размер
- * контейнера, а толщина линии остаётся постоянной.
- */
-export function sketchRectPath(seed: number, wobble = 1.6): string {
+/** 8-вершинный «вырезанный» контур вокруг карточки (углы + середины сторон). */
+function jitteredPolygon(
+  width: number,
+  height: number,
+  seed: number,
+  jitter: number,
+  offset: [number, number],
+): Array<[number, number]> {
   const rand = mulberry32(seed);
-  const steps = 14;
-  const jitter = () => (rand() - 0.5) * wobble;
-  const points: Array<[number, number]> = [];
-
-  // Периметр по часовой стрелке: верх → право → низ → лево
-  for (let i = 0; i <= steps; i++) points.push([(100 * i) / steps + jitter(), jitter()]);
-  for (let i = 1; i <= steps; i++) points.push([100 + jitter(), (100 * i) / steps + jitter()]);
-  for (let i = 1; i <= steps; i++) points.push([100 - (100 * i) / steps + jitter(), 100 + jitter()]);
-  for (let i = 1; i < steps; i++) points.push([jitter(), 100 - (100 * i) / steps + jitter()]);
-
-  return "M " + points.map(([x, y]) => `${x.toFixed(2)} ${y.toFixed(2)}`).join(" L ");
+  const off = () => (rand() * 2 - 1) * jitter;
+  const pad = 6;
+  const x0 = pad + offset[0];
+  const y0 = pad + offset[1];
+  const x1 = width - pad + offset[0];
+  const y1 = height - pad + offset[1];
+  const xm = (x0 + x1) / 2;
+  const ym = (y0 + y1) / 2;
+  const pts: Array<[number, number]> = [
+    [x0, y0],
+    [xm, y0],
+    [x1, y0],
+    [x1, ym],
+    [x1, y1],
+    [xm, y1],
+    [x0, y1],
+    [x0, ym],
+  ];
+  return pts.map(([px, py]) => [px + off(), py + off()]);
 }
 
 export interface SketchCardProps {
   children: ReactNode;
-  /** Выключен по умолчанию: true рисует hand-drawn рамку поверх карточки */
+  /** Выключен по умолчанию: true рисует rough-фон и обводку */
   sketch?: boolean;
   seed?: number;
   className?: string;
 }
 
 export function SketchCard({ children, sketch = false, seed = 7, className }: SketchCardProps) {
-  const filterId = useId();
+  const mountRef = useRef<HTMLDivElement | null>(null);
+
+  // Rough рисуется императивно в layout-effect (до покраски) и перерисовывается
+  // при ресайзе — геометрия живёт в px карточки, viewBox не искажает штрих.
+  useLayoutEffect(() => {
+    if (!sketch) return;
+    const mount = mountRef.current;
+    if (!mount) return;
+
+    let svg: SVGSVGElement | null = null;
+
+    const draw = () => {
+      if (!mount) return;
+      const w = mount.offsetWidth;
+      const h = mount.offsetHeight;
+      if (w < 2 || h < 2) return;
+
+      mount
+        .querySelectorAll<SVGSVGElement>(":scope > .rough-overlay")
+        .forEach((old) => old.remove());
+
+      const nextSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      nextSvg.setAttribute("width", String(w));
+      nextSvg.setAttribute("height", String(h));
+      nextSvg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+      nextSvg.setAttribute("aria-hidden", "true");
+      nextSvg.classList.add("rough-overlay");
+      nextSvg.style.cssText = "position:absolute;left:0;top:0;pointer-events:none;overflow:visible;z-index:0;";
+
+      const rc = rough.svg(nextSvg);
+
+      // 1) Фон-полигон: сплошная светло-зелёная заливка (fillStyle solid)
+      const fillPoly = rc.polygon(jitteredPolygon(w, h, seed, 2.4, [0, 0]), {
+        seed,
+        roughness: 1.8,
+        bowing: 1,
+        stroke: "none",
+        fill: FILL_COLOR,
+        fillStyle: "solid",
+      });
+      nextSvg.appendChild(fillPoly);
+
+      // 2) Обводка: тёмно-зелёный рисованный контур, слегка смещён от фона
+      const strokePoly = rc.polygon(jitteredPolygon(w, h, seed + 13, 3.2, [1.6, 2.2]), {
+        seed: seed + 13,
+        roughness: 2.2,
+        bowing: 1.4,
+        stroke: STROKE_COLOR,
+        strokeWidth: 2,
+        fill: undefined,
+      });
+      nextSvg.appendChild(strokePoly);
+
+      mount.prepend(nextSvg);
+      svg = nextSvg;
+    };
+
+    draw();
+
+    // Ресайз карточки (контент, вьюпорт) → перерисовка тем же seed («почерк» тот же)
+    const observer = new ResizeObserver(draw);
+    observer.observe(mount);
+
+    return () => {
+      observer.disconnect();
+      svg?.remove();
+    };
+  }, [sketch, seed]);
 
   if (!sketch) {
     return (
@@ -63,51 +138,12 @@ export function SketchCard({ children, sketch = false, seed = 7, className }: Sk
     );
   }
 
-  // Формула стиля (фидбек владельца): сплошная светло-зелёная заливка-полигон
-  // как фон + обводка тёмно-зелёным «рисованным» контуром, слегка смещённым
-  // относительно фона. Дрожание контура — feTurbulence+feDisplacementMap.
   return (
-    <div className={cn("relative rounded-2xl", className)} style={{ backgroundColor: "#eaf5e4" }}>
-      <div className="pointer-events-none absolute inset-0 z-10" aria-hidden>
-        <svg
-          className="h-full w-full overflow-visible"
-          viewBox="0 0 100 100"
-          preserveAspectRatio="none"
-        >
-          <defs>
-            <filter id={filterId}>
-              <feTurbulence
-                type="fractalNoise"
-                baseFrequency="0.05"
-                numOctaves="2"
-                seed={seed}
-                result="noise"
-              />
-              <feDisplacementMap in="SourceGraphic" in2="noise" scale="2.2" />
-            </filter>
-          </defs>
-          {/* Фон-полигон: светло-зелёная сплошная заливка, свой контур */}
-          <path
-            d={sketchRectPath(seed + 31, 1.1)}
-            fill="#e2efdb"
-            stroke="none"
-            filter={`url(#${filterId})`}
-          />
-          {/* Обводка: тёмно-зелёный рисованный контур, слегка смещён от фона */}
-          <path
-            d={sketchRectPath(seed, 1.8)}
-            fill="none"
-            stroke="#2e6b34"
-            strokeWidth={2.4}
-            strokeLinejoin="round"
-            strokeLinecap="round"
-            vectorEffect="non-scaling-stroke"
-            transform="translate(0.9 1.3)"
-            filter={`url(#${filterId})`}
-          />
-        </svg>
-      </div>
+    <div ref={mountRef} className={cn("relative rounded-2xl", className)} style={{ backgroundColor: "transparent" }}>
       <div className="relative">{children}</div>
     </div>
   );
 }
+
+/** Наличие roughjs в рантайме — для dev-переключателей, чтобы не мигать без либы. */
+export const SKETCH_AVAILABLE = true;

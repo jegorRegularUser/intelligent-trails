@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { Menu, X, Map, History, User, LogIn, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useNavigation } from '@/contexts/NavigationContext';
+import { LanguageToggle } from './LanguageToggle';
 
 interface NavigationProps {
   isAuthenticated?: boolean;
@@ -38,6 +39,8 @@ export function Navigation({ isAuthenticated = false }: NavigationProps) {
               >
                 {t('map')}
               </Link>
+
+              <LanguageToggle />
 
               {isAuthenticated ? (
                 <>
@@ -141,7 +144,10 @@ export function Navigation({ isAuthenticated = false }: NavigationProps) {
             ) : null}
           </div>
 
-          {/* Кнопки авторизации внизу */}
+          {/* Язык + кнопки авторизации внизу */}
+          <div className="px-6 pb-2">
+            <LanguageToggle className="w-full justify-center" />
+          </div>
           {!isAuthenticated && (
             <div className="px-6 py-6 border-t border-slate-200 space-y-3">
               <Link href={`/signin`} onClick={toggleMobileMenu}>

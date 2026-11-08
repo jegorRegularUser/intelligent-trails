@@ -1,7 +1,7 @@
 // src/components/map/RouteMap.tsx
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { YMaps, Map } from "@pbe/react-yandex-maps";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouteStore } from "@/store/useRouteStore";
@@ -9,6 +9,24 @@ import { useQuickWalkMapStore } from "@/store/useQuickWalkMapStore";
 import { reverseGeocode } from "@/actions/geocoder";
 import { usePreferences } from "@/contexts/PreferencesContext";
 import { Coordinates } from "@/types/map";
+import { getKindInfo, type PlaceCard as PlaceCardData } from "@/lib/places";
+import { PlaceMiniCard } from "@/components/places/PlaceMiniCard";
+
+/** Пин остановки → богатая карточка места (словарь kind-ов, часы — unknown). */
+function buildWalkStopCard(
+  stop: { name: string; kind: string; reason?: string },
+  locale: string,
+): PlaceCardData {
+  const info = getKindInfo(stop.kind);
+  return {
+    kind: stop.kind,
+    kindLabel: locale === "en" ? info.en : info.ru,
+    icon: info.icon,
+    name: stop.name,
+    displayName: stop.name,
+    openState: "unknown",
+  };
+}
 
 export function RouteMap() {
   const locale = useLocale();
@@ -318,6 +336,28 @@ export function RouteMap() {
   // Приоритет за эксперт-режимом: пока есть mapPoints, полилиния не рисуем.
   const quickWalk = useQuickWalkMapStore();
   const qwSignature = `${quickWalk.fitNonce}:${quickWalk.geometry.length}:${mapPoints.length}`;
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  // Выбранная остановка: богатая карточка места, якоренная к пину
+  const [activeStop, setActiveStop] = useState<{
+    card: PlaceCardData;
+    anchor: { x: number; y: number };
+    coords: [number, number];
+  } | null>(null);
+
+  // Проекция координат в пиксели контейнера карты (для якоря карточки)
+  const projectToContainer = useCallback((coords: [number, number]) => {
+    if (!mapInstance || !mapContainerRef.current) return null;
+    try {
+      const projection = mapInstance.options.get("projection");
+      const zoom = mapInstance.getZoom();
+      const globalPixel = projection.toGlobalPixels(coords, zoom);
+      const page = mapInstance.converter.globalToPage(globalPixel);
+      const rect = mapContainerRef.current.getBoundingClientRect();
+      return { x: Math.round(page[0] - rect.left), y: Math.round(page[1] - rect.top) };
+    } catch {
+      return null;
+    }
+  }, [mapInstance]);
 
   useEffect(() => {
     if (!ymapsInstance || !mapInstance) return;
@@ -341,6 +381,36 @@ export function RouteMap() {
     mapInstance.geoObjects.add(polyline);
     mapInstance.geoObjects.add(startPlacemark);
 
+    // Пины остановок: клик открывает богатую карточку места у пина
+    const stopPlacemarks: any[] = [];
+    for (const stop of quickWalk.stops) {
+      const placemark = new ymapsInstance.Placemark(
+        stop.coords,
+        {
+          iconCaption: stop.name,
+          balloonContent: `<strong>${stop.name}</strong>`,
+        },
+        { preset: "islands#blueCircleDotIcon", iconCaptionMaxWidth: "160" }
+      );
+      placemark.events.add("click", () => {
+        const anchor = projectToContainer(stop.coords);
+        if (!anchor) return;
+        setActiveStop({ card: buildWalkStopCard(stop, locale), anchor, coords: stop.coords });
+      });
+      stopPlacemarks.push(placemark);
+      mapInstance.geoObjects.add(placemark);
+    }
+
+    // Движение/зум: якорь открытой карточки следует за пином
+    const onBoundsChange = () => {
+      setActiveStop((prev) => {
+        if (!prev) return prev;
+        const anchor = projectToContainer(prev.coords);
+        return anchor ? { ...prev, anchor } : prev;
+      });
+    };
+    mapInstance.events.add("boundschange", onBoundsChange);
+
     // Автофит: полилиния может быть далеко от центра карты по умолчанию
     const bounds = ymapsInstance.util.bounds.fromPoints(quickWalk.geometry);
     mapInstance.setBounds(bounds, {
@@ -352,8 +422,15 @@ export function RouteMap() {
     return () => {
       mapInstance.geoObjects.remove(polyline);
       mapInstance.geoObjects.remove(startPlacemark);
+      for (const pm of stopPlacemarks) mapInstance.geoObjects.remove(pm);
+      mapInstance.events.remove("boundschange", onBoundsChange);
     };
-  }, [ymapsInstance, mapInstance, qwSignature, quickWalk.isActive, quickWalk.startName]);
+  }, [ymapsInstance, mapInstance, qwSignature, quickWalk.isActive, quickWalk.startName, quickWalk.stops, locale, projectToContainer]);
+
+  // Новая прогулка — закрываем открытую карточку
+  useEffect(() => {
+    setActiveStop(null);
+  }, [quickWalk.fitNonce]);
 
   return (
     <YMaps query={{
@@ -361,7 +438,7 @@ export function RouteMap() {
       load: "package.full",
       lang: mapLocale === 'en' ? 'en_US' : 'ru_RU'
     }}>
-      <div className="w-full h-full">
+      <div ref={mapContainerRef} className="relative w-full h-full">
         <Map
           defaultState={{
             center: [55.75, 37.61],
@@ -378,6 +455,16 @@ export function RouteMap() {
             suppressObsoleteBrowserNotifier: true // Убирает уведомление о старом браузере
           }}
         />
+        {/* Карточка выбранной остановки прогулки — богатый вариант, якорь к пину */}
+        {activeStop && (
+          <PlaceMiniCard
+            card={activeStop.card}
+            anchor={activeStop.anchor}
+            containerRef={mapContainerRef}
+            variant="full"
+            onExpand={() => setActiveStop(null)}
+          />
+        )}
       </div>
     </YMaps>
   );

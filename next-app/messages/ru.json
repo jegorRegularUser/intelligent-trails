@@ -74,7 +74,9 @@
     "startFromAddress": "Откуда пойдём?",
     "addressHint": "Геолокация недоступна — введите адрес старта",
     "qualityOk": "Все проверки качества пройдены",
-    "variantOf": "Вариант {index} из {count}"
+    "variantOf": "Вариант {index} из {count}",
+    "modeQuick": "Быстрая прогулка",
+    "modeRoute": "Маршрут"
   },
   "BuilderSidebar": {
     "title": "План прогулки",
@@ -197,7 +199,8 @@
     "history": "История",
     "profile": "Профиль",
     "signIn": "Войти",
-    "signUp": "Регистрация"
+    "signUp": "Регистрация",
+    "language": "Язык"
   },
   "Auth": {
     "signInTitle": "Вход в аккаунт",

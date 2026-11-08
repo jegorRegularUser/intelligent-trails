@@ -74,7 +74,9 @@
     "startFromAddress": "Where do we start?",
     "addressHint": "Geolocation unavailable — enter a start address",
     "qualityOk": "All quality gates passed",
-    "variantOf": "Variant {index} of {count}"
+    "variantOf": "Variant {index} of {count}",
+    "modeQuick": "Quick walk",
+    "modeRoute": "Route"
   },
   "Builder": {
     "title": "Intelligent Route Planner",
@@ -126,7 +128,8 @@
     "history": "History",
     "profile": "Profile",
     "signIn": "Sign In",
-    "signUp": "Sign Up"
+    "signUp": "Sign Up",
+    "language": "Language"
   },
   "BuilderSidebar": {
     "title": "Walk Plan",

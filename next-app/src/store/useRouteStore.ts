@@ -62,6 +62,12 @@ interface RouteState {
   mapPickerTarget: string | null; // 'start' | waypoint.id | 'end'
   setMapPickerActive: (active: boolean, target?: string | null) => void;
 
+  // Режим единой панели «План прогулки»: быстрый старт (вайб+время) или
+  // эксперт-маршрут. Свитчер в шапке панели переключает контент,
+  // shell и компоненты — общие.
+  walkMode: 'quick' | 'route';
+  setWalkMode: (mode: 'quick' | 'route') => void;
+
   // User location
   userLocation: Coordinates | null;
   setUserLocation: (coords: Coordinates | null) => void;
@@ -92,6 +98,8 @@ export const useRouteStore = create<RouteState>((set) => ({
   setEndPointCategory: (cat) => set({ endPointCategory: cat }),
   mapPoints: [],
   setMapPoints: (points) => set({ mapPoints: points }),
+  walkMode: 'quick',
+  setWalkMode: (mode) => set({ walkMode: mode }),
   isMapPickerActive: false,
   mapPickerTarget: null,
   setMapPickerActive: (active, target = null) => set({ isMapPickerActive: active, mapPickerTarget: target }),

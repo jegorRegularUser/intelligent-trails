@@ -4,12 +4,13 @@ import { useEffect, useState, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { useRouteStore, MapRoutePoint, FormWaypoint } from "@/store/useRouteStore";
 import { RouteBuilderSidebar } from "./RouteBuilderSidebar";
+import { QuickWalkPanel } from "./quick-walk/QuickWalkPanel";
 import { RouteResultSidebar } from "./RouteResultSidebar";
 import { decodeRouteFromUrl } from "@/utils/routeCodec";
 import { useNavigation } from "@/contexts/NavigationContext";
 
 
-export function RouteSidebarManager() {
+export function RouteSidebarManager({ sketch = false }: { sketch?: boolean } = {}) {
   const searchParams = useSearchParams();
   const routeParam = searchParams.get("r");
   const { isMobileMenuOpen } = useNavigation();

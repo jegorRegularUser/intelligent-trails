@@ -1,14 +1,12 @@
 "use client";
 
-// Живой главный сценарий «Прогуляться сейчас» (docs/PRODUCT.md, вход №1).
-// Композиция та же, что в демо (components/walk/WalkDemo), но сборка настоящая:
-// геолокация/адрес → server action buildQuickWalk (провайдер → погода → вайб →
-// движок) → карточка прогулки + петля на карте.
-// «Заменить» = пересборка без выменянных остановок; «Пересобрать» = цикл по
-// альтернативам движка без похода в сеть, если планов несколько.
+// Контент режима «Быстрая прогулка» — вся логика прежнего QuickWalkContainer,
+// но без плавающей оболочки: рендерится ВНУТРИ единой панели «План прогулки»
+// (RoutePanel) рядом со свитчером режимов. Геолокация/адрес → server action →
+// движок → карточка + петля на карте.
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { CloudRain, Crosshair, Footprints, MapPin, Save, ThermometerSun, X } from "lucide-react";
+import { CloudRain, Crosshair, MapPin, Save, ThermometerSun } from "lucide-react";
 import {
   DEFAULT_CUSTOM_MINUTES,
   INITIAL_WALK_STATE,
@@ -24,7 +22,11 @@ import { LoginRequiredModal } from "@/components/features/LoginRequiredModal";
 import { useToast } from "@/contexts/ToastContext";
 import { useQuickWalkMapStore } from "@/store/useQuickWalkMapStore";
 import type { WalkPlan } from "@/components/walk/types";
-import { buildQuickWalk, type QuickVibe, type WalkContextInfo } from "@/actions/quickWalk";
+import {
+  buildQuickWalk,
+  type QuickVibe,
+  type WalkContextInfo,
+} from "@/actions/quickWalk";
 import { saveQuickWalkToHistory } from "@/actions/quickWalkSave";
 import { planPolyline } from "@/lib/walk/uiAdapter";
 import { quickWalkToYandexMapsUrl } from "@/lib/walk/shareCodec";
@@ -55,13 +57,12 @@ function browserTimezone(): string | undefined {
   }
 }
 
-export function QuickWalkContainer() {
+export function QuickWalkContent() {
   const t = useTranslations("WalkUI");
   const locale = useLocale();
   const { showToast } = useToast();
   const mapStore = useQuickWalkMapStore();
   const [machine, dispatch] = useReducer(walkMachine, INITIAL_WALK_STATE);
-  const [open, setOpen] = useState(false);
   const [selectedMinutes, setSelectedMinutes] = useState<number | null>(null);
   const [isCustomActive, setIsCustomActive] = useState(false);
   const [customMinutes, setCustomMinutes] = useState<number | null>(null);
@@ -122,7 +123,17 @@ export function QuickWalkContainer() {
           setContext(result.context);
           setFastMode(result.fastMode);
           setLastInput({ minutes, vibe: vibeId, start });
-          mapStore.setWalk(planPolyline(result.plans[0], start), "Старт прогулки");
+          mapStore.setWalk(
+            planPolyline(result.plans[0], start),
+            "Старт прогулки",
+            result.plans[0].stops.map((s) => ({
+              id: s.id,
+              name: s.name,
+              kind: s.kind,
+              coords: s.coordinates ?? start,
+              reason: s.reason,
+            })),
+          );
           dispatch({ type: "BUILD_SUCCESS" });
         } else {
           setErrorMessage(result.error);
@@ -171,7 +182,16 @@ export function QuickWalkContainer() {
       const next = (planIndex + 1) % plans.length;
       setPlanIndex(next);
       if (lastInput) {
-        mapStore.setWalk(planPolyline(plans[next], lastInput.start), "Старт прогулки");
+        mapStore.setWalk(
+          planPolyline(plans[next], lastInput.start),
+          "Старт прогулки",
+          plans[next].stops.map((s) => ({
+            id: s.id,
+            name: s.name,
+            kind: s.kind,
+            coords: s.coordinates ?? lastInput.start,
+          })),
+        );
       }
       return;
     }
@@ -210,7 +230,16 @@ export function QuickWalkContainer() {
             setPlans(result.plans);
             setPlanIndex(0);
             setContext(result.context);
-            mapStore.setWalk(planPolyline(result.plans[0], start), "Старт прогулки");
+            mapStore.setWalk(
+              planPolyline(result.plans[0], start),
+              "Старт прогулки",
+              result.plans[0].stops.map((s) => ({
+                id: s.id,
+                name: s.name,
+                kind: s.kind,
+                coords: s.coordinates ?? start,
+              })),
+            );
             dispatch({ type: "BUILD_SUCCESS" });
           } else {
             // Заменить не получилось — оставляем старый план и честно сообщаем.
@@ -228,7 +257,7 @@ export function QuickWalkContainer() {
         }
       })();
     },
-    [addressStart, lastInput, locale, mapStore],
+    [addressStart, lastInput, locale, mapStore, showToast, t],
   );
 
   const handleSave = useCallback(async () => {
@@ -256,18 +285,17 @@ export function QuickWalkContainer() {
   }, [lastInput, mapStore.geometry, plan, showToast, t]);
 
   const handleStartWalk = useCallback(() => {
-    if (!plan || !lastInput) return;
-    // Старт для внешней навигации: первая координата плана (первая остановка)
-    // неточна как место старта — берём старт из стора карты, он всегда актуален
+    if (!plan) return;
+    // Старт для внешней навигации: geometry[0] стора карты — всегда актуален
     const start = mapStore.geometry[0];
     if (!start) return;
     const url = quickWalkToYandexMapsUrl(plan, start);
     window.open(url, "_blank", "noopener");
-  }, [lastInput, mapStore.geometry, plan]);
+  }, [mapStore.geometry, plan]);
 
   const phase = machine.phase;
   const cardPhase = phase === "offline" ? (machine.resumePhase ?? "idle") : phase;
-  const showPanel = open && (cardPhase === "idle" || cardPhase === "params");
+  const showPanel = cardPhase === "idle" || cardPhase === "params";
   const showCard = cardPhase === "ready" || cardPhase === "error" || cardPhase === "building";
   const forecast = useMemo(
     () => (selectedMinutes != null ? estimateBuildRange(selectedMinutes) : null),
@@ -282,70 +310,39 @@ export function QuickWalkContainer() {
     return { icon: null, text: t("weatherNeutral") };
   }, [cardPhase, context, t]);
 
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={() => {
-          setOpen(true);
-          touchParams();
-        }}
-        className="fixed bottom-4 left-4 z-30 flex items-center gap-2 rounded-full bg-brand-500 px-5 py-3.5 font-semibold text-white shadow-float transition-all hover:bg-brand-600 active:scale-95"
-      >
-        <Footprints size={20} />
-        {t("screenTitle")}
-      </button>
-    );
-  }
-
   return (
-    <section
-      className="fixed bottom-0 left-0 right-0 z-30 max-h-[85dvh] overflow-y-auto rounded-t-3xl border border-slate-200 bg-white p-5 shadow-float md:bottom-4 md:left-auto md:right-6 md:max-w-[440px] md:rounded-3xl md:p-6"
-      aria-label={t("screenTitle")}
-    >
-      <button
-        type="button"
-        onClick={() => setOpen(false)}
-        aria-label={t("editParamsCta")}
-        className="absolute right-3 top-3 z-10 rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
-      >
-        <X size={18} />
-      </button>
-
+    <>
       {phase === "offline" && <OfflineBanner />}
 
       {showPanel ? (
-        <>
-          <QuickStartPanel
-            selectedMinutes={selectedMinutes}
-            isCustomActive={isCustomActive}
-            customMinutes={customMinutes}
-            onSelectPreset={(minutes) => {
-              touchParams();
-              setIsCustomActive(false);
-              setSelectedMinutes(minutes);
-            }}
-            onCustomActivate={() => {
-              touchParams();
-              setIsCustomActive(true);
-              setCustomMinutes((prev) => prev ?? DEFAULT_CUSTOM_MINUTES);
-            }}
-            onCustomChange={(minutes) => {
-              touchParams();
-              setCustomMinutes(normalizeCustomMinutes(minutes));
-            }}
-            selectedVibe={vibe}
-            onSelectVibe={(next) => {
-              touchParams();
-              setVibe(next);
-            }}
-            onStart={handleStart}
-            isBuilding={phase === "building"}
-            disabled={phase === "offline"}
-            forecast={forecast}
-            className="pt-8"
-          />
-        </>
+        <QuickStartPanel
+          selectedMinutes={selectedMinutes}
+          isCustomActive={isCustomActive}
+          customMinutes={customMinutes}
+          onSelectPreset={(minutes) => {
+            touchParams();
+            setIsCustomActive(false);
+            setSelectedMinutes(minutes);
+          }}
+          onCustomActivate={() => {
+            touchParams();
+            setIsCustomActive(true);
+            setCustomMinutes((prev) => prev ?? DEFAULT_CUSTOM_MINUTES);
+          }}
+          onCustomChange={(minutes) => {
+            touchParams();
+            setCustomMinutes(normalizeCustomMinutes(minutes));
+          }}
+          selectedVibe={vibe}
+          onSelectVibe={(next) => {
+            touchParams();
+            setVibe(next);
+          }}
+          onStart={handleStart}
+          isBuilding={phase === "building"}
+          disabled={phase === "offline"}
+          forecast={forecast}
+        />
       ) : null}
 
       {/* Фолбэк старта: геолокацию не дали — пусть человек введёт адрес.
@@ -376,7 +373,7 @@ export function QuickWalkContainer() {
         <>
           {/* Индикатор цикла альтернатив: «Пересобрать» листает планы мгновенно */}
           {cardPhase === "ready" && alternativesCount > 1 && (
-            <p className="pt-8 text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
               {t("variantOf", { index: planIndex + 1, count: alternativesCount })}
             </p>
           )}
@@ -393,7 +390,6 @@ export function QuickWalkContainer() {
             }}
             onRebuild={handleRebuild}
             onStartWalk={handleStartWalk}
-            className="pt-8"
           />
 
           {/* Погодный контекст: почему движок выбрал такие места */}
@@ -433,7 +429,8 @@ export function QuickWalkContainer() {
         </>
       ) : null}
 
+      {/* Модалка логина — контентная часть; скетч-обёртку добавляет QuickWalkPanel */}
       <LoginRequiredModal isOpen={showLoginModal} onClose={() => setShowLoginModal(false)} />
-    </section>
+    </>
   );
 }
