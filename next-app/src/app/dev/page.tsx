@@ -1,3 +1,4 @@
+import { notFound } from "next/navigation";
 import { WalkDemo } from "@/components/walk/WalkDemo";
 import { SketchCard } from "@/components/ui/SketchCard";
 
@@ -10,8 +11,12 @@ interface DevPageProps {
 /**
  * Dev-страница: демо главного экрана «Прогуляться сейчас» (визуал + колбэки,
  * движок и стор не подключены) и эксперимент SketchCard (?sketch=1).
+ * Только для разработки: в проде честный 404.
  */
 export default async function DevPage({ searchParams }: DevPageProps) {
+  if (process.env.NODE_ENV === "production") {
+    notFound();
+  }
   const { sketch } = await searchParams;
   const sketchOn = sketch === "1";
 

@@ -18,8 +18,10 @@ import { shouldShowDistanceWarning, calculateDirectDistance } from "@/utils/rout
 
 import { useRouter } from 'next/navigation';
 import { encodeRouteToUrl } from '@/utils/routeCodec';
-import { Navigation, Footprints, Car, Bus, Plus, Trash2, MapPin, Flag } from "lucide-react";
+import { Navigation, Footprints, Car, Bus, Plus, Trash2, MapPin, Flag, Wand2 } from "lucide-react";
 import { PLACE_CATEGORIES } from "@/constants/categories";
+import { optimizeRouteOrderAction } from "@/actions/optimizeOrder";
+import { useToast } from "@/contexts/ToastContext";
 
 interface RouteBuilderSidebarProps {
   isNavigationOpen?: boolean;
@@ -43,6 +45,8 @@ export function RouteBuilderSidebar({ isNavigationOpen = false }: RouteBuilderSi
     setMapPoints, setIsRouteBuilt,
     setMapPickerActive
   } = useRouteStore();
+
+  const { showToast } = useToast();
 
   // Локальный стейт для спиннера и модального окна ошибок
   const [isGenerating, setIsGenerating] = useState(false);

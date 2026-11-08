@@ -131,7 +131,11 @@
     "editHint": "Чтобы изменить адрес, нажмите стрелку назад",
     "hoursShort": "ч",
     "startPointDefault": "Начало",
-    "endPointDefault": "Конец"
+    "endPointDefault": "Конец",
+    "optimizeOrder": "Оптимизировать порядок",
+    "optimizing": "Считаем матрицу…",
+    "optimizeDone": "Порядок пересобран: ~{minutes} мин ходьбы",
+    "optimizeError": "Не удалось оптимизировать порядок"
   },
   "TransportAlternatives": {
     "routeOptions": "Варианты маршрута",

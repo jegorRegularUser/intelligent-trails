@@ -183,7 +183,11 @@
     "editHint": "To change address, click the back arrow",
     "hoursShort": "h",
     "startPointDefault": "Start",
-    "endPointDefault": "End"
+    "endPointDefault": "End",
+    "optimizeOrder": "Optimize stop order",
+    "optimizing": "Computing matrix…",
+    "optimizeDone": "Order rebuilt: ~{minutes} min of walking",
+    "optimizeError": "Failed to optimize order"
   },
   "TransportAlternatives": {
     "routeOptions": "Route options",
