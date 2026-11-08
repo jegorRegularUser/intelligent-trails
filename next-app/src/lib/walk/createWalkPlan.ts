@@ -29,7 +29,7 @@ import { mulberry32 } from './internal/rng';
 import { selectCandidates, type SelectionResult } from './selection';
 import { solveWalkOrder, ringCost } from './ordering';
 import { evaluateGates } from './gates';
-import { buildAnchorReason } from './reasons';
+import { buildAnchorReason, buildAnchorReasonEn } from './reasons';
 
 // --- Параметры вариантов альтернатив (docs/walk-engine.md §11) ---
 
@@ -504,6 +504,13 @@ function assignReasons(stops: WalkStop[], selection: SelectionResult, isLoop: bo
       isClosest: proximities[i] <= minProximity + 1e-9,
       proximityMeters: proximities[i],
     });
+      stop.reasonEn = buildAnchorReasonEn({
+        place: stop.place,
+        zoneWord,
+        isBestOfCategory: selection.bestByCategory.get(stop.place.category) === stop.place,
+        isClosest: proximities[i] <= minProximity + 1e-9,
+        proximityMeters: proximities[i],
+      });
   });
 }
 

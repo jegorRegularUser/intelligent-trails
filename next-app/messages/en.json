@@ -61,7 +61,18 @@
     "demoHint": "Engine and store are not connected: building, errors and swaps are simulated with timers.",
     "demoFailToggle": "Simulate failure",
     "demoOfflineToggle": "Simulate offline",
-    "demoReset": "Reset demo"
+    "demoReset": "Reset demo",
+    "weatherRain": "It's raining — indoor stops prioritized",
+    "weatherHeat": "It's hot — the route prefers shade and greenery",
+    "weatherDark": "Evening — lit and lively places",
+    "weatherNeutral": "Weather is perfect for a walk",
+    "saveCta": "Save this walk",
+    "saving": "Saving…",
+    "savedToast": "Walk saved to history",
+    "saveError": "Failed to save — please try again",
+    "walkName": "Walk · {minutes} min",
+    "startFromAddress": "Where do we start?",
+    "addressHint": "Geolocation unavailable — enter a start address"
   },
   "Builder": {
     "title": "Intelligent Route Planner",

@@ -1,7 +1,7 @@
 "use server";
 
 // Серверный экшен главного сценария «Прогуляться сейчас» (docs/PRODUCT.md, вход №1).
-// Конвейер: CloudProvider → погода → архетип+контекст → скоринг → движок → UI-план.
+// Конвейер: CloudProvider → погода → архетип+контекст → скоринг → движок → UI-планы.
 // Экшен тонкий: вся логика — в чистых модулях (geo/vibes/walk), здесь только склейка.
 import { CloudProvider, type GeoPlace, type GeoProvider } from '@/lib/geo';
 import { fetchWeatherContext } from '@/lib/weather';
@@ -9,8 +9,8 @@ import { getArchetype } from '@/lib/vibes/archetypes';
 import { combineContext, type AdjustedProfile } from '@/lib/vibes/combine';
 import { scorePlace } from '@/lib/vibes/ranking';
 import { evaluateOpeningHours } from '@/lib/places/hours';
-import { createWalkPlan, type WalkPlan } from '@/lib/walk';
-import { enginePlanToUiPlan } from '@/lib/walk/uiAdapter';
+import { createWalkPlan } from '@/lib/walk';
+import { enginePlansToUiPlans } from '@/lib/walk/uiAdapter';
 import type { VibeId } from '@/components/walk/logic';
 import type { WalkPlan as UiWalkPlan } from '@/components/walk/types';
 import { PLACE_CATEGORIES } from '@/constants/categories';
@@ -19,20 +19,34 @@ import { PLACE_CATEGORIES } from '@/constants/categories';
 export type QuickVibe = VibeId;
 
 export interface QuickWalkInput {
-  /** [lat, lng] — точка старта (геолокация браузера). */
+  /** [lat, lng] — точка старта (геолокация или адрес). */
   start: [number, number];
   budgetMinutes: number;
   vibe: QuickVibe;
   /** Идентификаторы остановок, которые не показывать (кнопка «Заменить» = пересборка без них). */
   excludeStopIds?: string[];
+  /** IANA-таймзона браузера — для «работает ли сейчас». */
+  timezone?: string;
+  /** Локаль карточки — выбирает словарь причин якорей. */
+  locale?: 'ru' | 'en';
+}
+
+/** Погодный контекст, который показываем человеку, а не прячем в логи. */
+export interface WalkContextInfo {
+  isRaining: boolean;
+  tempC: number | null;
+  isDark: boolean;
+  /** Какие корректировки применил combineContext: 'rain-indoor' | 'heat-shade' | 'dark-evening'. */
+  adjustments: string[];
 }
 
 export type QuickWalkResult =
-  | { ok: true; plan: UiWalkPlan; fastMode: boolean }
+  | { ok: true; plans: UiWalkPlan[]; fastMode: boolean; context: WalkContextInfo }
   | { ok: false; error: string };
 
 const MIN_BUDGET = 15;
 const MAX_BUDGET = 240;
+const DEFAULT_TIMEZONE = 'Europe/Moscow';
 
 /** Пул кандидатов, который движок готов переварить: скоринг режет до этого. */
 const ENGINE_CANDIDATE_CAP = 40;
@@ -103,7 +117,14 @@ export async function buildQuickWalk(input: QuickWalkInput): Promise<QuickWalkRe
   const archetype = getArchetype(input.vibe === 'rain' ? 'rainy' : input.vibe);
   const profile = combineContext(archetype, weather, now);
 
-  const timeZone = 'Europe/Moscow'; // пока фиксированная; поле в профиле пользователя появится с i18n-настройками
+  const context: WalkContextInfo = {
+    isRaining: weather?.isRaining ?? false,
+    tempC: weather?.tempC ?? null,
+    isDark: weather ? weather.isDark : false,
+    adjustments: profile.adjustments,
+  };
+
+  const timeZone = input.timezone ?? DEFAULT_TIMEZONE;
   const hour = now.getHours();
 
   const pool = await collectCandidates(provider, start, profile, input.budgetMinutes);
@@ -153,10 +174,11 @@ export async function buildQuickWalk(input: QuickWalkInput): Promise<QuickWalkRe
     return { ok: false, error: messages[planResult.failure.code] ?? 'Не удалось построить прогулку' };
   }
 
-  const best = planResult.plans[0] as WalkPlan;
+  const locale = input.locale ?? 'ru';
   return {
     ok: true,
-    plan: enginePlanToUiPlan(best, input.budgetMinutes),
+    plans: enginePlansToUiPlans(planResult.plans, input.budgetMinutes, locale),
     fastMode: await provider.isFastArea(start),
+    context,
   };
 }

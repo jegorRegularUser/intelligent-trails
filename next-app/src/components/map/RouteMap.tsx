@@ -5,6 +5,7 @@ import { useEffect, useState, useRef } from "react";
 import { YMaps, Map } from "@pbe/react-yandex-maps";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouteStore } from "@/store/useRouteStore";
+import { useQuickWalkMapStore } from "@/store/useQuickWalkMapStore";
 import { reverseGeocode } from "@/actions/geocoder";
 import { usePreferences } from "@/contexts/PreferencesContext";
 import { Coordinates } from "@/types/map";
@@ -312,6 +313,48 @@ export function RouteMap() {
     };
   }, [ymapsInstance, mapInstance, routeSignature]);
 
+  // --- Быстрая прогулка: полилиния из отдельного стора.
+  // Эксперт-зона не знает о движке прогулки: RouteMap читает только этот стор.
+  // Приоритет за эксперт-режимом: пока есть mapPoints, полилиния не рисуем.
+  const quickWalk = useQuickWalkMapStore();
+  const qwSignature = `${quickWalk.fitNonce}:${quickWalk.geometry.length}:${mapPoints.length}`;
+
+  useEffect(() => {
+    if (!ymapsInstance || !mapInstance) return;
+    if (!quickWalk.isActive || quickWalk.geometry.length < 2) return;
+    if (mapPoints.length > 0) return; // эксперт-маршрут занимает карту
+
+    const polyline = new ymapsInstance.Polyline(
+      quickWalk.geometry,
+      { hintContent: null },
+      { strokeColor: "#10b981", strokeWidth: 5, strokeOpacity: 0.9, strokeStyle: "solid" }
+    );
+    const startPlacemark = new ymapsInstance.Placemark(
+      quickWalk.geometry[0],
+      {
+        iconCaption: quickWalk.startName || "Старт",
+        balloonContent: `<strong>Старт прогулки</strong>`,
+      },
+      { preset: "islands#greenDotIcon", iconCaptionMaxWidth: "200" }
+    );
+
+    mapInstance.geoObjects.add(polyline);
+    mapInstance.geoObjects.add(startPlacemark);
+
+    // Автофит: полилиния может быть далеко от центра карты по умолчанию
+    const bounds = ymapsInstance.util.bounds.fromPoints(quickWalk.geometry);
+    mapInstance.setBounds(bounds, {
+      checkZoomRange: true,
+      zoomMargin: [60, 60, 60, window.innerWidth > 768 ? 460 : 60],
+      duration: 500
+    });
+
+    return () => {
+      mapInstance.geoObjects.remove(polyline);
+      mapInstance.geoObjects.remove(startPlacemark);
+    };
+  }, [ymapsInstance, mapInstance, qwSignature, quickWalk.isActive, quickWalk.startName]);
+
   return (
     <YMaps query={{
       apikey: process.env.NEXT_PUBLIC_YANDEX_API_KEY,
@@ -329,7 +372,7 @@ export function RouteMap() {
           height="100%"
           onLoad={setYmapsInstance}
           instanceRef={setMapInstance}
-          modules={["multiRouter.MultiRoute", "util.bounds", "Placemark"]}
+          modules={["multiRouter.MultiRoute", "util.bounds", "Placemark", "Polyline"]}
           options={{
             suppressMapOpenBlock: true, // Убирает кнопку "Открыть в Яндекс.Картах"
             suppressObsoleteBrowserNotifier: true // Убирает уведомление о старом браузере

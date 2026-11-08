@@ -61,7 +61,18 @@
     "demoHint": "Движок и стор не подключены: сборка, ошибки и замены имитируются таймерами.",
     "demoFailToggle": "Симулировать ошибку",
     "demoOfflineToggle": "Симулировать нет сети",
-    "demoReset": "Сбросить демо"
+    "demoReset": "Сбросить демо",
+    "weatherRain": "Идёт дождь — приоритет крытым местам",
+    "weatherHeat": "Жарко — маршрут любит тень и зелень",
+    "weatherDark": "Вечер — освещённые и живые места",
+    "weatherNeutral": "Погода располагает к прогулке",
+    "saveCta": "Сохранить прогулку",
+    "saving": "Сохраняем…",
+    "savedToast": "Прогулка сохранена в историю",
+    "saveError": "Не удалось сохранить — попробуйте ещё раз",
+    "walkName": "Прогулка · {minutes} мин",
+    "startFromAddress": "Откуда пойдём?",
+    "addressHint": "Геолокация недоступна — введите адрес старта"
   },
   "BuilderSidebar": {
     "title": "План прогулки",
@@ -81,7 +92,7 @@
     "transportPedestrian": "Пешком",
     "transportAuto": "Авто",
     "transportMassTransit": "Транспорт",
-    "transportLabel" : "Транспорт",
+    "transportLabel": "Транспорт",
     "time15m": "15 мин",
     "time30m": "30 мин",
     "time1h": "1 час",

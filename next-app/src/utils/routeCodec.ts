@@ -262,11 +262,18 @@ export function encodeRouteToUrl(data: any): string {
       const dur = wp.durationToNext !== undefined ? Number(wp.durationToNext) : undefined;
 
       const tuple: WaypointTupleV2 = [t, v, latI, lonI, n, stayDuration, m, i];
-      if (altFlat) tuple.push(altFlat);
-      if (altNames) tuple.push(altNames as any); // Добавляем названия альтернатив
-      if (oc && (t === 1 || tuple.length > 8)) tuple.push(oc);
-      if (dist !== undefined) tuple.push(dist);
-      if (dur !== undefined) tuple.push(dur);
+      // Позиции 8-12 опциональных полей всегда держим выровненными:
+      // если хоть одно есть — остальные кодируем нулями-плейсхолдерами.
+      // Иначе (старое поведение) originalCategory без альтернатив уезжала
+      // на позицию altFlat, и декодер читал её не на своём месте.
+      const hasOptional = !!(altFlat || altNames || oc || dist !== undefined || dur !== undefined);
+      if (hasOptional) {
+        tuple.push((altFlat ?? 0) as any);
+        tuple.push((altNames ?? 0) as any);
+        tuple.push((oc || 0) as any);
+        tuple.push((dist ?? 0) as any);
+        tuple.push((dur ?? 0) as any);
+      }
       return tuple;
     });
 

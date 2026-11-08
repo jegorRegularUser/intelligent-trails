@@ -22,11 +22,15 @@ export interface WalkStop {
   stayMin: number;
   /** Зачем сюда заходить — единственная строка причины в таймлайне */
   reason: string;
+  /** Координаты [lat,lng] — для сохранения, шеринга и кнопки «Идти» (интеграция). */
+  coordinates?: [number, number];
 }
 
 export interface WalkLeg {
   /** Минуты ходьбы между соседними точками маршрута */
   walkMin: number;
+  /** Полилиния [lat,lng] для отрисовки на карте (интеграция). */
+  geometry?: [number, number][];
 }
 
 export interface WalkPlanTotals {
