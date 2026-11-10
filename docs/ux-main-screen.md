@@ -574,16 +574,23 @@ Footprints слева от текста CTA)*
 | Чипы времени + вайбы + CTA | `src/components/walk/QuickStartPanel.tsx` |
 | Живая карточка: сводка + скелетон/empty/error | `src/components/walk/WalkSummaryCard.tsx` |
 | Строка таймлайна + «Заменить» | `src/components/walk/StopRow.tsx` |
-| Демо-харнесс (фазы на useState, фейковая сборка, оффлайн/ошибка тумблерами) | `src/components/walk/WalkDemo.tsx` |
 | Тесты чистой логики и консистентности fixtures | `src/components/walk/__tests__/logic.test.ts` |
-| i18n | `messages/ru.json`, `messages/en.json` → только namespace `WalkUI.*` |
+| i18n | `messages/ru.json`, `messages/en.json` → namespace `WalkUI.*` (+ `Places` для бейджей часов) |
 | Hand-drawn эксперимент (по умолчанию выключен) | `src/components/ui/SketchCard.tsx` |
-| Демо-страница | `src/app/dev/page.tsx` |
+| Единая панель: shell + свитчер трёх режимов | `src/components/ui/RoutePanel.tsx`, `src/components/features/walk-mode/WalkModeSwitcher.tsx` |
+| Контент «Прогуляться сейчас» / «Новый город» | `src/components/features/quick-walk/QuickWalkContent.tsx` (режим — проп `mode`), обёртка `QuickWalkPanel.tsx` |
+| Серверная склейка | `src/lib/walk/quickPipeline.ts`, экшены `src/actions/quickWalk.ts` / `quickWalkReplace.ts` / `quickWalkSave.ts` |
+| Карта: петля + пины с карточками и часами | `src/components/map/RouteMap.tsx` (читает `src/store/useQuickWalkMapStore.ts`) |
 
-Компоненты управляемые (controlled): состояние фаз и выбора живёт в
-`WalkDemo` (в будущем — в стор/движок), компоненты получают пропсы и отдают
-колбэки (`onStart`, `onRetry`, `onSwapRequest(stopId)`, `onSelectVibe`...).
-Интеграции с движком и глобальным стором в этой итерации нет — сознательно.
+*(Демо-харнесс `WalkDemo.tsx` удалён после интеграции — его роль забрал живой
+контент внутри единой панели.)*
+
+Компоненты управляемые (controlled): машина фаз и выбор живут в
+`QuickWalkContent` (reducer `walkMachine`), серверная склейка — в
+`quickPipeline`, движок остаётся чистым. Интеграция со стором и движком
+выполнена: три режима в свитчере — «Прогуляться» (quick), «Новый город»
+(sightseeing: тот же контент, архетип `sightseeing` вместо выбора вайба,
+docs/vibes.md §3.5.1) и эксперт-маршрут.
 
 ## 11. Открытые вопросы
 
