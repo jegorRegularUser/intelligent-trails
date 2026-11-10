@@ -71,6 +71,27 @@ function longLegsGate(facts: GateFacts): GateReport {
 }
 
 /**
+ * Числовая метрика перекрытия петли: максимум доли перекрытия по всем парам
+ * ног — та же механика, что у loopStreetGate (коридор 30 м, короткая нога
+ * в коридоре длинной). Реакция лестницы деградации L3: если гейт улиц упал,
+ * перебираем варианты розы и берём вариант с минимальным перекрытием.
+ */
+export function maxStreetOverlap(geometries: WalkLatLng[][]): number {
+  let max = 0;
+  for (let i = 0; i < geometries.length; i++) {
+    for (let j = i + 1; j < geometries.length; j++) {
+      const a = geometries[i];
+      const b = geometries[j];
+      if (a.length < 2 || b.length < 2) continue;
+      const [shorter, longer] =
+        polylineLengthMeters(a) <= polylineLengthMeters(b) ? [a, b] : [b, a];
+      max = Math.max(max, fractionWithinCorridor(shorter, longer, SAME_STREET_CORRIDOR_M));
+    }
+  }
+  return max;
+}
+
+/**
  * Эвристика «не по той же улице» (выбор задокументирован в §8): для пары ног
  * доля точек короче ноги в 30-метровом коридоре другой ноги > 0.6 → провал.
  * Нет геометрии — честная деградация: гейт проходит с пометкой.

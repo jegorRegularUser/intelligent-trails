@@ -3,6 +3,10 @@
 // Никакого UI и сети: createWalkPlan(input, ports) → план или честный отказ.
 
 export { createWalkPlan } from './createWalkPlan';
+export { replaceStopInPlan } from './replaceStop';
+export { buildWalkWithFallback } from './fallback';
+export { buildLoopThroughCandidates } from './loopThrough';
+export { buildStreetLoop, loopRadiusMeters } from './streetLoop';
 export { evaluateGates } from './gates';
 export { selectCandidates } from './selection';
 export { solveWalkOrder, nearestNeighborOrder } from './ordering';
@@ -19,7 +23,12 @@ export type {
   WalkFailure,
   WalkFailureCode,
   WalkPlanResult,
+  WalkDegradedLevel,
 } from './types';
+export type { ReplaceStopInput, ReplaceStopResult, ReplaceablePlan } from './replaceStop';
+export type { LoopThroughInput, LoopThroughResult } from './loopThrough';
+export type { StreetLoopInput, StreetLoopResult } from './streetLoop';
+export type { WalkWithFallbackResult } from './fallback';
 export type { WalkRoutingPort, WalkRouteSegment, WalkMatrixCell } from './ports';
 
 export {

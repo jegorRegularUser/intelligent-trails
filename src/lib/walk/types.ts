@@ -16,6 +16,8 @@ export interface WalkPlace {
   coordinates: WalkLatLng;
   /** 0-5, если источник даёт. */
   rating?: number;
+  /** OSM-теги: логику движка не трогают, едут пассажиром в UI (часы работы карточки). */
+  tags?: Record<string, string>;
 }
 
 export interface WalkInput {
@@ -68,6 +70,10 @@ export interface GateReport {
   detail: string;
 }
 
+/** Уровень деградации плана лестницы fallback (PRODUCT: «почти всегда прогулка»).
+ *  partial — петля через лучших кандидатов; loop-only — чистая уличная петля. */
+export type WalkDegradedLevel = 'partial' | 'loop-only';
+
 export interface WalkPlan {
   stops: WalkStop[];
   legs: WalkLeg[];
@@ -79,6 +85,8 @@ export interface WalkPlan {
   score: number;
   gates: GateReport[];
   allGatesPass: boolean;
+  /** Задан только у деградационных планов; строгий движок поле не ставит. */
+  degraded?: { level: WalkDegradedLevel };
 }
 
 export type WalkFailureCode =

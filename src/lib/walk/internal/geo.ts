@@ -124,3 +124,56 @@ export function fractionWithinCorridor(
   }
   return inside / sampled.length;
 }
+
+/**
+ * Режет полилинию маршрута на сегменты по вейпоинтам: для каждого вейпоинта
+ * берётся БЛИЖАЙШАЯ вершина полилинии, поиск монотонно вперёд, чтобы сегменты
+ * не перекрывались и порядок обхода сохранялся. Сегментов всегда
+ * waypoints.length + 1; вырожденные сегменты (вейпоинт совпал с границей)
+ * остаются из одной точки — метрики таких ног нулевые.
+ */
+export function splitPolylineByWaypoints(
+  polyline: WalkLatLng[],
+  waypoints: WalkLatLng[],
+): WalkLatLng[][] {
+  if (polyline.length === 0) return waypoints.map(() => []);
+  const segments: WalkLatLng[][] = [];
+  let startIdx = 0;
+  for (const wp of waypoints) {
+    let bestIdx = startIdx;
+    let bestDist = Infinity;
+    for (let j = startIdx; j < polyline.length; j++) {
+      const d = haversineMeters(polyline[j], wp);
+      if (d < bestDist) {
+        bestDist = d;
+        bestIdx = j;
+      }
+    }
+    segments.push(polyline.slice(startIdx, bestIdx + 1));
+    startIdx = bestIdx;
+  }
+  segments.push(polyline.slice(startIdx));
+  return segments;
+}
+
+/**
+ * Метрики разрезанной петли: длительность/дистанция маршрута раскладываются
+ * по сегментам пропорционально их длине по полилинии. Вырожденная полилиния
+ * (одна точка) делит метрики поровну — честнее нуля.
+ */
+export function splitRouteMetrics(
+  segments: WalkLatLng[][],
+  routeDistanceMeters: number,
+  routeDurationSeconds: number,
+): { distanceMeters: number; durationMinutes: number }[] {
+  const lengths = segments.map((seg) => polylineLengthMeters(seg));
+  const totalLength = lengths.reduce((sum, len) => sum + len, 0);
+  const even = segments.length > 0 && totalLength <= 0;
+  return segments.map((seg, i) => {
+    const share = even ? 1 / segments.length : lengths[i] / totalLength;
+    return {
+      distanceMeters: routeDistanceMeters * share,
+      durationMinutes: (routeDurationSeconds / 60) * share,
+    };
+  });
+}
