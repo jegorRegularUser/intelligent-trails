@@ -5,3 +5,4 @@
 export * from './types';
 export { CloudProvider } from './cloud/cloud-provider';
 export type { CloudProviderConfig } from './cloud/config';
+export { getCloudProvider } from './instance';

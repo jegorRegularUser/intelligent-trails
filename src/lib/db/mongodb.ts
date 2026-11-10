@@ -45,15 +45,24 @@ function getClientPromise(): Promise<MongoClient> {
     // Dev: глобальная переменная, чтобы переживать hot reload.
     // Провалившийся промис сбрасываем — следующий вызов попробует снова.
     if (!globalForMongo._mongoClientPromise) {
-      globalForMongo._mongoClientPromise = connect().catch((error) => {
+      const pending = connect().catch((error) => {
         globalForMongo._mongoClientPromise = undefined;
         throw error;
       });
+      // Сайд-чейн: кэшируемый промис не должен жить с «висящим» rejection
+      // (dev без MONGODB_URI сыпал unhandledRejection на каждом вызове).
+      // Сам промис отдаём как был — поведение потребителей не меняется.
+      void pending.catch(() => {});
+      globalForMongo._mongoClientPromise = pending;
     }
     return globalForMongo._mongoClientPromise;
   }
   if (!prodClientPromise) {
-    prodClientPromise = connect();
+    const pending = connect();
+    // Тот же сайд-чейн: rejection обрабатывает реальный потребитель,
+    // но пока его нет — промис не числится unhandled.
+    void pending.catch(() => {});
+    prodClientPromise = pending;
   }
   return prodClientPromise;
 }

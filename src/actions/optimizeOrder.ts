@@ -3,7 +3,7 @@
 // «Оптимизировать порядок» для эксперт-режима: матрица пешеходных времён
 // через CloudProvider + NN/2-opt из движка прогулок. Старт фиксирован, опциональный
 // финиш фиксирован, промежуточные точки переупорядочиваются.
-import { CloudProvider } from '@/lib/geo';
+import { getCloudProvider } from '@/lib/geo/instance';
 import { solveWalkOrder, type TimeMatrix } from '@/lib/walk/ordering';
 
 export interface OptimizeOrderInput {
@@ -30,7 +30,7 @@ export async function optimizeRouteOrderAction(input: OptimizeOrderInput): Promi
   if (!input.end && endIndex !== 0) return { ok: false, error: 'Некорректные параметры' };
 
   try {
-    const provider = new CloudProvider({ orsApiKey: process.env.OPENROUTESERVICE_API_KEY ?? '' });
+    const provider = getCloudProvider();
     const cells = await provider.matrix(all, all);
 
     const times: TimeMatrix = Array.from({ length: n }, () => Array(n).fill(INF));

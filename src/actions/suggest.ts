@@ -1,7 +1,7 @@
 "use server";
 
 import { Coordinates } from "@/types/map";
-import { CloudProvider } from "@/lib/geo";
+import { getCloudProvider } from "@/lib/geo/instance";
 
 export interface YandexSuggestResult {
   title: string;
@@ -65,7 +65,7 @@ async function fetchPhotonSuggestions(
   query: string,
   userLocation?: Coordinates | null,
 ): Promise<YandexSuggestResult[]> {
-  const provider = new CloudProvider({});
+  const provider = getCloudProvider();
   const items = await provider.suggest(query, userLocation ?? undefined);
   return items
     .filter((item) => item.title)
