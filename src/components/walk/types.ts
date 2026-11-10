@@ -14,6 +14,17 @@ export type WalkStopKind =
   | "market"
   | "other";
 
+/**
+ * Скоринговые причины места (lib/vibes/ranking): параллельные массивы ru/en.
+ * Позитивные идут первыми; негативные («сейчас закрыто», «открытая остановка
+ * в жару») попадают сюда только когда позитивных нет вовсе — они объясняют
+ * место в хвосте шорт-листа и показываются приглушённо. Вторичны к reason.
+ */
+export interface WalkScoreReasons {
+  ru: string[];
+  en: string[];
+}
+
 export interface WalkStop {
   id: string;
   name: string;
@@ -24,6 +35,16 @@ export interface WalkStop {
   reason: string;
   /** Координаты [lat,lng] — для сохранения, шеринга и кнопки «Идти» (интеграция). */
   coordinates?: [number, number];
+  /** Движковая категория (constants/categories) — сырьё для замены остановки без пересборки. */
+  category?: string;
+  /** Скоринговые причины — 1-2 muted-чипа под строкой причины. */
+  scoreReasons?: WalkScoreReasons;
+  /** Рейтинг места, если источник даёт — участвует в замене остановки. */
+  rating?: number;
+  /** OSM-теги сырьём — факты для скоринга при замене. */
+  tags?: Record<string, string>;
+  /** Часы работы OSM — вытащены из tags для экшена замены. */
+  openingHours?: string;
 }
 
 export interface WalkLeg {
@@ -38,6 +59,9 @@ export interface WalkPlanTotals {
   stayMin: number;
   totalMin: number;
 }
+
+/** Уровень деградации: план построен лестницей fallback, а не строгим движком. */
+export type WalkDegradedLevel = "partial" | "loop-only";
 
 export interface WalkPlan {
   id: string;
@@ -54,4 +78,8 @@ export interface WalkPlan {
   totals: WalkPlanTotals;
   /** Все гейты качества движка пройдены (бюджет ±10%, якоря, ноги, улицы). */
   gatesPass?: boolean;
+  /** Деградационный план: карточка показывает честную заметку-бейдж. */
+  degraded?: { level: WalkDegradedLevel };
+  /** Заметка о деградации параллельными ru/en — движковый факт уровня. */
+  degradedNote?: { ru: string; en: string };
 }

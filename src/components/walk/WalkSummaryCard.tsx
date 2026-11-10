@@ -1,11 +1,12 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
   AlertTriangle,
   Check,
   Compass,
   Footprints,
+  Info,
   RotateCcw,
   WifiOff,
 } from "lucide-react";
@@ -13,7 +14,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/utils/cn";
 import { budgetOverrunPercent, isWithinBudget, type WalkPhase } from "./logic";
-import type { WalkPlan } from "./types";
+import type { WalkDegradedLevel, WalkPlan } from "./types";
 import { StopRow, WalkLegRow } from "./StopRow";
 
 /**
@@ -95,37 +96,58 @@ export function WalkSummaryCard({
             </p>
           </div>
 
+          {/* Деградация: честная заметка — заметно, но не пугающе (принцип 5 PRODUCT.md) */}
+          {plan.degraded && (
+            <DegradationNote
+              level={plan.degraded.level}
+              note={plan.degradedNote}
+            />
+          )}
+
           {/* Таймлайн остановок */}
           <div className="flex flex-col">
             <h4 className="relative z-10 mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">
               {t("timelineTitle")}
             </h4>
             <div className="relative">
-              {/* Сплошная линия таймлайна позади кругов — модель эксперт-билдера:
-                  круги w-10 с border-white перекрывают линию, leg-тексты по
-                  выравниванию кругов (pl-52px) */}
-              <div
-                aria-hidden
-                className="absolute left-[19px] top-5 bottom-8 w-0.5 bg-slate-200"
-              />
-              {plan.stops.map((stop, index) => (
-                <div key={stop.id} className="relative">
-                  {index > 0 && (
-                    <WalkLegRow walkMin={plan.legs[index]?.walkMin ?? 0} />
-                  )}
-                  <StopRow
-                    stop={stop}
-                    isSwapping={swappingStopIds.includes(stop.id)}
-                    swapDisabled={interactionsDisabled}
-                    onSwapRequest={onSwapRequest}
-                    className="pb-4"
+              {plan.stops.length > 0 && (
+                <>
+                  {/* Сплошная линия таймлайна позади кругов — модель эксперт-билдера:
+                      круги w-10 с border-white перекрывают линию, leg-тексты по
+                      выравниванию кругов (pl-52px) */}
+                  <div
+                    aria-hidden
+                    className="absolute left-[19px] top-5 bottom-8 w-0.5 bg-slate-200"
                   />
-                </div>
-              ))}
-              {plan.type === "loop" && plan.legs.length > 0 && (
+                  {plan.stops.map((stop, index) => (
+                    <div key={stop.id} className="relative">
+                      {index > 0 && (
+                        <WalkLegRow walkMin={plan.legs[index]?.walkMin ?? 0} />
+                      )}
+                      <StopRow
+                        stop={stop}
+                        isSwapping={swappingStopIds.includes(stop.id)}
+                        swapDisabled={interactionsDisabled}
+                        onSwapRequest={plan.stops.length > 0 ? onSwapRequest : undefined}
+                        className="pb-4"
+                      />
+                    </div>
+                  ))}
+                  {plan.type === "loop" && plan.legs.length > 0 && (
+                    <WalkLegRow
+                      walkMin={plan.legs[plan.legs.length - 1].walkMin}
+                      label={t("legWalkBack", { minutes: plan.legs[plan.legs.length - 1].walkMin })}
+                      className="pb-6"
+                    />
+                  )}
+                </>
+              )}
+              {/* Чистая петля без якорей: таймлайн «Старт → петля → Старт» —
+                  одна строка с суммой перегонов; замены нечего предлагать. */}
+              {plan.stops.length === 0 && plan.legs.length > 0 && (
                 <WalkLegRow
-                  walkMin={plan.legs[plan.legs.length - 1].walkMin}
-                  label={t("legWalkBack", { minutes: plan.legs[plan.legs.length - 1].walkMin })}
+                  walkMin={plan.totals.walkMin}
+                  label={t("loopOnlyLeg", { minutes: plan.totals.walkMin })}
                   className="pb-6"
                 />
               )}
@@ -179,6 +201,33 @@ function BudgetBadge({ totalMin, budgetMin }: { totalMin: number; budgetMin: num
       <AlertTriangle size={12} />
       {t("budgetOver", { percent: budgetOverrunPercent(totalMin, budgetMin) })}
     </Badge>
+  );
+}
+
+interface DegradationNoteProps {
+  level: WalkDegradedLevel;
+  /** Параллельная заметка из данных — фолбэк, если словарный ключ недоступен. */
+  note?: { ru: string; en: string };
+}
+
+/**
+ * Заметка о деградации: тёплая (amber), не красная — прогулка состоялась,
+ * просто честно объясняем, почему она проще обычной. Рендер из словаря
+ * WalkUI по уровню; данные-заметка — фолбэк для планов без i18n-контекста.
+ */
+function DegradationNote({ level, note }: DegradationNoteProps) {
+  const t = useTranslations("WalkUI");
+  const locale = useLocale();
+  const dictText = level === "partial" ? t("degradedPartial") : t("degradedLoopOnly");
+  const text = dictText || (note ? (locale === "en" ? note.en : note.ru) : "");
+  return (
+    <p
+      role="status"
+      className="flex items-start gap-1.5 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800"
+    >
+      <Info size={13} className="mt-0.5 shrink-0 text-amber-600" />
+      <span>{text}</span>
+    </p>
   );
 }
 

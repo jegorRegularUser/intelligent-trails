@@ -63,6 +63,13 @@ export interface PlaceScore {
   score: number;
   reasonsRu: string[];
   reasonsEn: string[];
+  /**
+   * Параллельно reasonsRu/reasonsEn: true — причина-минус («сейчас закрыто»,
+   * «открытая остановка в жару», тьма). Карточка показывает её приглушённо
+   * и только когда позитивных причин нет: она объясняет место в хвосте
+   * шорт-листа, а не повод зайти.
+   */
+  negative: boolean[];
 }
 
 function clamp01(v: number): number {
@@ -130,29 +137,32 @@ export function scorePlace(place: GeoPlace, ctx: ScorePlaceContext): PlaceScore 
   const tags = place.tags ?? {};
   const reasonsRu: string[] = [];
   const reasonsEn: string[] = [];
+  const negative: boolean[] = [];
+  // Причины пишутся строго парами ru/en — флаг negative едет вместе с ними.
+  const push = (ru: string, en: string, isNegative = false): void => {
+    reasonsRu.push(ru);
+    reasonsEn.push(en);
+    negative.push(isNegative);
+  };
 
   const base = baseQuality(place);
   const w = (a.categoryWeights as Record<string, number | undefined>)[place.category]
     ?? UNKNOWN_CATEGORY_WEIGHT;
 
   if (place.rating !== undefined && place.rating >= REASON_RATING_MIN) {
-    reasonsRu.push(`рейтинг ${place.rating} из 5`);
-    reasonsEn.push(`rated ${place.rating} out of 5`);
+    push(`рейтинг ${place.rating} из 5`, `rated ${place.rating} out of 5`);
   }
   if (tags.wikipedia || tags.wikidata) {
-    reasonsRu.push('упоминается в Википедии');
-    reasonsEn.push('featured on Wikipedia');
+    push('упоминается в Википедии', 'featured on Wikipedia');
   }
   if (w >= CORE_WEIGHT_MIN) {
-    reasonsRu.push(`ядро вайба «${a.labelRu}»`);
-    reasonsEn.push(`core of the "${a.labelEn}" vibe`);
+    push(`ядро вайба «${a.labelRu}»`, `core of the "${a.labelEn}" vibe`);
   }
 
   // fit: качество × принадлежность архетипу × (опционально) аффинность часа.
   const affinity = ctx.hour !== undefined ? clamp01(a.hourAffinity(ctx.hour)) : 1;
   if (ctx.hour !== undefined && affinity < 0.5) {
-    reasonsRu.push('не лучшее время для этого вайба');
-    reasonsEn.push('not the best time for this vibe');
+    push('не лучшее время для этого вайба', 'not the best time for this vibe', true);
   }
   let score = base * w * affinity;
 
@@ -163,23 +173,26 @@ export function scorePlace(place: GeoPlace, ctx: ScorePlaceContext): PlaceScore 
   const match = isPlaceIndoor ? d : 1 - d;
   const indoorBonus = INDOOR_MATCH_RANGE * (2 * match - 1);
   if (indoorBonus >= INDOOR_MATCH_RANGE * 0.6) {
-    reasonsRu.push(isPlaceIndoor ? 'крытое место — подходит контексту' : 'под открытым небом — то, что нужно');
-    reasonsEn.push(isPlaceIndoor ? 'indoors — fits the context' : 'outdoors — exactly what the moment calls for');
+    push(
+      isPlaceIndoor ? 'крытое место — подходит контексту' : 'под открытым небом — то, что нужно',
+      isPlaceIndoor ? 'indoors — fits the context' : 'outdoors — exactly what the moment calls for',
+    );
   } else if (indoorBonus <= -INDOOR_MATCH_RANGE * 0.6) {
-    reasonsRu.push(isPlaceIndoor ? 'хочется улицы, а это крытое' : 'хочется крытого, а это улица');
-    reasonsEn.push(isPlaceIndoor ? 'you would rather be outside, this is indoors' : 'you would rather be indoors, this is outside');
+    push(
+      isPlaceIndoor ? 'хочется улицы, а это крытое' : 'хочется крытого, а это улица',
+      isPlaceIndoor ? 'you would rather be outside, this is indoors' : 'you would rather be indoors, this is outside',
+      true,
+    );
   }
   score += indoorBonus;
 
   // bonusOpen: инъекция часов работы; unknown/отсутствие — ноль.
   if (ctx.hoursState === 'open') {
     score += OPEN_BONUS;
-    reasonsRu.push('работает сейчас');
-    reasonsEn.push('open right now');
+    push('работает сейчас', 'open right now');
   } else if (ctx.hoursState === 'closed') {
     score -= CLOSED_PENALTY;
-    reasonsRu.push('сейчас закрыто');
-    reasonsEn.push('currently closed');
+    push('сейчас закрыто', 'currently closed', true);
   }
 
   // bonusWeather: shade и lighted; дождь учтён через indoorBias.
@@ -188,28 +201,24 @@ export function scorePlace(place: GeoPlace, ctx: ScorePlaceContext): PlaceScore 
     if (hints.preferShade) {
       if (place.category === 'park') {
         score += SHADE_PARK_BONUS;
-        reasonsRu.push('даст тень и зелень в жару');
-        reasonsEn.push('offers shade and greenery in the heat');
+        push('даст тень и зелень в жару', 'offers shade and greenery in the heat');
       } else if (!isPlaceIndoor) {
         score -= SHADE_EXPOSED_PENALTY;
-        reasonsRu.push('открытая остановка в жару');
-        reasonsEn.push('an exposed stop in the heat');
+        push('открытая остановка в жару', 'an exposed stop in the heat', true);
       }
     }
     if (hints.preferLighted) {
       if (place.category === 'cafe' || place.category === 'restaurant' || place.category === 'bar') {
         score += LIGHTED_LIVE_BONUS;
-        reasonsRu.push('вечером здесь живо и светло');
-        reasonsEn.push('lively and well-lit in the evening');
+        push('вечером здесь живо и светло', 'lively and well-lit in the evening');
       } else if (place.category === 'park' || place.category === 'viewpoint') {
         score -= LIGHTED_DARK_PENALTY;
-        reasonsRu.push('ночью здесь темно и пусто');
-        reasonsEn.push('dark and deserted at night');
+        push('ночью здесь темно и пусто', 'dark and deserted at night', true);
       }
     }
   }
 
-  return { score: clamp01(score), reasonsRu, reasonsEn };
+  return { score: clamp01(score), reasonsRu, reasonsEn, negative };
 }
 
 // --- Диверсификация (docs/vibes.md §7) ------------------------------------------

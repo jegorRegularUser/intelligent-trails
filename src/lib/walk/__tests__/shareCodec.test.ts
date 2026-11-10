@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { decodeRouteFromUrl } from '@/utils/routeCodec';
-import { quickWalkToEncodedRoute, quickWalkToYandexMapsUrl } from '../shareCodec';
+import { quickWalkToEncodedRoute, quickWalkToYandexMapsUrl, sampleLoopGeometry } from '../shareCodec';
 import type { WalkPlan as UiWalkPlan } from '@/components/walk/types';
 
 function makeUiPlan(type: 'loop' | 'point_to_point' = 'loop'): UiWalkPlan {
@@ -61,5 +61,68 @@ describe('shareCodec: быстрая прогулка → исторически
     // старт + 2 остановки + возврат к старту = 4 точки
     expect(url.match(/~/g)).toHaveLength(3);
     expect(url.startsWith('https://yandex.ru/maps/?')).toBe(true);
+  });
+});
+
+describe('shareCodec: ссылка «Идти» для чистой петли (loop-only)', () => {
+  function makeLoopOnlyPlan(legs: UiWalkPlan['legs']): UiWalkPlan {
+    return {
+      id: 'walk-loop-only',
+      type: 'loop',
+      budgetMin: 60,
+      stops: [],
+      legs,
+      totals: { walkMin: legs.reduce((sum, l) => sum + l.walkMin, 0), stayMin: 0, totalMin: legs.reduce((sum, l) => sum + l.walkMin, 0) },
+      degraded: { level: 'loop-only' },
+      degradedNote: { ru: 'петля', en: 'loop' },
+    };
+  }
+
+  it('rtext строится из сэмпла геометрии (≤10 точек), не старт~старт', () => {
+    // Замкнутая петля: 24 точки окружности + замыкание в старт.
+    const ring: [number, number][] = Array.from({ length: 24 }, (_, i) => {
+      const angle = (i / 24) * Math.PI * 2;
+      return [START[0] + Math.sin(angle) * 0.005, START[1] + Math.cos(angle) * 0.005];
+    });
+    const geometry: [number, number][] = [...ring, START];
+    const plan = makeLoopOnlyPlan([{ walkMin: 48, geometry }]);
+
+    const url = quickWalkToYandexMapsUrl(plan, START);
+    expect(url).toContain('rtt=pd');
+    const rtext = url.split('rtext=')[1].split('&')[0];
+    const points = rtext.split('~');
+    // ≤10 сэмплов: первая — начало геометрии, последняя — замыкание петли в старте.
+    expect(points.length).toBeLessThanOrEqual(10);
+    expect(points.length).toBeGreaterThanOrEqual(5);
+    expect(points[0]).toBe(`${geometry[0][0].toFixed(5)},${geometry[0][1].toFixed(5)}`);
+    expect(points[points.length - 1]).toBe(`${START[0].toFixed(5)},${START[1].toFixed(5)}`);
+    // Не «маршрут из точки в ту же точку»: есть промежуточные точки.
+    expect(new Set(points).size).toBeGreaterThan(2);
+  });
+
+  it('план с остановками — прежний формат (старт+остановки+замыкание), не сэмпл', () => {
+    const url = quickWalkToYandexMapsUrl(makeUiPlan('loop'), START);
+    // 4 точки = старт + 2 остановки + возврат; сэмпл бы дал 10.
+    expect(url.match(/~/g)).toHaveLength(3);
+  });
+
+  it('нет геометрии (<2 точек) — деградация в старт~старт', () => {
+    const plan = makeLoopOnlyPlan([{ walkMin: 40 }]);
+    const url = quickWalkToYandexMapsUrl(plan, START);
+    const rtext = url.split('rtext=')[1].split('&')[0];
+    expect(rtext.split('~')).toHaveLength(2); // старт~старт
+    expect(rtext.startsWith(`${START[0].toFixed(5)},${START[1].toFixed(5)}`)).toBe(true);
+  });
+
+  it('sampleLoopGeometry: ≤maxPoints, края на месте, вход не мутируется', () => {
+    const line: [number, number][] = Array.from({ length: 50 }, (_, i) => [55.7 + i * 0.001, 37.6]);
+    const sampled = sampleLoopGeometry(line, 10);
+    expect(sampled).toHaveLength(10);
+    expect(sampled[0]).toEqual(line[0]);
+    expect(sampled[sampled.length - 1]).toEqual(line[line.length - 1]);
+    expect(line).toHaveLength(50);
+    // Короче лимита — возвращается копия целиком.
+    const short = line.slice(0, 5);
+    expect(sampleLoopGeometry(short, 10)).toHaveLength(5);
   });
 });

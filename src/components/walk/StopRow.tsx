@@ -1,7 +1,7 @@
 "use client";
 
 import type { ComponentType } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
   Camera,
   Coffee,
@@ -64,7 +64,16 @@ export function StopRow({
   className,
 }: StopRowProps) {
   const t = useTranslations("WalkUI");
+  const locale = useLocale();
   const Icon = KIND_ICONS[stop.kind];
+
+  // Скоринговые причины — вторичная строка к якорной причине движка.
+  // Приходят позитивными первыми (негатив — только когда позитива нет),
+  // поэтому просто берём первые две — они и есть самое весомое объяснение.
+  // Нет scoreReasons (старые планы из истории) — рендер деградирует в прежний вид.
+  const reasonChips = stop.scoreReasons
+    ? (locale === "en" ? stop.scoreReasons.en : stop.scoreReasons.ru).slice(0, 2)
+    : [];
 
   return (
     <div className={cn("relative flex gap-3", className)} aria-busy={isSwapping || undefined}>
@@ -96,6 +105,18 @@ export function StopRow({
             <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
               {t(KIND_I18N[stop.kind])} · {stop.reason}
             </p>
+            {reasonChips.length > 0 && (
+              <div className="mt-1 flex flex-wrap gap-1">
+                {reasonChips.map((chip, i) => (
+                  <span
+                    key={`${chip}-${i}`}
+                    className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] leading-4 text-slate-400"
+                  >
+                    {chip}
+                  </span>
+                ))}
+              </div>
+            )}
             {onSwapRequest && (
               <button
                 type="button"

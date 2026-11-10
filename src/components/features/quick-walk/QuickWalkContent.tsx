@@ -27,6 +27,7 @@ import {
   type QuickVibe,
   type WalkContextInfo,
 } from "@/actions/quickWalk";
+import { replaceQuickStop } from "@/actions/quickWalkReplace";
 import { saveQuickWalkToHistory } from "@/actions/quickWalkSave";
 import { planPolyline } from "@/lib/walk/uiAdapter";
 import { quickWalkToYandexMapsUrl } from "@/lib/walk/shareCodec";
@@ -218,14 +219,19 @@ export function QuickWalkContent() {
     setVibe(null);
   }, [lastInput, mapStore, planIndex, plans]);
 
-  const handleSwapRequest = useCallback(
+  /** Старое поведение «Заменить»: полная пересборка с чёрным списком.
+   *  Осталось фолбэком — локальная замена зовёт его из тоста, когда
+   *  достойной замены сегмента не нашлось. */
+  const runLegacyRebuild = useCallback(
     (stopId: string) => {
       if (!lastInput) return;
       setSwappingIds((prev) => (prev.includes(stopId) ? prev : [...prev, stopId]));
       excludedRef.current.add(stopId);
       void (async () => {
         try {
-          const start = addressStart ?? (await getCurrentStart());
+          // Старт именно той прогулки (не новая геолокация): план перестраивается
+          // вокруг той же точки, иначе карты и ноги разъедутся.
+          const start = lastInput.start;
           const result = await buildQuickWalk({
             start,
             budgetMinutes: lastInput.minutes,
@@ -250,8 +256,6 @@ export function QuickWalkContent() {
             );
             dispatch({ type: "BUILD_SUCCESS" });
           } else {
-            // Заменить не получилось — оставляем старый план и честно сообщаем.
-            // BUILD_FAILED из фазы ready — но-оп машины, поэтому тост.
             excludedRef.current.delete(stopId);
             dispatch({ type: "BUILD_SUCCESS" });
             showToast(result.error, "error");
@@ -265,7 +269,88 @@ export function QuickWalkContent() {
         }
       })();
     },
-    [addressStart, lastInput, locale, mapStore, showToast, t],
+    [lastInput, locale, mapStore, showToast, t],
+  );
+
+  const handleSwapRequest = useCallback(
+    (stopId: string) => {
+      // Локальная замена (PRODUCT, принцип 3): подмена одного сегмента петли
+      // вместо пересборки. Текущий план уезжает на сервер как есть — ноги и
+      // причины сохранившихся остановок переиспользуются, busy-флаг один и
+      // тот же (swappingIds крутит спиннер строки, машина фаз не трогается).
+      if (!plan || !lastInput) return;
+      setSwappingIds((prev) => (prev.includes(stopId) ? prev : [...prev, stopId]));
+      void (async () => {
+        try {
+          const result = await replaceQuickStop({
+            start: lastInput.start,
+            budgetMinutes: lastInput.minutes,
+            vibe: lastInput.vibe,
+            timezone: browserTimezone(),
+            locale: locale === "en" ? "en" : "ru",
+            currentStops: plan.stops.map((s) => ({
+              id: s.id,
+              name: s.name,
+              reason: s.reason,
+              category: s.category ?? "",
+              stayMin: s.stayMin,
+              coordinates: s.coordinates ?? lastInput.start,
+              ...(s.rating !== undefined ? { rating: s.rating } : {}),
+              ...(s.tags ? { tags: s.tags } : {}),
+              ...(s.openingHours ? { openingHours: s.openingHours } : {}),
+              // Причины едут туда и обратно: у выживших остановок это факты
+              // прошлого скоринга, сервер возвращает их как есть.
+              ...(s.scoreReasons ? { scoreReasons: s.scoreReasons } : {}),
+            })),
+            replaceStopId: stopId,
+            excludeStopIds: [...excludedRef.current],
+            currentLegs: plan.legs.map((l) =>
+              l.geometry && l.geometry.length > 0
+                ? { walkMin: l.walkMin, geometry: l.geometry }
+                : { walkMin: l.walkMin },
+            ),
+            // Петля живёт на 4 гейтах (бюджет, якоря, ноги, улицы):
+            // флаг есть — база фолбэка движка полная.
+            ...(plan.gatesPass ? { currentGatesPassed: 4 } : {}),
+          });
+          if (result.ok) {
+            const next = result.plan;
+            // Заменённая уходит в чёрный список, как и в старом флоу:
+            // без этого место может вернуться кандидатом при следующей замене.
+            excludedRef.current.add(stopId);
+            setPlans([next]);
+            setPlanIndex(0);
+            mapStore.setWalk(
+              planPolyline(next, lastInput.start),
+              "Старт прогулки",
+              next.stops.map((s) => ({
+                id: s.id,
+                name: s.name,
+                kind: s.kind,
+                coords: s.coordinates ?? lastInput.start,
+                reason: s.reason,
+              })),
+            );
+            // Из ready — но-оп: машина не покидала фазу, карточка просто обновилась
+            dispatch({ type: "BUILD_SUCCESS" });
+          } else {
+            // Заменить не получилось — старый план остаётся. Предлагаем фолбэк:
+            // пересборку с чёрным списком одной кнопкой в тосте.
+            dispatch({ type: "BUILD_SUCCESS" });
+            showToast(result.error, "error", {
+              label: t("swapFallbackRebuild"),
+              onClick: () => runLegacyRebuild(stopId),
+            });
+          }
+        } catch {
+          dispatch({ type: "BUILD_SUCCESS" });
+          showToast(t("errorGeneric"), "error");
+        } finally {
+          setSwappingIds((prev) => prev.filter((id) => id !== stopId));
+        }
+      })();
+    },
+    [lastInput, locale, mapStore, plan, runLegacyRebuild, showToast, t],
   );
 
   const handleSave = useCallback(async () => {

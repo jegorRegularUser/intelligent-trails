@@ -2,7 +2,50 @@
 // Мост движок (lib/walk) → UI-карточка (components/walk/types.ts).
 // Чистые функции без побочных эффектов — тестируются без сети и React.
 import type { WalkPlan as EngineWalkPlan } from './types';
-import type { WalkPlan as UiWalkPlan, WalkStopKind } from '@/components/walk/types';
+import { haversineMeters } from './internal/geo';
+import type {
+  WalkDegradedLevel,
+  WalkPlan as UiWalkPlan,
+  WalkScoreReasons,
+  WalkStopKind,
+} from '@/components/walk/types';
+
+/** «Замкнута» — последняя нога приходит в точку старта первой (±10 м: округление ORS ~1 м). */
+const LOOP_CLOSURE_EPS_METERS = 10;
+
+/**
+ * Тип прогулки — из ФАКТА замыкания, а не из арифметики counts: треугольная
+ * петля K=1 (1 stop, 3 legs) и чистая уличная петля (0 stops, 5 legs) замкнуты
+ * геометрически, но старой формулой падали в point_to_point — карточка рисовала
+ * «Из А в Б», а шаринг терял возврат к старту. Нет геометрии у краевых ног —
+ * фолбэк на старую арифметику (старые планы, деградация без полилиний).
+ */
+function isClosedLoop(engine: EngineWalkPlan): boolean {
+  if (engine.legs.length === 0) return false;
+  const first = engine.legs[0];
+  const last = engine.legs[engine.legs.length - 1];
+  if (first.geometry.length >= 2 && last.geometry.length >= 2) {
+    return haversineMeters(last.to, first.from) <= LOOP_CLOSURE_EPS_METERS;
+  }
+  return engine.legs.length === engine.stops.length + 1;
+}
+
+/**
+ * Заметки о деградации (PRODUCT: честная деградация, никогда не врём):
+ * параллельные ru/en, как у движковых причин. Словарь WalkUI.degradedPartial /
+ * degradedLoopOnly дублирует эти тексты для рендера — тест сверяет их
+ * синхронность, чтобы тексты не разъехались.
+ */
+export const DEGRADED_NOTES: Record<WalkDegradedLevel, { ru: string; en: string }> = {
+  partial: {
+    ru: 'Рядом мало якорей — собрали прогулку с меньшим числом остановок',
+    en: 'Not many anchors nearby — the walk has fewer stops than usual',
+  },
+  'loop-only': {
+    ru: 'Интересных мест рядом не нашлось — вот пешеходная петля на всё твоё время',
+    en: 'No interesting places nearby — here is a walking loop for your time',
+  },
+};
 
 /** Категория реестра (constants/categories.ts) → kind карточки UI. */
 const CATEGORY_TO_UI_KIND: Record<string, WalkStopKind> = {
@@ -28,25 +71,46 @@ function reasonFor(stop: EngineWalkPlan['stops'][number], locale: 'ru' | 'en'): 
   return locale === 'en' ? (stop.reasonEn ?? stop.reason) : stop.reason;
 }
 
+/** Скоринговые причины по id места (quickPipeline.buildScoreReasonsMap). */
+export type ScoreReasonsById = ReadonlyMap<string, WalkScoreReasons>;
+
 /**
  * Один план движка → форма для WalkSummaryCard.
  * Легы движка идут от старта через остановки (и замыкают петлю) —
  * ровно семантика legs UI-типа: петля = stops+1, A→B = stops.
  * geometry каждого лега — полилиния [lat,lng] для отрисовки на карте.
+ *
+ * scoreReasons — опциональная карта скоринговых причин: якорная причина
+ * (stop.reason) остаётся главной строкой, скоринговые едут вторичными чипами.
+ * Без карты (старые планы, история) карточка рендерится как раньше.
  */
 export function enginePlanToUiPlan(
   engine: EngineWalkPlan,
   budgetMin: number,
   locale: 'ru' | 'en' = 'ru',
+  scoreReasons?: ScoreReasonsById,
 ): UiWalkPlan {
-  const stops = engine.stops.map((stop) => ({
-    id: `${stop.place.id}`,
-    name: stop.place.name,
-    kind: uiKindForCategory(stop.place.category),
-    stayMin: Math.round(stop.stayMinutes),
-    reason: reasonFor(stop, locale),
-    coordinates: stop.place.coordinates,
-  }));
+  const stops = engine.stops.map((stop) => {
+    const place = stop.place;
+    const tags = place.tags;
+    const openingHours = tags?.opening_hours;
+    const reasons = scoreReasons?.get(`${place.id}`);
+    return {
+      id: `${place.id}`,
+      name: place.name,
+      kind: uiKindForCategory(place.category),
+      stayMin: Math.round(stop.stayMinutes),
+      reason: reasonFor(stop, locale),
+      coordinates: place.coordinates,
+      // Сырьё для локальной замены остановки: категория/рейтинг/теги нужны
+      // экшену, чтобы пересобрать сегмент без полной перестройки прогулки.
+      category: place.category,
+      ...(place.rating !== undefined ? { rating: place.rating } : {}),
+      ...(tags && Object.keys(tags).length > 0 ? { tags } : {}),
+      ...(openingHours ? { openingHours } : {}),
+      ...(reasons ? { scoreReasons: reasons } : {}),
+    };
+  });
 
   const legs = engine.legs.map((leg) => ({
     walkMin: Math.round(leg.durationMinutes),
@@ -58,13 +122,18 @@ export function enginePlanToUiPlan(
 
   return {
     id: `walk-${Date.now()}-${Math.round(Math.random() * 1e6)}`,
-    type: engine.legs.length === engine.stops.length + 1 ? 'loop' : 'point_to_point',
+    type: isClosedLoop(engine) ? 'loop' : 'point_to_point',
     budgetMin,
     stops,
     legs,
     // Пересчитаны из округлённых минут UI — чтобы шапка совпадала с таймлайном
     totals: { walkMin, stayMin, totalMin: walkMin + stayMin },
     gatesPass: engine.allGatesPass,
+    // Деградационные планы несут уровень и параллельную заметку: карточка
+    // показывает бейдж, сохранённые планы остаются самодостаточными.
+    ...(engine.degraded
+      ? { degraded: engine.degraded, degradedNote: DEGRADED_NOTES[engine.degraded.level] }
+      : {}),
   };
 }
 
@@ -73,8 +142,9 @@ export function enginePlansToUiPlans(
   engines: EngineWalkPlan[],
   budgetMin: number,
   locale: 'ru' | 'en' = 'ru',
+  scoreReasons?: ScoreReasonsById,
 ): UiWalkPlan[] {
-  return engines.map((plan) => enginePlanToUiPlan(plan, budgetMin, locale));
+  return engines.map((plan) => enginePlanToUiPlan(plan, budgetMin, locale, scoreReasons));
 }
 
 /** Полная полилиния прогулки для карты: старт + геометрии всех легов подряд. */
