@@ -54,6 +54,49 @@ describe('shareCodec: быстрая прогулка → исторически
     expect(Math.abs(decoded.endPoint[1] - START[1])).toBeLessThan(1e-4);
   });
 
+  it('формат v2: код начинается с «2.» и декодируется только через v2-ветку', () => {
+    // V2_PREFIX в routeCodec — «2.»; ссылка = маршрут, декодер обязан понять её.
+    const encoded = quickWalkToEncodedRoute(makeUiPlan(), START);
+    expect(encoded.startsWith('2.')).toBe(true);
+    expect(decodeRouteFromUrl(encoded)).toBeTruthy();
+  });
+
+  it('остановка без координат — деградация в старт, не мусор в ссылке', () => {
+    const plan = makeUiPlan();
+    const [withCoords, ...rest] = plan.stops;
+    plan.stops = [
+      { ...withCoords, coordinates: undefined },
+      ...rest.map((s) => ({ ...s, coordinates: undefined })),
+    ];
+    const decoded = decodeRouteFromUrl(quickWalkToEncodedRoute(plan, START));
+    for (const waypoint of decoded.waypoints) {
+      expect(Math.abs(waypoint.coords[0] - START[0])).toBeLessThan(1e-4);
+      expect(Math.abs(waypoint.coords[1] - START[1])).toBeLessThan(1e-4);
+    }
+  });
+
+  it('UTF-8 и спецсимволы имени переживают lz-string и URL-кодирование', () => {
+    const plan = makeUiPlan();
+    plan.stops = [
+      ...plan.stops,
+      {
+        id: '13',
+        name: 'Кафе «У Петровича» & Co ~50% 100%#привет',
+        kind: 'cafe',
+        stayMin: 10,
+        reason: 'колорит',
+        coordinates: [55.74, 37.59],
+      },
+    ];
+    const decoded = decodeRouteFromUrl(quickWalkToEncodedRoute(plan, START));
+    expect(decoded.waypoints[2].resolvedName).toBe('Кафе «У Петровича» & Co ~50% 100%#привет');
+  });
+
+  it('мусорная строка — decodeRouteFromUrl возвращает null, а не падает', () => {
+    expect(decodeRouteFromUrl('2.garbage-not-lzstring')).toBeNull();
+    expect(decodeRouteFromUrl('')).toBeNull();
+  });
+
   it('ссылка Яндекс.Карт: пешеходный режим, старт+остановки, петля замыкается', () => {
     const url = quickWalkToYandexMapsUrl(makeUiPlan('loop'), START);
     expect(url).toContain('rtt=pd');
