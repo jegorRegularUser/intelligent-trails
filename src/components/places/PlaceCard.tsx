@@ -30,7 +30,16 @@ const BADGE_LABEL_KEY = {
 } as const;
 
 /** Бейдж «работает ли сейчас» — честный: unknown не притворяется closed. */
-export function OpenBadge({ state, className }: { state: PlaceCardData['openState']; className?: string }) {
+export function OpenBadge({
+  state,
+  until,
+  className,
+}: {
+  state: PlaceCardData['openState'];
+  /** Время закрытия открытого сейчас места («22:00») — рендерится как «до 22:00». */
+  until?: string | null;
+  className?: string;
+}) {
   const t = useTranslations('Places');
   return (
     <span
@@ -41,7 +50,7 @@ export function OpenBadge({ state, className }: { state: PlaceCardData['openStat
       )}
     >
       <span className={cn('h-1.5 w-1.5 rounded-full', OPEN_BADGE_DOT[state])} aria-hidden />
-      {t(BADGE_LABEL_KEY[state])}
+      {state === 'open' && until ? t('openUntil', { until }) : t(BADGE_LABEL_KEY[state])}
     </span>
   );
 }

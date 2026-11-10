@@ -10,7 +10,7 @@ import { type GeoPlace, type GeoProvider } from '@/lib/geo';
 import type { AdjustedProfile } from '@/lib/vibes/combine';
 import { scorePlace, type PlaceScore } from '@/lib/vibes/ranking';
 import type { WeatherContext } from '@/lib/weather';
-import { evaluateOpeningHours } from '@/lib/places/hours';
+import { evaluateOpeningHoursDetailed } from '@/lib/places/hours';
 import { PLACE_CATEGORIES } from '@/constants/categories';
 import type { WalkScoreReasons } from '@/components/walk/types';
 
@@ -107,14 +107,16 @@ function mergeWaves(
 export interface ScoredPoolEntry {
   place: GeoPlace;
   score: PlaceScore;
+  /** Часы на момент скоринга: 'closed' отсеивается, пока живых хватает. */
+  hoursState: 'open' | 'closed' | 'unknown';
 }
 
 export interface ScorePoolParams {
   pool: GeoPlace[];
   profile: AdjustedProfile;
   weather: WeatherContext | null;
-  /** Час 0..23 — включает аффинность часа архетипа. */
-  hour: number;
+  /** Час 0..23 — включает аффинность часа архетипа; нет — множитель 1. */
+  hour?: number;
   timezone: string;
   now: Date;
   /** id мест, которые не возвращаем: исключения юзера + уже стоящие в плане. */
@@ -125,22 +127,36 @@ export interface ScorePoolParams {
  * Скоринг-пул: scorePlace с контекстом «сейчас» (архетип + погода + час +
  * часы работы), сортировка по убыванию скора — она же приоритет перебора
  * при замене остановки. Порядок устойчив для равных скоров.
+ *
+ * Гейт «работает сейчас» (PRODUCT.md, метрика №5): закрытые не едут дальше,
+ * пока живых кандидатов хватает. Мало живых — честная деградация, пул как есть.
  */
 export function scoreCandidatePool(params: ScorePoolParams): ScoredPoolEntry[] {
   const { pool, profile, weather, hour, timezone, now, excludeIds } = params;
-  return pool
+  const scored = pool
     .filter((place) => !excludeIds?.has(`${place.id}`))
-    .map((place) => ({
-      place,
-      score: scorePlace(place, {
-        archetype: profile,
-        weather,
-        hour,
-        hoursState: evaluateOpeningHours(place.tags?.opening_hours, now, timezone),
-      }),
-    }))
+    .map((place) => {
+      const hours = evaluateOpeningHoursDetailed(place.tags?.opening_hours, now, timezone);
+      return {
+        place,
+        hoursState: hours.state,
+        score: scorePlace(place, {
+          archetype: profile,
+          weather,
+          hour,
+          hoursState: hours.state,
+          closesInMinutes: hours.minutesUntilClose,
+        }),
+      };
+    })
     .sort((a, b) => b.score.score - a.score.score);
+
+  const alive = scored.filter((entry) => entry.hoursState !== 'closed');
+  return alive.length >= MIN_ALIVE_FOR_FILTER ? alive : scored;
 }
+
+/** Живых кандидатов меньше этого порога — закрытые остаются в пуле (деградация). */
+const MIN_ALIVE_FOR_FILTER = 12;
 
 /**
  * Карта скоринговых причин для карточки по id места. Негативные причины

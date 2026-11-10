@@ -433,6 +433,7 @@
     "open": "Открыто",
     "closed": "Закрыто",
     "hoursUnknown": "Часы неизвестны",
+    "openUntil": "до {until}",
     "whyTitle": "Почему сюда"
   }
 }

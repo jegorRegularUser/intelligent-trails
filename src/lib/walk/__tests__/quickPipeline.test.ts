@@ -4,7 +4,7 @@
 // (collectCandidates) на фейк-провайдере.
 
 import { describe, expect, it } from 'vitest';
-import { collectCandidates, mergeScoreReasons, searchRadiusMeters } from '../quickPipeline';
+import { collectCandidates, mergeScoreReasons, scoreCandidatePool, searchRadiusMeters } from '../quickPipeline';
 import type { GeoPlace, GeoProvider } from '@/lib/geo';
 import type { AdjustedProfile } from '@/lib/vibes/combine';
 import type { WalkScoreReasons } from '@/components/walk/types';
@@ -104,5 +104,41 @@ describe('quickPipeline: эскалация collectCandidates', () => {
     expect(result.places).toHaveLength(0);
     expect(result.searchFailed).toBe(true);
     expect(radiuses).toHaveLength(2);
+  });
+});
+
+describe('quickPipeline: гейт «работает сейчас» (отсев закрытых)', () => {
+  const NOW = new Date('2024-01-15T20:00:00Z'); // понедельник 20:00 UTC
+  const PROFILE = { categoryWeights: { park: 1 }, adjustments: [] } as unknown as AdjustedProfile;
+
+  function place(id: string, i: number, openingHours?: string): GeoPlace {
+    return {
+      id,
+      name: `Парк ${id}`,
+      category: 'park',
+      coordinates: [55.75 + i * 0.001, 37.62],
+      ...(openingHours ? { tags: { opening_hours: openingHours } } : {}),
+    };
+  }
+
+  it('живых хватает — закрытые не едут в пул', () => {
+    const pool = [
+      ...Array.from({ length: 13 }, (_, i) => place(`alive${i}`, i)),
+      place('closed1', 90, 'Mo-Fr 09:00-18:00'), // 20:00 UTC — уже закрыто
+      place('closed2', 91, 'Mo-Fr 09:00-18:00'),
+    ];
+    const scored = scoreCandidatePool({ pool, profile: PROFILE, weather: null, timezone: 'UTC', now: NOW });
+    expect(scored.some((entry) => entry.place.id === 'closed1')).toBe(false);
+    expect(scored).toHaveLength(13);
+    expect(scored.every((entry) => entry.hoursState !== 'closed')).toBe(true);
+  });
+
+  it('живых мало — закрытые остаются (честная деградация, не пустой пул)', () => {
+    const pool = [
+      ...Array.from({ length: 10 }, (_, i) => place(`alive${i}`, i)),
+      ...Array.from({ length: 5 }, (_, i) => place(`closed${i}`, 90 + i, 'Mo-Fr 09:00-18:00')),
+    ];
+    const scored = scoreCandidatePool({ pool, profile: PROFILE, weather: null, timezone: 'UTC', now: NOW });
+    expect(scored).toHaveLength(15);
   });
 });

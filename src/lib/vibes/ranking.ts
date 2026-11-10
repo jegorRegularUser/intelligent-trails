@@ -31,6 +31,9 @@ const INDOOR_MATCH_RANGE = 0.1;
 /** «Открыто сейчас»: инъекция часов работы. */
 const OPEN_BONUS = 0.1;
 const CLOSED_PENALTY = 0.15;
+/** «Скоро закроется»: открыто, но закроется в пределах порога — не якорь. */
+const CLOSING_SOON_PENALTY = 0.1;
+const CLOSING_SOON_WINDOW_MIN = 30;
 
 /** Погодные модификаторы. */
 const SHADE_PARK_BONUS = 0.08;
@@ -55,6 +58,11 @@ export interface ScorePlaceContext {
   archetype: Archetype;
   /** Часы работы места — считает вызывающий (парсер opening_hours). */
   hoursState?: 'open' | 'closed' | 'unknown';
+  /**
+   * Минуты до закрытия, когда hoursState = 'open' и закрытие известно
+   * (lib/places/hours, evaluateOpeningHoursDetailed). null/undefined — не знаем.
+   */
+  closesInMinutes?: number | null;
   /** Погода; null/undefined = деградация без погодных модификаторов. */
   weather?: WeatherContext | null;
   /** Текущий час 0..23 — включает множитель hourAffinity архетипа. */
@@ -192,6 +200,15 @@ export function scorePlace(place: GeoPlace, ctx: ScorePlaceContext): PlaceScore 
   if (ctx.hoursState === 'open') {
     score += OPEN_BONUS;
     push('работает сейчас', 'open right now');
+    // Открыто, но закроется раньше, чем юзер успеет насладиться — причина-минус.
+    if (
+      ctx.closesInMinutes !== null &&
+      ctx.closesInMinutes !== undefined &&
+      ctx.closesInMinutes <= CLOSING_SOON_WINDOW_MIN
+    ) {
+      score -= CLOSING_SOON_PENALTY;
+      push('скоро закроется', 'closing soon', true);
+    }
   } else if (ctx.hoursState === 'closed') {
     score -= CLOSED_PENALTY;
     push('сейчас закрыто', 'currently closed', true);

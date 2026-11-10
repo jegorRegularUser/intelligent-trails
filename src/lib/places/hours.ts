@@ -242,6 +242,82 @@ function buildSchedule(rules: ParsedRule[]): WeekSchedule {
 }
 
 /**
+ * Разбор строки opening_hours в расписание недели. null — «не смогли
+ * разобрать» (пустой ввод, незнакомый токен): часовой гейт молча пропускает
+ * такое место, честная деградация (PRODUCT.md).
+ */
+function parseWeeklySchedule(raw: string | undefined | null): WeekSchedule | null {
+  if (typeof raw !== 'string') return null;
+  const text = raw.trim();
+  if (!text) return null;
+
+  const rules: ParsedRule[] = [];
+  for (const part of text.split(';')) {
+    const rule = parseRule(part);
+    if (!rule) return null; // одно непонятное правило портит всю строку
+    rules.push(rule);
+  }
+  return buildSchedule(rules);
+}
+
+export interface OpeningHoursStatus {
+  state: OpenState;
+  /**
+   * «До 22:00» — время закрытия открытого сейчас места (HH:MM по таймзоне
+   * запроса). null для закрытых/круглосуточных/непонятных: показывать
+   * «до 00:00» у 24/7 — враньё, которое мы себе не позволяем.
+   */
+  closesAtText: string | null;
+  /** Минут до закрытия открытого сейчас места; null = не знаем/не ограничено. */
+  minutesUntilClose: number | null;
+}
+
+/**
+ * Подробный статус часов: state + время закрытия открытого сейчас места.
+ * Гейт «работает сейчас» (PRODUCT.md, метрика №5) живёт на этом: скоринг
+ * демотивирует закрытое, отсев — в quickPipeline, бейдж — «до HH:MM».
+ */
+export function evaluateOpeningHoursDetailed(
+  raw: string | undefined | null,
+  at: Date,
+  timeZone: string,
+): OpeningHoursStatus {
+  const unknown = { state: 'unknown' as OpenState, closesAtText: null, minutesUntilClose: null };
+  const clock = wallClockInZone(at, timeZone);
+  if (!clock) return unknown;
+  const schedule = parseWeeklySchedule(raw);
+  if (!schedule) return unknown;
+
+  const now = clock.weekday * MINUTES_PER_DAY + clock.minutes;
+  const sorted = [...schedule].sort((a, b) => a[0] - b[0]);
+  const index = sorted.findIndex(([start, end]) => start <= now && now < end);
+  if (index === -1) return { state: 'closed', closesAtText: null, minutesUntilClose: null };
+
+  const start = sorted[index][0];
+  // Сутки через полночь и вс→пн режутся addSpan'ом на два интервала — сшиваем
+  // стыки по кругу недели, иначе «до 00:00» у 22:00-04:00 — враньё.
+  let end = sorted[index][1];
+  for (let guard = 0; guard < 7; guard += 1) {
+    const next = sorted.find(([s]) => s === end % MINUTES_PER_WEEK);
+    if (!next) break;
+    end += next[1] - next[0];
+  }
+
+  // Круглосуточный интервал (24/7, сшитые сутки) — «до …» не существует.
+  if (end - start >= MINUTES_PER_DAY) {
+    return { state: 'open', closesAtText: null, minutesUntilClose: null };
+  }
+  const endOfDay = end % MINUTES_PER_DAY;
+  const hh = String(Math.floor(endOfDay / 60)).padStart(2, '0');
+  const mm = String(endOfDay % 60).padStart(2, '0');
+  return {
+    state: 'open',
+    closesAtText: `${hh}:${mm}`,
+    minutesUntilClose: end - now,
+  };
+}
+
+/**
  * Открыто ли место в момент `at` по строке opening_hours в таймзоне `timeZone`.
  * Страта честности: непустой непарсируемый ввод, пустая строка и неизвестная
  * таймзона дают 'unknown'; 'closed' возвращается только для успешно
@@ -255,21 +331,5 @@ export function evaluateOpeningHours(
   at: Date,
   timeZone: string,
 ): OpenState {
-  if (typeof raw !== 'string') return 'unknown';
-  const text = raw.trim();
-  if (!text) return 'unknown';
-
-  const clock = wallClockInZone(at, timeZone);
-  if (!clock) return 'unknown';
-
-  const rules: ParsedRule[] = [];
-  for (const part of text.split(';')) {
-    const rule = parseRule(part);
-    if (!rule) return 'unknown'; // одно непонятное правило портит всю строку
-    rules.push(rule);
-  }
-
-  const schedule = buildSchedule(rules);
-  const now = clock.weekday * MINUTES_PER_DAY + clock.minutes;
-  return schedule.some(([start, end]) => start <= now && now < end) ? 'open' : 'closed';
+  return evaluateOpeningHoursDetailed(raw, at, timeZone).state;
 }

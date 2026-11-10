@@ -1,7 +1,9 @@
 "use client";
 
-import type { ComponentType } from "react";
+import { useEffect, useMemo, useState, type ComponentType } from "react";
 import { useLocale, useTranslations } from "next-intl";
+import { evaluateOpeningHoursDetailed } from "@/lib/places/hours";
+import { OpenBadge } from "@/components/places/PlaceCard";
 import {
   Camera,
   Coffee,
@@ -67,6 +69,24 @@ export function StopRow({
   const locale = useLocale();
   const Icon = KIND_ICONS[stop.kind];
 
+  // Бейдж часов — только после монтирования: на SSR серверные часы и таймзона
+  // дали бы текст, расходящийся с браузером (hydration-мисматч). Часы есть —
+  // «Открыто · до 22:00» / «Закрыто»; часов нет — никакого бейджа (честно).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const hours = useMemo(() => {
+    if (!stop.openingHours) return null;
+    try {
+      return evaluateOpeningHoursDetailed(
+        stop.openingHours,
+        new Date(),
+        Intl.DateTimeFormat().resolvedOptions().timeZone,
+      );
+    } catch {
+      return null;
+    }
+  }, [stop.openingHours]);
+
   // Скоринговые причины — вторичная строка к якорной причине движка.
   // Приходят позитивными первыми (негатив — только когда позитива нет),
   // поэтому просто берём первые две — они и есть самое весомое объяснение.
@@ -101,6 +121,9 @@ export function StopRow({
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <span className="text-sm font-semibold text-slate-800">{stop.name}</span>
               <Badge size="sm">{t("stayChip", { minutes: stop.stayMin })}</Badge>
+              {mounted && hours && hours.state !== "unknown" && (
+                <OpenBadge state={hours.state} until={hours.closesAtText} />
+              )}
             </div>
             <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
               {t(KIND_I18N[stop.kind])} · {stop.reason}

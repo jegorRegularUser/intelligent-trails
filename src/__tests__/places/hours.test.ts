@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { evaluateOpeningHours } from '@/lib/places/hours';
+import { evaluateOpeningHours, evaluateOpeningHoursDetailed } from '@/lib/places/hours';
 
 /** 2024-01-15 — понедельник, 2024-01-20 — суббота, 2024-01-21 — воскресенье. */
 const at = (iso: string) => new Date(iso);
@@ -155,5 +155,48 @@ describe('evaluateOpeningHours — честный unknown', () => {
     ['Mo-Fr 9:00-18:00-ish'], // мусор
   ])('непарсируемое «%s» → unknown', (raw) => {
     expect(evaluateOpeningHours(raw, at('2024-01-15T10:00:00Z'), UTC)).toBe('unknown');
+  });
+});
+
+describe('evaluateOpeningHoursDetailed — время закрытия для бейджа и скоринга', () => {
+  it('открыто: «до 18:00» и минуты до закрытия', () => {
+    const s = evaluateOpeningHoursDetailed('Mo-Fr 09:00-18:00', at('2024-01-15T12:00:00Z'), UTC);
+    expect(s.state).toBe('open');
+    expect(s.closesAtText).toBe('18:00');
+    expect(s.minutesUntilClose).toBe(360);
+  });
+
+  it('закрыто: времени закрытия нет', () => {
+    const s = evaluateOpeningHoursDetailed('Mo-Fr 09:00-18:00', at('2024-01-15T20:00:00Z'), UTC);
+    expect(s.state).toBe('closed');
+    expect(s.closesAtText).toBeNull();
+    expect(s.minutesUntilClose).toBeNull();
+  });
+
+  it('24/7 — открыто, но «до …» не существует', () => {
+    const s = evaluateOpeningHoursDetailed('24/7', at('2024-01-15T12:00:00Z'), UTC);
+    expect(s.state).toBe('open');
+    expect(s.closesAtText).toBeNull();
+    expect(s.minutesUntilClose).toBeNull();
+  });
+
+  it('ночь через полночь: хвост чужого дня показывает закрытие по расписанию', () => {
+    const s = evaluateOpeningHoursDetailed('Sa 22:00-04:00', at('2024-01-20T23:00:00Z'), UTC);
+    expect(s.state).toBe('open');
+    expect(s.closesAtText).toBe('04:00');
+    expect(s.minutesUntilClose).toBe(300);
+  });
+
+  it('таймзона запроса: 06:00 UTC — это 09:00 в Москве', () => {
+    const s = evaluateOpeningHoursDetailed('Mo-Su 09:00-18:00', at('2024-01-15T06:00:00Z'), MOSCOW);
+    expect(s.state).toBe('open');
+    expect(s.closesAtText).toBe('18:00');
+  });
+
+  it('непарсируемое — unknown, всё null', () => {
+    const s = evaluateOpeningHoursDetailed('PH 09:00-18:00', at('2024-01-15T12:00:00Z'), UTC);
+    expect(s.state).toBe('unknown');
+    expect(s.closesAtText).toBeNull();
+    expect(s.minutesUntilClose).toBeNull();
   });
 });

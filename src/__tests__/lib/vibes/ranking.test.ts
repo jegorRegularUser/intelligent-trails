@@ -205,7 +205,24 @@ describe('scorePlace', () => {
     );
     expect(best.score).toBeLessThanOrEqual(1);
   });
+
+  it('скоро закроется: открыто, но закрытие в пределах окна — минус и причина-минус', () => {
+    const place = makePlace({ category: 'cafe' });
+    const open = scorePlace(place, { archetype: COFFEE, hoursState: 'open' });
+    const soon = scorePlace(place, { archetype: COFFEE, hoursState: 'open', closesInMinutes: 20 });
+    const notSoon = scorePlace(place, { archetype: COFFEE, hoursState: 'open', closesInMinutes: 45 });
+    const noInfo = scorePlace(place, { archetype: COFFEE, hoursState: 'open', closesInMinutes: null });
+
+    expect(soon.score).toBeCloseTo(open.score - 0.1, 5);
+    expect(soon.reasonsRu).toContain('скоро закроется');
+    expect(soon.reasonsEn).toContain('closing soon');
+    expect(soon.negative[soon.reasonsRu.indexOf('скоро закроется')]).toBe(true);
+    expect(notSoon.reasonsRu).not.toContain('скоро закроется');
+    // null — «не знаем, когда закроется», штрафа нет
+    expect(noInfo.score).toBeCloseTo(open.score, 5);
+  });
 });
+
 
 describe('localProject (эквидистантная проекция)', () => {
   const origin: [number, number] = [55.75, 37.62];
