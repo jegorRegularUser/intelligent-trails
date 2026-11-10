@@ -34,7 +34,7 @@ jobs:
         env:
           # Для сборки достаточно фиктивных значений — реальный .env.local ставится деплоем
           MONGODB_URI: mongodb://localhost:27017/ci-placeholder
-          NEXTAUTH_SECRET: ci-placeholder-secret
+          AUTH_SECRET: ci-placeholder-secret
           NEXT_PUBLIC_YANDEX_API_KEY: ci-placeholder
           YANDEX_CLIENT_ID: ci-placeholder
           YANDEX_CLIENT_SECRET: ci-placeholder
