@@ -10,21 +10,36 @@ import { reverseGeocode } from "@/actions/geocoder";
 import { usePreferences } from "@/contexts/PreferencesContext";
 import { Coordinates } from "@/types/map";
 import { getKindInfo, type PlaceCard as PlaceCardData } from "@/lib/places";
+import { evaluateOpeningHours } from "@/lib/places/hours";
 import { PlaceMiniCard } from "@/components/places/PlaceMiniCard";
 
-/** Пин остановки → богатая карточка места (словарь kind-ов, часы — unknown). */
+/** Пин остановки → богатая карточка места (словарь kind-ов + часы, если OSM их даёт). */
 function buildWalkStopCard(
-  stop: { name: string; kind: string; reason?: string },
+  stop: { name: string; kind: string; reason?: string; openingHours?: string },
   locale: string,
 ): PlaceCardData {
   const info = getKindInfo(stop.kind);
+  // Часы считаем в момент клика в браузерной таймзоне юзера; нет часов или
+  // строки не разобрались — 'unknown', честная деградация (docs/place-cards.md).
+  let openState: PlaceCardData["openState"] = "unknown";
+  if (stop.openingHours) {
+    try {
+      openState = evaluateOpeningHours(
+        stop.openingHours,
+        new Date(),
+        Intl.DateTimeFormat().resolvedOptions().timeZone,
+      );
+    } catch {
+      openState = "unknown";
+    }
+  }
   return {
     kind: stop.kind,
     kindLabel: locale === "en" ? info.en : info.ru,
     icon: info.icon,
     name: stop.name,
     displayName: stop.name,
-    openState: "unknown",
+    openState,
   };
 }
 

@@ -11,6 +11,8 @@ export interface QuickWalkStopPin {
   coords: [number, number];
   /** Причина якоря из движка — слот «почему сюда» карточки. */
   reason?: string;
+  /** Часы работы OSM — бейдж «открыто/закрыто» в карточке пина (lib/places/hours). */
+  openingHours?: string;
 }
 
 interface QuickWalkMapState {

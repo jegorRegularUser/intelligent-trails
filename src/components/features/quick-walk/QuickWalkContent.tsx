@@ -58,6 +58,18 @@ function browserTimezone(): string | undefined {
   }
 }
 
+/** Остановки плана → пины карты: reason и часы едут в бейдж карточки пина. */
+function pinsFromPlan(plan: WalkPlan, fallbackStart: [number, number]) {
+  return plan.stops.map((s) => ({
+    id: s.id,
+    name: s.name,
+    kind: s.kind,
+    coords: s.coordinates ?? fallbackStart,
+    reason: s.reason,
+    openingHours: s.openingHours,
+  }));
+}
+
 export function QuickWalkContent() {
   const t = useTranslations("WalkUI");
   const locale = useLocale();
@@ -129,13 +141,7 @@ export function QuickWalkContent() {
           mapStore.setWalk(
             planPolyline(result.plans[0], start),
             "Старт прогулки",
-            result.plans[0].stops.map((s) => ({
-              id: s.id,
-              name: s.name,
-              kind: s.kind,
-              coords: s.coordinates ?? start,
-              reason: s.reason,
-            })),
+            pinsFromPlan(result.plans[0], start),
           );
           dispatch({ type: "BUILD_SUCCESS" });
         } else {
@@ -194,12 +200,7 @@ export function QuickWalkContent() {
         mapStore.setWalk(
           planPolyline(plans[next], lastInput.start),
           "Старт прогулки",
-          plans[next].stops.map((s) => ({
-            id: s.id,
-            name: s.name,
-            kind: s.kind,
-            coords: s.coordinates ?? lastInput.start,
-          })),
+          pinsFromPlan(plans[next], lastInput.start),
         );
       }
       return;
@@ -247,12 +248,7 @@ export function QuickWalkContent() {
             mapStore.setWalk(
               planPolyline(result.plans[0], start),
               "Старт прогулки",
-              result.plans[0].stops.map((s) => ({
-                id: s.id,
-                name: s.name,
-                kind: s.kind,
-                coords: s.coordinates ?? start,
-              })),
+              pinsFromPlan(result.plans[0], start),
             );
             dispatch({ type: "BUILD_SUCCESS" });
           } else {
@@ -323,13 +319,7 @@ export function QuickWalkContent() {
             mapStore.setWalk(
               planPolyline(next, lastInput.start),
               "Старт прогулки",
-              next.stops.map((s) => ({
-                id: s.id,
-                name: s.name,
-                kind: s.kind,
-                coords: s.coordinates ?? lastInput.start,
-                reason: s.reason,
-              })),
+              pinsFromPlan(next, lastInput.start),
             );
             // Из ready — но-оп: машина не покидала фазу, карточка просто обновилась
             dispatch({ type: "BUILD_SUCCESS" });
