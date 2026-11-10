@@ -29,19 +29,27 @@ export const HEAT_PARK_WEIGHT_BOOST = 0.15;
 export const EVENING_BLEND = 0.25;
 
 /** Часовой fallback тьмы, когда погоды нет: грубо, но честно и без зависимостей. */
-export function isDarkHour(now: Date): boolean {
-  const h = now.getHours();
-  return h < 7 || h >= 19;
+export function isDarkHour(now: Date, hour: number = now.getHours()): boolean {
+  return hour < 7 || hour >= 19;
+}
+
+/** Часовые контексты юзера, посчитанные в lib/vibes/localHour.ts. */
+export interface ContextHour {
+  /** Час 0..23 в таймзоне юзера — для fallback тьмы. */
+  hour?: number;
 }
 
 /**
  * Скорректированный профиль: дождь → крытое, жара >27 °C → тень и зелень,
  * тьма → 25% бленд к вечернему профилю. Погода null → только часовой fallback.
+ * Час юзера — opts.hour (lib/vibes/localHour.ts): серверный now.getHours()
+ * врёт клиенту на разницу поясов (docs/vibes.md §8).
  */
 export function combineContext(
   archetype: Archetype,
   weather: WeatherContext | null,
   now: Date,
+  opts?: ContextHour,
 ): AdjustedProfile {
   const categoryWeights: Record<CategoryId, number> = { ...archetype.categoryWeights };
   let indoorBias = archetype.indoorBias;
@@ -65,7 +73,7 @@ export function combineContext(
     adjustments.push('heat-shade');
   }
 
-  const dark = weather ? weather.isDark : isDarkHour(now);
+  const dark = weather ? weather.isDark : isDarkHour(now, opts?.hour);
   if (dark) {
     for (const c of Object.keys(categoryWeights) as CategoryId[]) {
       categoryWeights[c] = categoryWeights[c]

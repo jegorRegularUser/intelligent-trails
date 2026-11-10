@@ -24,6 +24,7 @@ import { enginePlansToUiPlans } from '@/lib/walk/uiAdapter';
 import { fetchWeatherContext } from '@/lib/weather';
 import { getArchetype } from '@/lib/vibes/archetypes';
 import { combineContext } from '@/lib/vibes/combine';
+import { userLocalHour } from '@/lib/vibes/localHour';
 import type { QuickVibe } from '@/actions/quickWalk';
 import type { WalkPlan as UiWalkPlan, WalkScoreReasons } from '@/components/walk/types';
 
@@ -152,9 +153,10 @@ export async function replaceQuickStop(input: QuickWalkReplaceInput): Promise<Qu
 
   const weather = await fetchWeatherContext(start[0], start[1]).catch(() => null);
   const archetype = getArchetype(input.vibe === 'rain' ? 'rainy' : input.vibe);
-  const profile = combineContext(archetype, weather, now);
+  // Час юзера, не сервера — те же аргументы скоринга, что у buildQuickWalk.
   const timeZone = input.timezone ?? DEFAULT_TIMEZONE;
-  const hour = now.getHours();
+  const hour = userLocalHour(now, input.timezone);
+  const profile = combineContext(archetype, weather, now, { hour });
 
   const excludeIds = new Set<string>([
     ...(input.excludeStopIds ?? []),

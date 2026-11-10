@@ -9,6 +9,7 @@ import { memoizeRoutingPort } from '@/lib/walk/memoPort';
 import { fetchWeatherContext } from '@/lib/weather';
 import { getArchetype } from '@/lib/vibes/archetypes';
 import { combineContext } from '@/lib/vibes/combine';
+import { userLocalHour } from '@/lib/vibes/localHour';
 import { createWalkPlan, buildWalkWithFallback } from '@/lib/walk';
 import { enginePlansToUiPlans } from '@/lib/walk/uiAdapter';
 import {
@@ -77,7 +78,10 @@ export async function buildQuickWalk(input: QuickWalkInput): Promise<QuickWalkRe
   const weather = await fetchWeatherContext(start[0], start[1]).catch(() => null);
   // Словарь UI говорит 'rain', архетип в vibes — 'rainy'
   const archetype = getArchetype(input.vibe === 'rain' ? 'rainy' : input.vibe);
-  const profile = combineContext(archetype, weather, now);
+  // Час юзера, не сервера: hourAffinity и fallback тьмы живут в его поясе.
+  const timeZone = input.timezone ?? DEFAULT_TIMEZONE;
+  const hour = userLocalHour(now, input.timezone);
+  const profile = combineContext(archetype, weather, now, { hour });
 
   const context: WalkContextInfo = {
     isRaining: weather?.isRaining ?? false,
@@ -85,9 +89,6 @@ export async function buildQuickWalk(input: QuickWalkInput): Promise<QuickWalkRe
     isDark: weather ? weather.isDark : false,
     adjustments: profile.adjustments,
   };
-
-  const timeZone = input.timezone ?? DEFAULT_TIMEZONE;
-  const hour = now.getHours();
 
   const { places: pool, searchFailed } = await collectCandidates(provider, start, profile, input.budgetMinutes);
   if (pool.length === 0) {
