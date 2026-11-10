@@ -127,9 +127,11 @@ export function RouteSidebarManager({ sketch = false }: { sketch?: boolean } = {
   }
   if (walkMode !== "route") {
     // quick и sightseeing («Новый город») живут на одном контенте,
-    // различаются архетипом и отсутствием выбора вайба.
+    // различаются архетипом и отсутствием выбора вайба. key — ремоунт при
+    // смене сценария: план, собранный в одном режиме, не переезжает в другой.
     return (
       <QuickWalkPanel
+        key={walkMode}
         isNavigationOpen={isMobileMenuOpen}
         sketch={sketch}
         mode={walkMode === "sightseeing" ? "sightseeing" : "quick"}
