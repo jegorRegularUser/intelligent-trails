@@ -6,6 +6,7 @@ import {
   GREEN,
   EVENING,
   COFFEE,
+  SIGHTSEEING,
   getArchetype,
 } from '@/lib/vibes/archetypes';
 
@@ -84,6 +85,33 @@ describe('archetypes', () => {
   it('getArchetype возвращает архетип по id и бросает на неизвестном', () => {
     expect(getArchetype('green')).toBe(GREEN);
     expect(() => getArchetype('nope' as never)).toThrow();
+  });
+
+  it('sightseeing — архетип входа «Новый город»: вне UI-реестра, но достижим', () => {
+    // Кнопки вайба не меняются (PRODUCT.md: UI-вайбов пять).
+    expect(ARCHETYPES.some((a) => a.id === 'sightseeing')).toBe(false);
+    expect(getArchetype('sightseeing')).toBe(SIGHTSEEING);
+  });
+
+  it('sightseeing: ядро — характерные места, инварианты те же', () => {
+    expect(SIGHTSEEING.categoryWeights.attraction).toBe(1.0);
+    expect(SIGHTSEEING.categoryWeights.viewpoint).toBeGreaterThan(SIGHTSEEING.categoryWeights.cafe);
+    expect(SIGHTSEEING.categoryWeights.bar).toBeLessThan(0.2); // вечерние ящики — не ядро обзора
+    for (const c of CATEGORIES) {
+      const w = SIGHTSEEING.categoryWeights[c];
+      expect(Number.isFinite(w)).toBe(true);
+      expect(w).toBeGreaterThanOrEqual(0);
+      expect(w).toBeLessThanOrEqual(1);
+      expect(SIGHTSEEING.stayMinutes[c]).toBeGreaterThan(0);
+    }
+    for (let h = 0; h <= 23; h++) {
+      const v = SIGHTSEEING.hourAffinity(h);
+      expect(Number.isFinite(v)).toBe(true);
+      expect(v).toBeGreaterThanOrEqual(0);
+      expect(v).toBeLessThanOrEqual(1);
+    }
+    expect(SIGHTSEEING.hourAffinity(12)).toBeCloseTo(1.0); // дневной пик
+    expect(SIGHTSEEING.hourAffinity(4)).toBeCloseTo(0.436, 2); // ночь: между 0:0.35 и 7:0.5
   });
 
   it('DEFAULT_INDOOR покрывает все 9 категорий булевыми значениями', () => {

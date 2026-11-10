@@ -70,7 +70,7 @@ function pinsFromPlan(plan: WalkPlan, fallbackStart: [number, number]) {
   }));
 }
 
-export function QuickWalkContent() {
+export function QuickWalkContent({ mode = "quick" }: { mode?: "quick" | "sightseeing" }) {
   const t = useTranslations("WalkUI");
   const locale = useLocale();
   const { showToast } = useToast();
@@ -169,14 +169,16 @@ export function QuickWalkContent() {
   );
 
   const handleStart = useCallback(() => {
-    if (selectedMinutes == null || vibe == null) return;
+    // Обзорный режим (вход №2): архетип фиксирован, юзер выбирает город и время.
+    const vibeValue: QuickVibe | null = mode === "sightseeing" ? "sightseeing" : vibe;
+    if (selectedMinutes == null || vibeValue == null) return;
     const minutes = isCustomActive
       ? normalizeCustomMinutes(customMinutes ?? DEFAULT_CUSTOM_MINUTES)
       : selectedMinutes;
     excludedRef.current = new Set();
     // lastInput (включая фактический старт) запишет runBuild при успехе
-    void runBuild(minutes, vibe, addressStart ? { manualStart: addressStart } : undefined);
-  }, [addressStart, customMinutes, isCustomActive, runBuild, selectedMinutes, vibe]);
+    void runBuild(minutes, vibeValue, addressStart ? { manualStart: addressStart } : undefined);
+  }, [addressStart, customMinutes, isCustomActive, mode, runBuild, selectedMinutes, vibe]);
 
   const handleRetry = useCallback(() => {
     if (!lastInput) return;
@@ -426,6 +428,9 @@ export function QuickWalkContent() {
             isBuilding={phase === "building"}
             disabled={phase === "offline"}
             forecast={forecast}
+            hideVibes={mode === "sightseeing"}
+            headerKey={mode === "sightseeing" ? "sightseeingTitle" : "screenTitle"}
+            subtitleKey={mode === "sightseeing" ? "sightseeingSubtitle" : "screenSubtitle"}
           />
 
           {/* Тот же AddressInput, что и в эксперт-маршруте: необязательный старт.

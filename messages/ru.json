@@ -2,6 +2,8 @@
   "WalkUI": {
     "screenTitle": "Прогулка рядом",
     "screenSubtitle": "Выберите время — остальное подберём. Без входа.",
+    "sightseeingTitle": "Обзорная прогулка",
+    "sightseeingSubtitle": "Петля по характерным местам: выберите время и точку старта.",
     "timeLegend": "Сколько есть времени?",
     "time30": "30 мин",
     "time60": "1 час",
@@ -81,6 +83,7 @@
     "variantOf": "Вариант {index} из {count}",
     "modeQuick": "Быстрая прогулка",
     "modeRoute": "Маршрут",
+    "modeSightseeing": "Новый город",
     "startFromAddressOptional": "Откуда пойдём? (необязательно — иначе от геолокации)"
   },
   "BuilderSidebar": {

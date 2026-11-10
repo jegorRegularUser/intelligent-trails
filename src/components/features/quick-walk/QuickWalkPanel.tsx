@@ -10,13 +10,21 @@ import { SketchCard } from "@/components/ui/SketchCard";
 import { WalkModeSwitcher } from "@/components/features/walk-mode/WalkModeSwitcher";
 import { QuickWalkContent } from "./QuickWalkContent";
 
-export function QuickWalkPanel({ isNavigationOpen = false, sketch = false }: { isNavigationOpen?: boolean; sketch?: boolean }) {
+export function QuickWalkPanel({
+  isNavigationOpen = false,
+  sketch = false,
+  mode = "quick",
+}: {
+  isNavigationOpen?: boolean;
+  sketch?: boolean;
+  mode?: "quick" | "sightseeing";
+}) {
   const t = useTranslations("WalkUI");
 
   const body = (
     <div className="flex flex-col gap-4">
       <WalkModeSwitcher />
-      <QuickWalkContent />
+      <QuickWalkContent mode={mode} />
     </div>
   );
 

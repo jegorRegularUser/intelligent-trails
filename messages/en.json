@@ -2,6 +2,8 @@
   "WalkUI": {
     "screenTitle": "A walk nearby",
     "screenSubtitle": "Pick your time — we'll plan the rest. No sign-up.",
+    "sightseeingTitle": "Overview walk",
+    "sightseeingSubtitle": "A loop through the character spots: pick time and a starting point.",
     "timeLegend": "How much time do you have?",
     "time30": "30 min",
     "time60": "1 hour",
@@ -81,6 +83,7 @@
     "variantOf": "Variant {index} of {count}",
     "modeQuick": "Quick walk",
     "modeRoute": "Route",
+    "modeSightseeing": "New city",
     "startFromAddressOptional": "Where do we start? (optional — otherwise from geolocation)"
   },
   "Builder": {

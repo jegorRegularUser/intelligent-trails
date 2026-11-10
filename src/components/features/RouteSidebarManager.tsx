@@ -125,8 +125,16 @@ export function RouteSidebarManager({ sketch = false }: { sketch?: boolean } = {
   if (isRouteBuilt && routeParam) {
     return <RouteResultSidebar isNavigationOpen={isMobileMenuOpen} />;
   }
-  if (walkMode === "quick") {
-    return <QuickWalkPanel isNavigationOpen={isMobileMenuOpen} sketch={sketch} />;
+  if (walkMode !== "route") {
+    // quick и sightseeing («Новый город») живут на одном контенте,
+    // различаются архетипом и отсутствием выбора вайба.
+    return (
+      <QuickWalkPanel
+        isNavigationOpen={isMobileMenuOpen}
+        sketch={sketch}
+        mode={walkMode === "sightseeing" ? "sightseeing" : "quick"}
+      />
+    );
   }
   return <RouteBuilderSidebar isNavigationOpen={isMobileMenuOpen} />;
 }

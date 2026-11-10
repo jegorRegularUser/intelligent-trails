@@ -5,7 +5,7 @@
 import type { CategoryId } from '@/constants/categories';
 import type { GeoPlace } from '@/lib/geo/types';
 
-export type ArchetypeId = 'green' | 'coffee' | 'evening' | 'rainy' | 'surprise';
+export type ArchetypeId = 'green' | 'coffee' | 'evening' | 'rainy' | 'surprise' | 'sightseeing';
 
 /** Архетип — профиль прогулки: веса категорий + предпочтения + тайминги. */
 export interface Archetype {
@@ -65,6 +65,10 @@ const RAINY_AFFINITY: readonly AffinityPoint[] = [
 ];
 const SURPRISE_AFFINITY: readonly AffinityPoint[] = [
   [0, 0.5], [7, 0.6], [10, 0.9], [12, 1.0], [21, 0.9], [23, 0.7], [24, 0.5],
+];
+// Обзорная: «что посмотреть» живёт с утра до сумерек, ночью панорамы тускнеют.
+const SIGHTSEEING_AFFINITY: readonly AffinityPoint[] = [
+  [0, 0.35], [7, 0.5], [9, 0.9], [11, 1.0], [17, 1.0], [19, 0.85], [21, 0.6], [23, 0.4], [24, 0.35],
 ];
 
 // --- 9 категорий (конвенция categories.ts) -----------------------------------
@@ -208,11 +212,38 @@ export const SURPRISE: Archetype = {
   hourAffinity: piecewiseAffinity(SURPRISE_AFFINITY),
 };
 
+/**
+ * Обзорная — архетип входа «Новый город / чужой район» (PRODUCT.md, сценарий №2),
+ * НЕ кнопка вайба: юзер выбирает город, не настроение. Ядро — характерные места
+ * (attraction/viewpoint/museum), кафе — передышка между ними.
+ */
+export const SIGHTSEEING: Archetype = {
+  id: 'sightseeing',
+  labelRu: 'Обзорная',
+  labelEn: 'Sightseeing',
+  descriptionRu: 'Обзорная петля по характерным местам района: что посмотреть, пока гуляешь.',
+  descriptionEn: 'A loop through the neighborhood\'s character spots: what to see while you walk.',
+  categoryWeights: record9({
+    cafe: 0.5, restaurant: 0.35, park: 0.6, museum: 0.7, attraction: 1.0,
+    bar: 0.15, cinema: 0.15, shopping: 0.2, viewpoint: 0.85,
+  }),
+  indoorBias: 0.3,
+  shadePriority: 0.5,
+  stayMinutes: record9({
+    cafe: 20, restaurant: 30, park: 15, museum: 40, attraction: 10,
+    bar: 25, cinema: 120, shopping: 15, viewpoint: 10,
+  }),
+  hourAffinity: piecewiseAffinity(SIGHTSEEING_AFFINITY),
+};
+
 /** Реестр архетипов в порядке UI («зелёная / кофейная / вечерняя / дождь / удиви меня»). */
 export const ARCHETYPES: readonly Archetype[] = [GREEN, COFFEE, EVENING, RAINY, SURPRISE];
 
+/** Полный реестр: UI-вайбы + архетипы сценариев входа (sightseeing — не кнопка). */
+const ALL_ARCHETYPES: readonly Archetype[] = [...ARCHETYPES, SIGHTSEEING];
+
 export function getArchetype(id: ArchetypeId): Archetype {
-  const found = ARCHETYPES.find((a) => a.id === id);
+  const found = ALL_ARCHETYPES.find((a) => a.id === id);
   if (!found) throw new Error(`Неизвестный архетип: ${id}`);
   return found;
 }

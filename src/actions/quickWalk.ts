@@ -24,8 +24,12 @@ import {
 import type { VibeId } from '@/components/walk/logic';
 import type { WalkPlan as UiWalkPlan } from '@/components/walk/types';
 
-/** Вайб приходит с главного экрана в словаре UI (logic.ts VIBE_IDS). */
-export type QuickVibe = VibeId;
+/**
+ * Вайб приходит с главного экрана в словаре UI (logic.ts VIBE_IDS);
+ * 'sightseeing' — архетип входа «Новый город» (PRODUCT.md, сценарий №2),
+ * кнопки вайба у него нет.
+ */
+export type QuickVibe = VibeId | 'sightseeing';
 
 export interface QuickWalkInput {
   /** [lat, lng] — точка старта (геолокация или адрес). */
