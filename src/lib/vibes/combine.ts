@@ -11,7 +11,7 @@ import {
 } from '@/lib/vibes/archetypes';
 import { HEAT_TEMP_C, type WeatherContext } from '@/lib/weather';
 
-export type Adjustment = 'rain-indoor' | 'heat-shade' | 'dark-evening';
+export type Adjustment = 'rain-indoor' | 'heat-shade' | 'dark-evening' | 'cold-indoor';
 
 /** Архетип после контекстных поправок + список сработавших правил. */
 export interface AdjustedProfile extends Archetype {
@@ -33,17 +33,47 @@ export function isDarkHour(now: Date, hour: number = now.getHours()): boolean {
   return hour < 7 || hour >= 19;
 }
 
-/** Часовые контексты юзера, посчитанные в lib/vibes/localHour.ts. */
+/** cold-indoor: холодный сезон — крытое приятнее, улица короче. */
+export const COLD_INDOOR_BIAS_BOOST = 0.1;
+export const COLD_INDOOR_WEIGHT_BOOST = 0.1;
+export const COLD_OUTDOOR_WEIGHT_CUT = 0.1;
+/** Ниже этой температуры холодное правило работает даже вне календарной зимы. */
+export const COLD_TEMP_C = 5;
+/** Уличные стоянки в холод режутся на четверть — гулять по морозу дольше неприятно. */
+export const COLD_STAY_FACTOR = 0.75;
+/** Пол стоянки в холод, минут. */
+export const COLD_STAY_FLOOR_MIN = 5;
+
+/** Календарная зима северного полушария (продукт RU-first): декабрь–февраль. */
+export function isColdMonth(month: number): boolean {
+  return month === 11 || month === 0 || month === 1;
+}
+
+/** Крытые категории, которым холод в плюс (сидеть можно и в мороз, но внутри). */
+const COLD_INDOOR_CATEGORIES: CategoryId[] = ['museum', 'cinema', 'shopping', 'cafe'];
+/** Уличные категории, которым холод в минус. */
+const COLD_OUTDOOR_CATEGORIES: CategoryId[] = ['park', 'viewpoint'];
+
+/** Условие cold-indoor: календарная зима без тёплой погоды либо мороз в любой месяц. */
+export function isColdContext(month: number, tempC: number | null): boolean {
+  if (tempC !== null) return tempC < COLD_TEMP_C;
+  return isColdMonth(month);
+}
+
+/** Часовые/сезонные контексты юзера, посчитанные в lib/vibes/localHour.ts. */
 export interface ContextHour {
   /** Час 0..23 в таймзоне юзера — для fallback тьмы. */
   hour?: number;
+  /** Месяц 0..11 в таймзоне юзера — для cold-indoor. */
+  month?: number;
 }
 
 /**
  * Скорректированный профиль: дождь → крытое, жара >27 °C → тень и зелень,
- * тьма → 25% бленд к вечернему профилю. Погода null → только часовой fallback.
- * Час юзера — opts.hour (lib/vibes/localHour.ts): серверный now.getHours()
- * врёт клиенту на разницу поясов (docs/vibes.md §8).
+ * тьма → 25% бленд к вечернему профилю, холод → крытое и короче.
+ * Погода null → часовой/сезонный fallback. Час и месяц юзера — opts
+ * (lib/vibes/localHour.ts): серверные now.getHours()/getMonth() врут клиенту
+ * на разницу поясов (docs/vibes.md §8).
  */
 export function combineContext(
   archetype: Archetype,
@@ -82,5 +112,36 @@ export function combineContext(
     adjustments.push('dark-evening');
   }
 
+  // cold-indoor: календарная зима без тёплой погоды либо мороз. Крытым — плюс,
+  // уличным — минус; слабее дождя (тот меняет саму возможность остановки).
+  if (isColdContext(opts?.month ?? now.getMonth(), weather ? weather.tempC : null)) {
+    indoorBias = Math.min(1, indoorBias + COLD_INDOOR_BIAS_BOOST);
+    for (const c of COLD_INDOOR_CATEGORIES) {
+      categoryWeights[c] = Math.min(1, categoryWeights[c] + COLD_INDOOR_WEIGHT_BOOST);
+    }
+    for (const c of COLD_OUTDOOR_CATEGORIES) {
+      categoryWeights[c] = Math.max(0, categoryWeights[c] - COLD_OUTDOOR_WEIGHT_CUT);
+    }
+    adjustments.push('cold-indoor');
+  }
+
   return { ...archetype, categoryWeights, indoorBias, shadePriority, adjustments };
+}
+
+/**
+ * Стоянки под холод: уличные категории короче на четверть (пол 5 минут),
+ * крытые не трогаем. Вызывается рядом с combineContext — тем же условием
+ * isColdContext, чтобы веса и стоянки не разъехались.
+ */
+export function seasonalStayMinutes(
+  stayMinutes: Record<CategoryId, number>,
+  month: number,
+  tempC: number | null,
+): Record<CategoryId, number> {
+  if (!isColdContext(month, tempC)) return stayMinutes;
+  const adjusted = { ...stayMinutes };
+  for (const c of COLD_OUTDOOR_CATEGORIES) {
+    adjusted[c] = Math.max(COLD_STAY_FLOOR_MIN, Math.round(adjusted[c] * COLD_STAY_FACTOR));
+  }
+  return adjusted;
 }

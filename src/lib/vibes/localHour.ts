@@ -25,3 +25,23 @@ export function userLocalHour(now: Date, timeZone?: string): number {
   }
   return now.getHours();
 }
+
+/**
+ * Месяц 0..11 (как Date.getMonth) в таймзоне юзера — сезонные правила
+ * (cold-indoor, docs/vibes.md §8) живут в его календаре, а не серверном.
+ */
+export function userLocalMonth(now: Date, timeZone?: string): number {
+  if (timeZone) {
+    try {
+      const formatted = new Intl.DateTimeFormat('en-US', {
+        month: 'numeric',
+        timeZone,
+      }).format(now);
+      const month = Number.parseInt(formatted, 10);
+      if (Number.isInteger(month) && month >= 1 && month <= 12) return month - 1;
+    } catch {
+      // Незнакомая зона — серверный месяц.
+    }
+  }
+  return now.getMonth();
+}

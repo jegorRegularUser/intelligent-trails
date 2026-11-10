@@ -116,6 +116,38 @@ describe('scorePlace', () => {
     expect(parkNight.score).toBeCloseTo(parkNone.score - 0.06, 5);
   });
 
+  it('lit-тег уточняет уличные места в тьме: yes +0.05, no −0.05, нет тега — 0', () => {
+    const night = weather({ isDark: true });
+    const litNone = scorePlace(makePlace({ category: 'attraction' }), { archetype: GREEN, weather: night });
+    const litYes = scorePlace(
+      makePlace({ category: 'attraction', tags: { lit: 'yes' } }),
+      { archetype: GREEN, weather: night },
+    );
+    const litNo = scorePlace(
+      makePlace({ category: 'attraction', tags: { lit: 'no' } }),
+      { archetype: GREEN, weather: night },
+    );
+    expect(litYes.score).toBeCloseTo(litNone.score + 0.05, 5);
+    expect(litNo.score).toBeCloseTo(litNone.score - 0.05, 5);
+    expect(litYes.reasonsRu).toContain('освещено после заката');
+    expect(litNo.reasonsRu).toContain('не освещено ночью');
+    expect(litNo.negative[litNo.reasonsRu.indexOf('не освещено ночью')]).toBe(true);
+
+    // Днём lit не читается: сигнал только в контексте тьмы.
+    const dayLit = scorePlace(
+      makePlace({ category: 'attraction', tags: { lit: 'yes' } }),
+      { archetype: GREEN, weather: weather({ tempC: 15 }) },
+    );
+    expect(dayLit.reasonsRu).not.toContain('освещено после заката');
+
+    // Крытым lit не начисляется — сигнал про улицу.
+    const indoorLit = scorePlace(
+      makePlace({ category: 'cafe', tags: { lit: 'yes' } }),
+      { archetype: COFFEE, weather: night },
+    );
+    expect(indoorLit.reasonsRu).not.toContain('освещено после заката');
+  });
+
   it('дождь без combine не считается дважды: hints только через indoorBias', () => {
     const place = makePlace({ category: 'cafe' });
     const none = scorePlace(place, { archetype: COFFEE });

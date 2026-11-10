@@ -8,8 +8,8 @@ import { getCloudProvider } from '@/lib/geo/instance';
 import { memoizeRoutingPort } from '@/lib/walk/memoPort';
 import { fetchWeatherContext } from '@/lib/weather';
 import { getArchetype } from '@/lib/vibes/archetypes';
-import { combineContext } from '@/lib/vibes/combine';
-import { userLocalHour } from '@/lib/vibes/localHour';
+import { combineContext, seasonalStayMinutes } from '@/lib/vibes/combine';
+import { userLocalHour, userLocalMonth } from '@/lib/vibes/localHour';
 import { createWalkPlan, buildWalkWithFallback } from '@/lib/walk';
 import { enginePlansToUiPlans } from '@/lib/walk/uiAdapter';
 import {
@@ -78,10 +78,12 @@ export async function buildQuickWalk(input: QuickWalkInput): Promise<QuickWalkRe
   const weather = await fetchWeatherContext(start[0], start[1]).catch(() => null);
   // Словарь UI говорит 'rain', архетип в vibes — 'rainy'
   const archetype = getArchetype(input.vibe === 'rain' ? 'rainy' : input.vibe);
-  // Час юзера, не сервера: hourAffinity и fallback тьмы живут в его поясе.
+  // Час и месяц юзера, не сервера: hourAffinity, fallback тьмы и сезон живут
+  // в его поясе (docs/vibes.md §8).
   const timeZone = input.timezone ?? DEFAULT_TIMEZONE;
   const hour = userLocalHour(now, input.timezone);
-  const profile = combineContext(archetype, weather, now, { hour });
+  const month = userLocalMonth(now, input.timezone);
+  const profile = combineContext(archetype, weather, now, { hour, month });
 
   const context: WalkContextInfo = {
     isRaining: weather?.isRaining ?? false,
@@ -111,8 +113,13 @@ export async function buildQuickWalk(input: QuickWalkInput): Promise<QuickWalkRe
   // Порт маршрутизации: структурная совместимость GeoProvider ↔ WalkRoutingPort.
   // Мемо-слой гасит дубли route-запросов между вариантами и зеркалом кольца.
   const routingPort = memoizeRoutingPort(provider);
-  // Стоянки — из архетипа: без них таблица живёт на дефолтах (парк 25 вместо 30).
-  const categoryStayMinutes = archetype.stayMinutes as Record<string, number>;
+  // Стоянки — из архетипа с сезонной поправкой (холод: улица короче); без них
+  // таблица живёт на дефолтах (парк 25 вместо 30).
+  const categoryStayMinutes = seasonalStayMinutes(
+    archetype.stayMinutes,
+    month,
+    weather ? weather.tempC : null,
+  ) as Record<string, number>;
   const planResult = await createWalkPlan(
     {
       start,

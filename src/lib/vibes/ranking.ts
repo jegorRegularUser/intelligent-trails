@@ -37,6 +37,8 @@ const SHADE_PARK_BONUS = 0.08;
 const SHADE_EXPOSED_PENALTY = 0.04;
 const LIGHTED_LIVE_BONUS = 0.06;
 const LIGHTED_DARK_PENALTY = 0.06;
+/** OSM lit=yes/no при тьме: мягкий сигнал освещённости уличного места (§5.4). */
+const LIT_TAG_BONUS = 0.05;
 
 /** Порог рейтинга, начиная с которого он попадает в reasons. */
 const REASON_RATING_MIN = 4.2;
@@ -214,6 +216,15 @@ export function scorePlace(place: GeoPlace, ctx: ScorePlaceContext): PlaceScore 
       } else if (place.category === 'park' || place.category === 'viewpoint') {
         score -= LIGHTED_DARK_PENALTY;
         push('ночью здесь темно и пусто', 'dark and deserted at night', true);
+      }
+      // lit-тег уточняет уличные места: OSM сам говорит, освещено ли после заката.
+      // Нет тега — ноль, честное «не знаем» (§9).
+      if (!isPlaceIndoor && tags.lit === 'yes') {
+        score += LIT_TAG_BONUS;
+        push('освещено после заката', 'well-lit after dark');
+      } else if (!isPlaceIndoor && tags.lit === 'no') {
+        score -= LIT_TAG_BONUS;
+        push('не освещено ночью', 'not lit at night', true);
       }
     }
   }

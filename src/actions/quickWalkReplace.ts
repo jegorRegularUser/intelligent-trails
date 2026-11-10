@@ -23,8 +23,8 @@ import {
 import { enginePlansToUiPlans } from '@/lib/walk/uiAdapter';
 import { fetchWeatherContext } from '@/lib/weather';
 import { getArchetype } from '@/lib/vibes/archetypes';
-import { combineContext } from '@/lib/vibes/combine';
-import { userLocalHour } from '@/lib/vibes/localHour';
+import { combineContext, seasonalStayMinutes } from '@/lib/vibes/combine';
+import { userLocalHour, userLocalMonth } from '@/lib/vibes/localHour';
 import type { QuickVibe } from '@/actions/quickWalk';
 import type { WalkPlan as UiWalkPlan, WalkScoreReasons } from '@/components/walk/types';
 
@@ -153,10 +153,11 @@ export async function replaceQuickStop(input: QuickWalkReplaceInput): Promise<Qu
 
   const weather = await fetchWeatherContext(start[0], start[1]).catch(() => null);
   const archetype = getArchetype(input.vibe === 'rain' ? 'rainy' : input.vibe);
-  // Час юзера, не сервера — те же аргументы скоринга, что у buildQuickWalk.
+  // Час и месяц юзера, не сервера — те же аргументы скоринга, что у buildQuickWalk.
   const timeZone = input.timezone ?? DEFAULT_TIMEZONE;
   const hour = userLocalHour(now, input.timezone);
-  const profile = combineContext(archetype, weather, now, { hour });
+  const month = userLocalMonth(now, input.timezone);
+  const profile = combineContext(archetype, weather, now, { hour, month });
 
   const excludeIds = new Set<string>([
     ...(input.excludeStopIds ?? []),
@@ -183,9 +184,14 @@ export async function replaceQuickStop(input: QuickWalkReplaceInput): Promise<Qu
       start,
       budgetMinutes: input.budgetMinutes,
       categoryWeights: profile.categoryWeights,
-      // Стоянки — из архетипа, как в сборке: без них новая остановка получает
-      // дефолтную таблицу (парк 25 вместо 30) и рассинхронизируется с планом.
-      categoryStayMinutes: archetype.stayMinutes as Record<string, number>,
+      // Стоянки — из архетипа с сезонной поправкой (холод: улица короче), как
+      // в сборке: без них новая остановка получает дефолтную таблицу
+      // (парк 25 вместо 30) и рассинхронизируется с планом.
+      categoryStayMinutes: seasonalStayMinutes(
+        archetype.stayMinutes,
+        month,
+        weather ? weather.tempC : null,
+      ) as Record<string, number>,
       currentPlan: buildEnginePlan(input),
       replaceIndex: input.currentStops.findIndex((stop) => stop.id === input.replaceStopId),
       candidates: shortlist.map((entry) => entry.place),
