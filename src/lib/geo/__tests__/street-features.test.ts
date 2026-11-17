@@ -21,12 +21,6 @@ function streetProvider(fetchImpl: typeof fetch): CloudProvider {
   return new CloudProvider({ orsApiKey: '', overpassMirrors: MIRRORS, fetchImpl });
 }
 
-function overpassQueryOf(init?: RequestInit): string {
-  const body = init?.body;
-  expect(typeof body).toBe('string');
-  return new URLSearchParams(body as string).get('data') ?? '';
-}
-
 function fakeStreetResponse(elements: unknown[]): { fetch: typeof fetch; calls: { url: string; init?: RequestInit }[] } {
   return createFakeFetch(() => jsonResponse({ elements }));
 }

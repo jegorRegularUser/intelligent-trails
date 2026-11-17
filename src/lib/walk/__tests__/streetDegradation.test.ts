@@ -17,7 +17,7 @@ const DEFS: CityPlaceDef[] = [
   { id: 'cafe', name: 'Кафе', category: 'cafe', east: 0, north: 1000, rating: 4.2 },
 ];
 
-function baseInput(places: ReturnType<typeof makeCity>['places']): Omit<WalkInput, 'candidates'> {
+function baseInput(): Omit<WalkInput, 'candidates'> {
   return {
     start: makeNode(0, 0),
     budgetMinutes: 90,
@@ -31,9 +31,9 @@ const snapshot = (plans: unknown): string => JSON.stringify(plans);
 describe('снапшот деградации: hasData=false идентичен прежним планам (S6)', () => {
   it('createWalkPlan: поля undefined → планы бит-в-бит совпадают с входом без полей', async () => {
     const { port, places } = makeCity(DEFS);
-    const without = await createWalkPlan({ ...baseInput(places), candidates: places }, port);
+    const without = await createWalkPlan({ ...baseInput(), candidates: places }, port);
     const withUndefined = await createWalkPlan(
-      { ...baseInput(places), candidates: places, streetFeatures: undefined, streetHints: undefined },
+      { ...baseInput(), candidates: places, streetFeatures: undefined, streetHints: undefined },
       makeCity(DEFS).port,
     );
 

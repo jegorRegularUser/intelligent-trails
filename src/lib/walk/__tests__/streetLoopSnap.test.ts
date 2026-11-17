@@ -132,12 +132,14 @@ describe('snapWaypointsToHints: чистая функция (S3)', () => {
     const hints = hintsAtCorners(INTEREST_SNAP_THRESHOLD);
     const snapped = snapWaypointsToHints(START, ROSE_R, geometric, hints);
     expect(snapped.snappedIndices).toHaveLength(4);
-    snapped.points.forEach((point, i) => expect(samePoint(point, hints.sectors.find((s) => s.point && samePoint(point, s.point))?.point ?? point)).toBe(true));
+    snapped.points.forEach((point) =>
+      expect(samePoint(point, hints.sectors.find((s) => s.point && samePoint(point, s.point))?.point ?? point)).toBe(true),
+    );
 
     const weak = hintsAtCorners(INTEREST_SNAP_THRESHOLD - 0.01);
     const notSnapped = snapWaypointsToHints(START, ROSE_R, geometric, weak);
     expect(notSnapped.snappedIndices).toHaveLength(0);
-    notSnapped.points.forEach((point, i) => expect(samePoint(point, geometric[i])).toBe(true));
+    notSnapped.points.forEach((point, index) => expect(samePoint(point, geometric[index])).toBe(true));
   });
 
   it('кап отклонения: точка дальше 30% радиуса не тянет (граница pinned)', () => {
