@@ -581,7 +581,7 @@ Footprints слева от текста CTA)*
 | Единая панель: shell + свитчер трёх режимов | `src/components/ui/RoutePanel.tsx`, `src/components/features/walk-mode/WalkModeSwitcher.tsx` |
 | Контент «Прогуляться сейчас» / «Новый город» | `src/components/features/quick-walk/QuickWalkContent.tsx` (режим — проп `mode`), обёртка `QuickWalkPanel.tsx` |
 | Серверная склейка | `src/lib/walk/quickPipeline.ts`, экшены `src/actions/quickWalk.ts` / `quickWalkReplace.ts` / `quickWalkSave.ts` |
-| Карта: петля + пины с карточками и часами | `src/components/map/RouteMap.tsx` (читает `src/store/useQuickWalkMapStore.ts`) |
+| Карта: петля + пины с карточками и часами | главный сценарий — `src/components/map/maplibre/MapCanvas.tsx` (читает `src/store/useQuickWalkMapStore.ts`, тайлы OpenFreeMap, ADR-003); expert — `RouteMap.tsx` (Яндекс) |
 
 *(Демо-харнесс `WalkDemo.tsx` удалён после интеграции — его роль забрал живой
 контент внутри единой панели.)*
@@ -610,3 +610,5 @@ docs/vibes.md §3.5.1) и эксперт-маршрут.
    (`feTurbulence + feDisplacementMap`): `rough.js` не добавлял, чтобы не
    трогать `package.json` вне зоны файлов чата. Если стиль зайдёт — добавить
    зависимость и заменить фильтр на rough-рисование.
+
+> Ревизия 2026-11-17 (волна human design): главный экран живёт на `/` (карта + панель), `/map` редиректит с сохранением query; лендинг — `/about`. Шторка: 45dvh (idle/params) → 60dvh (building/error) → 85dvh (ready), контент монтирован всегда. Шаринг быстрой прогулки — кнопка «Поделиться» (`?w=`, кодек v3, геометрия до 40 точек/лег). См. docs/ux-human-wave.md.
