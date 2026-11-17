@@ -43,7 +43,8 @@ export function CTASection() {
         </p>
 
         <div className="mt-10">
-          <Link href={`/map`}>
+          {/* CTA ведёт прямо на главный экран / (S5: без redirect через /map) */}
+          <Link href={`/`}>
             <Button
               size="lg"
               className="bg-white text-brand-700 hover:bg-brand-50 border-0 px-8 shadow-lg"

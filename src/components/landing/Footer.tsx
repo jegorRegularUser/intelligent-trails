@@ -47,7 +47,7 @@ export function Footer() {
             <h3 className="text-white font-bold mb-4">{t('navigation')}</h3>
             <ul className="space-y-2">
               <li>
-                <Link href={`/map`} className="hover:text-brand-400 transition-colors">
+                <Link href={`/`} className="hover:text-brand-400 transition-colors">
                   {t('map')}
                 </Link>
               </li>

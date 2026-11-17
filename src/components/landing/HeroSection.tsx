@@ -51,7 +51,9 @@ export function HeroSection() {
           </p>
 
           <div className="mt-10 flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
-            <Link href={`/map`} className="contents">
+            {/* Лендинг переехал на /about: HeroCTA ведёт прямо на главный экран /
+                — прямой переход без двойного redirect через /map (S5) */}
+            <Link href={`/`} className="contents">
               <Button variant="primary" size="lg" className="w-full sm:w-auto" rightIcon={<ArrowRight size={20} />}>
                 {t('cta')}
               </Button>

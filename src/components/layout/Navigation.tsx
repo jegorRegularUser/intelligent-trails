@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { useTranslations } from 'next-intl';
-import { Menu, X, Map, History, User, LogIn, ArrowRight } from 'lucide-react';
+import { Menu, X, Map, History, User, LogIn, ArrowRight, BookOpen } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useNavigation } from '@/contexts/NavigationContext';
 import { LanguageToggle } from './LanguageToggle';
@@ -34,10 +34,17 @@ export function Navigation({ isAuthenticated = false }: NavigationProps) {
 
             <div className="flex items-center gap-6">
               <Link
-                href={`/map`}
+                href={`/`}
                 className="text-slate-700 hover:text-brand-600 font-medium transition-colors"
               >
                 {t('map')}
+              </Link>
+
+              <Link
+                href={`/about`}
+                className="text-slate-700 hover:text-brand-600 font-medium transition-colors"
+              >
+                {t('about')}
               </Link>
 
               <LanguageToggle />
@@ -99,7 +106,7 @@ export function Navigation({ isAuthenticated = false }: NavigationProps) {
           {/* Навигационные ссылки */}
           <div className="flex-1 px-6 py-8 space-y-2 overflow-y-auto">
             <Link
-              href={`/map`}
+              href={`/`}
               onClick={toggleMobileMenu}
               className="flex items-center justify-between px-4 py-4 rounded-2xl hover:bg-slate-50 active:bg-slate-100 transition-colors group"
             >
@@ -108,6 +115,20 @@ export function Navigation({ isAuthenticated = false }: NavigationProps) {
                   <Map size={20} />
                 </div>
                 <span className="text-lg font-medium text-slate-900">{t('map')}</span>
+              </div>
+              <ArrowRight size={20} className="text-slate-400 group-hover:text-brand-500 transition-colors" />
+            </Link>
+
+            <Link
+              href={`/about`}
+              onClick={toggleMobileMenu}
+              className="flex items-center justify-between px-4 py-4 rounded-2xl hover:bg-slate-50 active:bg-slate-100 transition-colors group"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 bg-brand-100 rounded-xl flex items-center justify-center text-brand-600">
+                  <BookOpen size={20} />
+                </div>
+                <span className="text-lg font-medium text-slate-900">{t('about')}</span>
               </div>
               <ArrowRight size={20} className="text-slate-400 group-hover:text-brand-500 transition-colors" />
             </Link>
