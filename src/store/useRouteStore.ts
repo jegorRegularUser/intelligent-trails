@@ -64,9 +64,10 @@ interface RouteState {
 
   // Режим единой панели «План прогулки»: быстрый старт (вайб+время) или
   // эксперт-маршрут. Свитчер в шапке панели переключает контент,
-  // shell и компоненты — общие.
-  walkMode: 'quick' | 'sightseeing' | 'route';
-  setWalkMode: (mode: 'quick' | 'sightseeing' | 'route') => void;
+  // shell и компоненты — общие. Ревизия 2026-11-18: 'sightseeing' убран —
+  // вкладка «Новый город» удалена (PRODUCT.md, «Два сценария входа»).
+  walkMode: 'quick' | 'route';
+  setWalkMode: (mode: 'quick' | 'route') => void;
 
   // User location
   userLocation: Coordinates | null;

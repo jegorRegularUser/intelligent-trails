@@ -1,8 +1,10 @@
 // src/lib/walk/__tests__/streetLoopSnap.test.ts
-// Умная роза (docs/street-interest-wave.md S3): снап к attraction-точкам
-// внутри buildWaypoints, порог интереса, кап отклонения 30% радиуса, дедуп
-// MIN_ANGLE_GAP_DEG, стабильность между tune-шагами, ретрай на route-отказ,
-// флаг streetInterest вместо loop-only при ≥2 снапнутых секторах.
+// Умная роза (docs/street-interest-wave.md S3 + walk-engine.md §19): снап к
+// attraction-точкам внутри buildWaypoints, порог интереса, кап отклонения 30%
+// радиуса, дедуп MIN_ANGLE_GAP_DEG, стабильность между tune-шагами, ретрай на
+// route-отказ, флаг streetInterest при ≥2 снапнутых секторах. Маркировку
+// деградации ставят конвейеры (§19.5) — сам buildStreetLoop отдаёт чистый
+// street-план (kind 'street'), а при живых данных слабого снапа — без флага.
 // Углы розы фиксированы сидом (детерминизм §13): для seed 1, K=4 углы падают
 // в сектора 0/1/3/5 на компасных азимутах 11.9°/87.0°/168.5°/269.3°.
 
@@ -63,7 +65,7 @@ function hintsAtCorners(interest = 1): WalkStreetHints {
 }
 
 interface FakePortPlan {
-  /** Минуты по номеру вызова (по умолчанию 40 — в окне бюджета 60 [30..69]). */
+  /** Минуты по номеру вызова (по умолчанию 60 — в окне бюджета 60 [54..69]). */
   minutesByCall?: (callIndex: number) => number;
   /** Бросок вместо ответа: снапнутые точки «не маршрутизируются» (ретрай, B3). */
   failIf?: (waypoints: WalkLatLng[]) => boolean;
@@ -75,7 +77,7 @@ function makeRecordingPort(plan: FakePortPlan = {}): { port: WalkRoutingPort; ca
     async route({ waypoints }) {
       calls.push(waypoints.map((p) => [p[0], p[1]] as WalkLatLng));
       if (plan.failIf?.(waypoints)) throw new Error('NO_ROUTE у снапнутых точек');
-      const minutes = plan.minutesByCall ? plan.minutesByCall(calls.length) : 40;
+      const minutes = plan.minutesByCall ? plan.minutesByCall(calls.length) : 60;
       return {
         distanceMeters: minutes * 75,
         durationSeconds: minutes * 60,
@@ -219,7 +221,7 @@ describe('buildStreetLoop: снап, флаг и ретрай (S3)', () => {
     }
   });
 
-  it('интерес ниже порога → геометрическая роза, честный loop-only', async () => {
+  it('интерес ниже порога → геометрическая роза, чистый street-план без флага', async () => {
     const hints = hintsAtCorners(INTEREST_SNAP_THRESHOLD - 0.01);
     const { port, calls } = makeRecordingPort();
 
@@ -227,8 +229,12 @@ describe('buildStreetLoop: снап, флаг и ретрай (S3)', () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.plan.degraded).toEqual({ level: 'loop-only' });
+    // Маркировку деградации ставит конвейер (§19.5): сам buildStreetLoop
+    // отдаёт street-план без флага интереса и без метки деградации.
+    expect(result.plan.degraded).toBeUndefined();
     expect(result.plan.streetInterest).toBeUndefined();
+    expect(result.plan.kind).toBe('street');
+    expect(result.plan.streetSnappedSectors).toBe(0);
     for (const attraction of attractionPointsOf(hints)) {
       expect(calls[0].some((w) => samePoint(w, attraction))).toBe(false);
     }
@@ -236,14 +242,14 @@ describe('buildStreetLoop: снап, флаг и ретрай (S3)', () => {
 
   it('стабильность снапа между tune-шагами: короткая петля растёт ×1.3 — точки остаются', async () => {
     const hints = hintsAtCorners();
-    // Вызов 1 — недобор (20 < 30 мин) → радиус ×1.3; вызов 2 — в окне.
-    const { port, calls } = makeRecordingPort({ minutesByCall: (n) => (n === 1 ? 20 : 40) });
+    // Вызов 1 — недобор (20 < 54 мин, пол окна 0.9·B) → радиус ×1.3; вызов 2 — в окне.
+    const { port, calls } = makeRecordingPort({ minutesByCall: (n) => (n === 1 ? 20 : 60) });
 
     const result = await buildStreetLoop({ start: START, budgetMinutes: 60, ports: port, streetHints: hints });
 
     expect(result.ok).toBe(true);
     expect(calls).toHaveLength(2);
-    // Отклонение снапнутой точки от выросшего угла = 0.3·R угла ≤ капа 0.3·R
+    // Отклонение снапнутой точки от выросшего угла = 0.3·R угла ≤ капа 0.3·1.3·R
     // — снап переживает tune-шаг: та же attraction-точка в обоих вызовах.
     for (const attraction of attractionPointsOf(hints)) {
       expect(calls[0].some((w) => samePoint(w, attraction))).toBe(true);
@@ -251,7 +257,7 @@ describe('buildStreetLoop: снап, флаг и ретрай (S3)', () => {
     }
   });
 
-  it('ретрай на отказ route со снапнутыми точками: повтор варианта с геометрией, честный loop-only', async () => {
+  it('ретрай на отказ route со снапнутыми точками: повтор варианта с геометрией', async () => {
     const hints = hintsAtCorners();
     const attractions = attractionPointsOf(hints);
     const { port, calls } = makeRecordingPort({
@@ -264,8 +270,9 @@ describe('buildStreetLoop: снап, флаг и ретрай (S3)', () => {
     // честная деградация, не ошибка экрана (B3).
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.plan.degraded).toEqual({ level: 'loop-only' });
+    expect(result.plan.degraded).toBeUndefined();
     expect(result.plan.streetInterest).toBeUndefined();
+    expect(result.plan.streetSnappedSectors).toBe(0);
     expect(calls).toHaveLength(2); // первый вариант: снап-попытка + геометрический ретрай
     for (const attraction of attractions) {
       expect(calls[0].some((w) => samePoint(w, attraction))).toBe(true);
@@ -280,8 +287,9 @@ describe('buildStreetLoop: снап, флаг и ретрай (S3)', () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.plan.degraded).toEqual({ level: 'loop-only' });
+    expect(result.plan.degraded).toBeUndefined();
     expect(result.plan.streetInterest).toBeUndefined();
+    expect(result.plan.kind).toBe('street');
     expect(calls).toHaveLength(1);
   });
 });

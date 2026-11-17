@@ -131,17 +131,9 @@ export function RouteSidebarManager({ sketch = false }: { sketch?: boolean } = {
     return <RouteResultSidebar isNavigationOpen={isMobileMenuOpen} />;
   }
   if (walkMode !== "route") {
-    // quick и sightseeing («Новый город») живут на одном контенте,
-    // различаются архетипом и отсутствием выбора вайба. key — ремоунт при
-    // смене сценария: план, собранный в одном режиме, не переезжает в другой.
-    return (
-      <QuickWalkPanel
-        key={walkMode}
-        isNavigationOpen={isMobileMenuOpen}
-        sketch={sketch}
-        mode={walkMode === "sightseeing" ? "sightseeing" : "quick"}
-      />
-    );
+    // Ревизия 2026-11-18: режим один — «Быстрая прогулка» (вкладка «Новый
+    // город» убрана, чужой район решается полем адреса старта).
+    return <QuickWalkPanel isNavigationOpen={isMobileMenuOpen} sketch={sketch} />;
   }
   return <RouteBuilderSidebar isNavigationOpen={isMobileMenuOpen} />;
 }

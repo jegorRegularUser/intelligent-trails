@@ -2,10 +2,13 @@
 
 // Свитчер режимов единой панели «План прогулки»: быстрый старт ↔ эксперт-маршрут.
 // Один shell, общие компоненты — переключается только контент (useRouteStore.walkMode).
+// Ревизия 2026-11-18: вкладка «Новый город» убрана — её маршрут не отличался от
+// быстрой прогулки; чужой район решается полем адреса старта (PRODUCT.md,
+// «Два сценария входа»).
 // Рядом — ссылка «Как это работает» (M2): главный экран отвечает на «что делать»,
 // механику объясняет /about, который открылся после переезда лендинга.
 import { useTranslations } from "next-intl";
-import { BookOpen, Footprints, Landmark, Navigation } from "lucide-react";
+import { BookOpen, Footprints, Navigation } from "lucide-react";
 import Link from "next/link";
 import { useRouteStore } from "@/store/useRouteStore";
 import { cn } from "@/utils/cn";
@@ -16,7 +19,6 @@ export function WalkModeSwitcher({ className }: { className?: string }) {
 
   const tabs = [
     { id: "quick" as const, label: t("modeQuick"), icon: Footprints },
-    { id: "sightseeing" as const, label: t("modeSightseeing"), icon: Landmark },
     { id: "route" as const, label: t("modeRoute"), icon: Navigation },
   ];
 
@@ -25,7 +27,7 @@ export function WalkModeSwitcher({ className }: { className?: string }) {
       <div
         role="tablist"
         aria-label={t("screenTitle")}
-        className="grid grid-cols-3 gap-1 rounded-2xl bg-slate-100 p-1 flex-1"
+        className="grid grid-cols-2 gap-1 rounded-2xl bg-slate-100 p-1 flex-1"
       >
         {tabs.map(({ id, label, icon: Icon }) => {
           const active = walkMode === id;

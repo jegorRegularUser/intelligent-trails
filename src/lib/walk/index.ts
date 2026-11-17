@@ -3,10 +3,12 @@
 // Никакого UI и сети: createWalkPlan(input, ports) → план или честный отказ.
 
 export { createWalkPlan, isUnderfloor, minimalLoopZoneMeters } from './createWalkPlan';
-export { replaceStopInPlan } from './replaceStop';
+export { replaceStopInPlan, replaceStreetGarnish } from './replaceStop';
 export { buildWalkWithFallback } from './fallback';
 export { buildLoopThroughCandidates } from './loopThrough';
 export { buildStreetLoop, loopRadiusMeters } from './streetLoop';
+export { buildStreetFirstPlans, STREET_FIRST_ROUTE_CAP, STREET_FIRST_MAX_PLANS } from './streetFirst';
+export { selectGarnishCandidates, attachGarnish, reserveMinutesForGarnish, garnishScore, GARNISH_CORRIDOR_M, GARNISH_MAX_STOPS } from './garnish';
 export { evaluateGates } from './gates';
 export { selectCandidates } from './selection';
 export { solveWalkOrder, nearestNeighborOrder } from './ordering';
@@ -26,8 +28,11 @@ export type {
   WalkDegradedLevel,
 } from './types';
 export type { ReplaceStopInput, ReplaceStopResult, ReplaceablePlan } from './replaceStop';
+export type { ReplaceStreetGarnishInput, ReplaceStreetGarnishResult } from './replaceStop';
 export type { LoopThroughInput, LoopThroughResult } from './loopThrough';
 export type { StreetLoopInput, StreetLoopResult } from './streetLoop';
+export type { StreetFirstInput, StreetFirstResult } from './streetFirst';
+export type { GarnishCandidate, AttachGarnishResult } from './garnish';
 export type { WalkWithFallbackResult } from './fallback';
 export type { WalkRoutingPort, WalkRouteSegment, WalkMatrixCell } from './ports';
 

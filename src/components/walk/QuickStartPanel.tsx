@@ -72,11 +72,6 @@ export interface QuickStartPanelProps {
   disabled?: boolean;
   /** Прогноз под CTA — считается по бюджету (estimateBuildRange) */
   forecast?: { from: number; to: number } | null;
-  /** Режим без вайбов (обзорная прогулка): секция «Какой вайб?» скрыта */
-  hideVibes?: boolean;
-  /** Заголовок/подзаголовок панели — обзорный режим говорит своим текстом */
-  headerKey?: string;
-  subtitleKey?: string;
   className?: string;
 }
 
@@ -110,9 +105,6 @@ export function QuickStartPanel({
   isBuilding = false,
   disabled = false,
   forecast,
-  hideVibes = false,
-  headerKey = "screenTitle",
-  subtitleKey = "screenSubtitle",
   className,
 }: QuickStartPanelProps) {
   const t = useTranslations("WalkUI");
@@ -124,8 +116,8 @@ export function QuickStartPanel({
   return (
     <div className={cn("flex flex-col gap-5", className)}>
       <header>
-        <h2 className="text-xl font-bold text-slate-800">{t(headerKey)}</h2>
-        <p className="mt-0.5 text-sm text-slate-500">{t(subtitleKey)}</p>
+        <h2 className="text-xl font-bold text-slate-800">{t("screenTitle")}</h2>
+        <p className="mt-0.5 text-sm text-slate-500">{t("screenSubtitle")}</p>
       </header>
 
       {/* Вопрос 1: время (бюджет генератора) */}
@@ -194,9 +186,7 @@ export function QuickStartPanel({
         )}
       </section>
 
-      {/* Вопрос 2: вайб (окраска, не обязательна); в обзорном режиме его нет —
-          юзер выбрал город, а не настроение (PRODUCT.md, сценарий №2) */}
-      {!hideVibes && (
+      {/* Вопрос 2: вайб (окраска, не обязательна) */}
       <section>
         <p id={vibeLegendId} className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">
           {t("vibeLegend")}
@@ -221,7 +211,6 @@ export function QuickStartPanel({
           })}
         </div>
       </section>
-      )}
 
       {/* CTA: одна первичная кнопка, подсказка объясняет, чего не хватает */}
       <div className="flex flex-col gap-2">

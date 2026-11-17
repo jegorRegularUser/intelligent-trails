@@ -7,7 +7,7 @@
 // (src/lib/walk/__tests__/sectorConvention.test.ts): азимут от севера по
 // часовой через azimuthRad, сектор = floor(азимут/45°).
 
-import type { Archetype } from './archetypes';
+import type { Archetype, ArchetypeId } from './archetypes';
 import type { LatLng, StreetFeature } from '@/lib/geo/types';
 import { SECTOR_COUNT, STREET_FEATURE_KIND_WEIGHTS } from '@/lib/walk/types';
 import {
@@ -122,4 +122,44 @@ export function scoreSectors(
   }
 
   return { sectors, hasData: true };
+}
+
+// --- Заметка «почему петля идёт тут» (rev 2026-11-18 «улица первична») ------
+
+/**
+ * Архетипная формулировка снапа (docs/vibes.md §3.7, walk-engine.md §19.7):
+ * множители streetInterest определили, куда роза притянулась, — заметка
+ * честно описывает это в карточке. Ставится только при снапе ≥ 2 секторов;
+ * общая формулировка — дефолт.
+ */
+const STREET_LOOP_NOTES: Record<ArchetypeId, { ru: string; en: string }> = {
+  green: {
+    ru: 'Петля идёт через зелёные кварталы и набережные — так её повернули парки и вода района',
+    en: 'The loop runs through green blocks and embankments — the parks and water pulled it there',
+  },
+  coffee: {
+    ru: 'Петля ведёт через пешеходные улочки и живые кварталы — так её повернул характер района',
+    en: 'The loop follows pedestrian streets and lively blocks — the neighborhood pulled it there',
+  },
+  evening: {
+    ru: 'Петля идёт по оживлённым пешеходным улицам — так её повернул вечерний центр',
+    en: 'The loop runs along lively pedestrian streets — the evening downtown pulled it there',
+  },
+  rainy: {
+    ru: 'Петля по характерным улицам района',
+    en: "A loop through the neighborhood's character streets",
+  },
+  surprise: {
+    ru: 'Петля по характерным улицам района',
+    en: "A loop through the neighborhood's character streets",
+  },
+  sightseeing: {
+    ru: 'Петля ведёт к видовым точкам и пешеходным улицам — так её повернул характер района',
+    en: 'The loop heads for viewpoints and pedestrian streets — the area pulled it there',
+  },
+};
+
+/** Заметка «почему петля идёт тут» по архетипу сборки (§19.7). */
+export function streetLoopNote(archetypeId: ArchetypeId): { ru: string; en: string } {
+  return STREET_LOOP_NOTES[archetypeId];
 }

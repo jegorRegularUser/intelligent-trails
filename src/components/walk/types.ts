@@ -68,8 +68,11 @@ export interface WalkPlanTotals {
   totalMin: number;
 }
 
-/** Уровень деградации: план построен лестницей fallback, а не строгим движком. */
-export type WalkDegradedLevel = "partial" | "loop-only";
+/**
+ * Уровень деградации: план построен лестницей fallback или первичным
+ * уличным конвейером без данных о среде (walk-engine.md §19.5).
+ */
+export type WalkDegradedLevel = "partial" | "loop-only" | "street-no-data";
 
 export interface WalkPlan {
   id: string;

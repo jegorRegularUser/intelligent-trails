@@ -134,8 +134,10 @@ describe('uiAdapter: деградационные планы', () => {
     const en = walkUi('en');
     expect(ru.degradedPartial).toBe(DEGRADED_NOTES.partial.ru);
     expect(ru.degradedLoopOnly).toBe(DEGRADED_NOTES['loop-only'].ru);
+    expect(ru.degradedStreetNoData).toBe(DEGRADED_NOTES['street-no-data'].ru);
     expect(en.degradedPartial).toBe(DEGRADED_NOTES.partial.en);
     expect(en.degradedLoopOnly).toBe(DEGRADED_NOTES['loop-only'].en);
+    expect(en.degradedStreetNoData).toBe(DEGRADED_NOTES['street-no-data'].en);
   });
 
   it('streetInterest-план несёт флаг и заметку вместо бейджа деградации (S3)', () => {
@@ -213,8 +215,10 @@ describe('uiAdapter: gatesSummary (честность в UI, R5)', () => {
     const en = walkUi('en');
     expect(ru.gateNoteUnderfloor).toBe(GATE_NOTES.budget?.ru);
     expect(ru.gateNoteWalkShare).toBe(GATE_NOTES.walk_share?.ru);
+    expect(ru.gateNoteStreetInterest).toBe(GATE_NOTES.street_interest?.ru);
     expect(en.gateNoteUnderfloor).toBe(GATE_NOTES.budget?.en);
     expect(en.gateNoteWalkShare).toBe(GATE_NOTES.walk_share?.en);
+    expect(en.gateNoteStreetInterest).toBe(GATE_NOTES.street_interest?.en);
   });
 });
 

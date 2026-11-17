@@ -66,10 +66,18 @@ describe('снапшот деградации: hasData=false идентичен 
     expectOk(without);
     expectOk(withEmpty);
     expectOk(withZero);
-    expect(withEmpty.plan.degraded).toEqual({ level: 'loop-only' });
+    // Маркировку деградации ставят конвейеры (walk-engine.md §19.5): сам
+    // buildStreetLoop отдаёт чистый street-план, метка loop-only — за fallback.
+    expect(withEmpty.plan.degraded).toBeUndefined();
+    expect(withEmpty.plan.kind).toBe('street');
     expect(withEmpty.plan.streetInterest).toBeUndefined();
+    // hasData=false → гейта интереса нет вовсе: план бит-в-бит с прежним.
     expect(snapshot(withEmpty.plan)).toBe(snapshot(without.plan));
-    expect(snapshot(withZero.plan)).toBe(snapshot(without.plan));
+    // hasData=true с нулевыми интересами — данные «есть», но петля мимо
+    // характера: геометрия та же, а гейт street_interest честно провален (§19.4).
+    expect(snapshot(withZero.plan.legs)).toBe(snapshot(without.plan.legs));
+    expect(withZero.plan.gates.find((g) => g.gate === 'street_interest')?.pass).toBe(false);
+    expect(without.plan.gates.find((g) => g.gate === 'street_interest')).toBeUndefined();
   });
 
   it('лестница fallback: strict-отказ → L3 план с undefined-полями = план без полей', async () => {

@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
-import { CloudRain, Crosshair, MapPin, Save, Share2, ThermometerSun, X } from "lucide-react";
+import { CloudRain, Crosshair, MapPin, Save, Share2, ThermometerSun } from "lucide-react";
 import {
   DEFAULT_CUSTOM_MINUTES,
   SURPRISE_VIBE,
@@ -87,14 +87,12 @@ function pinsFromPlan(plan: WalkPlan, fallbackStart: [number, number]) {
 }
 
 export interface QuickWalkContentProps {
-  mode?: "quick" | "sightseeing";
   /** Машина фаз живёт в QuickWalkPanel (M3): shell знает высоту шторки. */
   machine: WalkMachineState;
   dispatch: (event: WalkEvent) => void;
 }
 
 export function QuickWalkContent({
-  mode = "quick",
   machine,
   dispatch,
 }: QuickWalkContentProps) {
@@ -124,9 +122,6 @@ export function QuickWalkContent({
   const focusAddressInput = useCallback(() => {
     addressInputRef.current?.querySelector("input")?.focus();
   }, []);
-
-  /** M6 «Новый город»: пикер города через suggest — город задаёт старт-центр. */
-  const [cityStart, setCityStart] = useState<{ coords: [number, number]; name: string } | null>(null);
 
   const [isSaving, setIsSaving] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -213,24 +208,21 @@ export function QuickWalkContent({
   );
 
   const handleStart = useCallback(() => {
-    // Обзорный режим (вход №2): архетип фиксирован, юзер выбирает город и время.
     // Вайб необязателен (ux-main-screen §6.2): CTA активна от одного времени,
     // поэтому пустой вайб — это «Удиви меня» (микс без ядра), а не молчаливый но-оп.
-    const vibeValue: QuickVibe = mode === "sightseeing" ? "sightseeing" : (vibe ?? SURPRISE_VIBE);
+    const vibeValue: QuickVibe = vibe ?? SURPRISE_VIBE;
     if (selectedMinutes == null) return;
     const minutes = isCustomActive
       ? normalizeCustomMinutes(customMinutes ?? DEFAULT_CUSTOM_MINUTES)
       : selectedMinutes;
     excludedRef.current = new Set();
-    const manualStart = mode === "sightseeing" ? cityStart?.coords : addressStart;
     // lastInput (включая фактический старт) запишет runBuild при успехе
-    void runBuild(minutes, vibeValue, manualStart ? { manualStart } : undefined);
-  }, [addressStart, cityStart, customMinutes, isCustomActive, mode, runBuild, selectedMinutes, vibe]);
+    void runBuild(minutes, vibeValue, addressStart ? { manualStart: addressStart } : undefined);
+  }, [addressStart, customMinutes, isCustomActive, runBuild, selectedMinutes, vibe]);
 
   const handleRetry = useCallback(() => {
     if (!lastInput) return;
-    const manualStart = mode === "sightseeing" ? cityStart?.coords : addressStart;
-    const hasStart = manualStart != null || (lastInput.start[0] !== 0 || lastInput.start[1] !== 0);
+    const hasStart = addressStart != null || (lastInput.start[0] !== 0 || lastInput.start[1] !== 0);
     if (!hasStart) {
       // Старт ещё не решён (отказ геолокации без адреса) — открываем фолбэк
       setNeedsAddress(true);
@@ -238,8 +230,8 @@ export function QuickWalkContent({
       return;
     }
     dispatch({ type: "RETRY" });
-    void runBuild(lastInput.minutes, lastInput.vibe, manualStart ? { manualStart } : undefined);
-  }, [addressStart, cityStart, dispatch, focusAddressInput, lastInput, mode, runBuild]);
+    void runBuild(lastInput.minutes, lastInput.vibe, addressStart ? { manualStart: addressStart } : undefined);
+  }, [addressStart, dispatch, focusAddressInput, lastInput, runBuild]);
 
   // --- Гидрация ?w= (M4/B4): чужая прогулка открывается без сети. ---
   const searchParams = useSearchParams();
@@ -399,6 +391,12 @@ export function QuickWalkContent({
             ...(plan.gatesPassedCount !== undefined
               ? { currentGatesPassed: plan.gatesPassedCount }
               : {}),
+            // Уличный план (§19.6): замена гарниша без пересборки петли; факт
+            // снапа (гейт street_interest) переносится в заменённый план.
+            ...(plan.kind === "street" ? { planKind: "street" as const } : {}),
+            ...(plan.gatesSummary?.some((g) => g.name === "street_interest" && g.pass)
+              ? { streetInterestPass: true }
+              : {}),
           });
           if (result.ok) {
             const next = result.plan;
@@ -549,65 +547,36 @@ export function QuickWalkContent({
             isBuilding={phase === "building"}
             disabled={phase === "offline"}
             forecast={forecast}
-            hideVibes={mode === "sightseeing"}
-            headerKey={mode === "sightseeing" ? "sightseeingTitle" : "screenTitle"}
-            subtitleKey={mode === "sightseeing" ? "sightseeingSubtitle" : "screenSubtitle"}
           />
 
-          {/* M6 «Новый город»: пикер города через suggest — город задаёт
-              старт-центр обзорной петли. */}
-          {mode === "sightseeing" ? (
-            <div className="mt-4" ref={addressInputRef}>
-              <AddressInput
-                placeholder={t("cityInputLabel")}
-                onSelect={(coords, text) => setCityStart({ coords, name: text })}
-              />
-              {cityStart ? (
-                <p className="mt-2 flex items-center gap-2 text-xs font-semibold text-brand-600">
-                  <MapPin size={12} />
-                  <span className="min-w-0 flex-1 truncate">{t("citySelected", { city: cityStart.name })}</span>
-                  <button
-                    type="button"
-                    onClick={() => setCityStart(null)}
-                    className="inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
-                    aria-label={t("cityClear")}
-                  >
-                    <X size={13} />
-                  </button>
-                </p>
-              ) : (
-                <p className="mt-2 text-xs text-slate-500">{t("addressHint")}</p>
-              )}
-            </div>
-          ) : (
-            /* Тот же AddressInput, что и в эксперт-маршруте: необязательный старт.
-                Геолокация по умолчанию; поле — чтобы стартовать не отсюда */
-            <div className="mt-4" ref={addressInputRef}>
-              <AddressInput
-                placeholder={needsAddress ? t("startFromAddress") : t("startFromAddressOptional")}
-                onSelect={(coords) => {
-                  setAddressStart(coords);
-                  setNeedsAddress(false);
-                  setGeoDenied(false);
-                }}
-              />
-              {addressStart ? (
-                <p className="mt-2 flex items-center gap-1 text-xs font-semibold text-brand-600">
-                  <MapPin size={12} />
-                  {addressStart[0].toFixed(4)}, {addressStart[1].toFixed(4)}
-                </p>
-              ) : geoDenied ? (
-                <p className="mt-2 text-xs text-amber-700">{t("geoDenied")}</p>
-              ) : needsAddress ? (
-                <p className="mt-2 text-xs text-slate-500">{t("addressHint")}</p>
-              ) : null}
-            </div>
-          )}
+          {/* Тот же AddressInput, что и в эксперт-маршруте: необязательный старт.
+              Геолокация по умолчанию; поле — чтобы стартовать не отсюда
+              (чужой город/район решается им же — PRODUCT.md, «Два сценария входа»). */}
+          <div className="mt-4" ref={addressInputRef}>
+            <AddressInput
+              placeholder={needsAddress ? t("startFromAddress") : t("startFromAddressOptional")}
+              onSelect={(coords) => {
+                setAddressStart(coords);
+                setNeedsAddress(false);
+                setGeoDenied(false);
+              }}
+            />
+            {addressStart ? (
+              <p className="mt-2 flex items-center gap-1 text-xs font-semibold text-brand-600">
+                <MapPin size={12} />
+                {addressStart[0].toFixed(4)}, {addressStart[1].toFixed(4)}
+              </p>
+            ) : geoDenied ? (
+              <p className="mt-2 text-xs text-amber-700">{t("geoDenied")}</p>
+            ) : needsAddress ? (
+              <p className="mt-2 text-xs text-slate-500">{t("addressHint")}</p>
+            ) : null}
+          </div>
         </>
       ) : null}
 
       {/* После неудачной сборки адрес тоже нужен — показываем в фазе error */}
-      {needsAddress && cardPhase === "error" && mode !== "sightseeing" && (
+      {needsAddress && cardPhase === "error" && (
         <div className="mt-4" ref={addressInputRef}>
           <AddressInput
             placeholder={t("startFromAddress")}

@@ -19,14 +19,12 @@ import { walkMachine, INITIAL_WALK_STATE } from "@/components/walk/logic";
 export function QuickWalkPanel({
   isNavigationOpen = false,
   sketch = false,
-  mode = "quick",
 }: {
   isNavigationOpen?: boolean;
   sketch?: boolean;
-  mode?: "quick" | "sightseeing";
 }) {
   const [machine, dispatch] = useReducer(walkMachine, INITIAL_WALK_STATE);
-  const body = <QuickWalkContent mode={mode} machine={machine} dispatch={dispatch} />;
+  const body = <QuickWalkContent machine={machine} dispatch={dispatch} />;
   // offline не входит в таблицу высот: шторка живёт высотой resume-фазы
   // (замороженный контент остаётся читаемым — docs/ux-main-screen.md §4.6).
   const panelPhase = machine.phase === "offline" ? (machine.resumePhase ?? "idle") : machine.phase;

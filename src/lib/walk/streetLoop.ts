@@ -18,7 +18,16 @@
 // перестраивает вейпоинты через него же, иначе снап стёрся бы первым же
 // ×1.3/×0.85). Отказ route со снапнутыми точками → один ретрай варианта
 // с геометрическими вейпоинтами. План с ≥2 снапнутыми секторами несёт
-// streetInterest: true вместо метки loop-only.
+// streetInterest: true и streetSnappedSectors.
+//
+// Ревизия 2026-11-18 «улица первична» (docs/walk-engine.md §19): модуль
+// больше не только деградация L3 — это построитель первичной петли.
+// maxCleanPlans собирает до N чистых вариантов (альтернативы слайдера),
+// routeCalls — общий бюджет вызовов порта на всю сборку street-first.
+// Тюнинг-окно длительности выровнено с коридором бюджета (пол 0.9·B):
+// улицы не кончаются — петля сама заполняет бюджет. Маркировку деградации
+// (loop-only / street-no-data) ставят вызывающие стороны: у конвейеров
+// она разная (§19.5).
 
 import type { WalkFailure, WalkLatLng, WalkLeg, WalkPlan, WalkStreetFeature, WalkStreetHints } from './types';
 import { DEFAULT_WALKING_SPEED_KMH, SECTOR_COUNT } from './types';
@@ -43,8 +52,12 @@ const RADIUS_JITTER = 0.1;
 const MIN_ANGLE_GAP_DEG = 65;
 /** Желаемая длина петли — доля бюджета, умноженная на скорость (метры). */
 const TARGET_LENGTH_SHARE = 0.8;
-/** Окно принятия по факту роутинга: доля бюджета времени. */
-const MIN_DURATION_SHARE = 0.5;
+/**
+ * Окно принятия по факту роутинга: доля бюджета времени. Пол 0.9 (§19.2):
+ * петля — содержание прогулки и заполняет бюджет сама; петля короче пола
+ * коридора — недобор, который тюнинг обязан попробовать закрыть ростом радиуса.
+ */
+const MIN_DURATION_SHARE = 0.9;
 const MAX_DURATION_SHARE = 1.15;
 /** Коррекция радиуса: рост короткой петли / сжатие длинной, лимиты на сторону. */
 const GROW_FACTOR = 1.3;
@@ -88,6 +101,19 @@ export interface StreetLoopInput {
   streetHints?: WalkStreetHints;
   /** Фичи улиц (S4): микро-стопы «по пути» на ногах петли. */
   streetFeatures?: WalkStreetFeature[];
+  /**
+   * Сколько ЧИСТЫХ вариантов собрать до остановки (§19.2): 1 (по умолчанию,
+   * лестница деградации — прежнее поведение «первый чистый закрывает задачу»)
+   * или 3 (street-first — альтернативы слайдера). Порядок сбора = приоритет
+   * перебора вариантов (детерминизм §13).
+   */
+  maxCleanPlans?: number;
+  /**
+   * Общий бюджет route-вызовов порта, разделяемый с вызывающим конвейером
+   * (§19.2: 28 на всю сборку street-first). Не передан — собственный счётчик
+   * с капом MAX_ROUTE_CALLS.
+   */
+  routeCalls?: { count: number; max: number };
   ports: WalkRoutingPort;
 }
 
@@ -167,7 +193,8 @@ const DEG = Math.PI / 180;
 const EARTH_M_PER_DEG = 6371008.8 * (Math.PI / 180);
 
 export type StreetLoopResult =
-  | { ok: true; plan: WalkPlan }
+  | { ok: true; plan: WalkPlan; /** Дополнительные чистые варианты (§19.2), порядок — приоритет перебора. */
+      extraPlans?: WalkPlan[] }
   | { ok: false; failure: WalkFailure };
 
 /**
@@ -251,14 +278,19 @@ export async function buildStreetLoop(input: StreetLoopInput): Promise<StreetLoo
     shapeJitter.set(corners, { angles: buildShapeAngles(corners, angleJitter), radiusJitter });
   }
 
-  let routeCalls = 0;
+  // Бюджет route-вызовов: общий с конвейером (§19.2) или собственный.
+  const calls = input.routeCalls ?? { count: 0 };
+  const maxCalls = input.routeCalls?.max ?? MAX_ROUTE_CALLS;
+  const maxCleanPlans = Math.max(1, input.maxCleanPlans ?? 1);
   let lastError = 'роутер не дал ни одного маршрута';
   // Варианты, у которых петля построилась, но гейт улиц не прошёл: из них
   // берём минимальное перекрытие, если ни один вариант не прошёл чисто.
   const survivors: { plan: WalkPlan; overlap: number }[] = [];
+  // Чистые варианты по порядку перебора (§19.2): альтернативы слайдера.
+  const cleanPlans: WalkPlan[] = [];
 
   for (const variant of VARIANTS) {
-    if (routeCalls >= MAX_ROUTE_CALLS) break;
+    if (calls.count >= maxCalls) break;
     const shape = shapeJitter.get(variant.corners)!;
     const baseAngle = variant.rotationDeg * DEG;
     let radius = loopRadiusMeters(desiredLength, variant.corners);
@@ -269,7 +301,7 @@ export async function buildStreetLoop(input: StreetLoopInput): Promise<StreetLoo
       buildWaypoints(input.start, r, shape.angles, baseAngle, shape.radiusJitter, useSnap ? input.streetHints : undefined);
 
     let built = buildFor(radius);
-    routeCalls += 1;
+    calls.count += 1;
     let segment: WalkRouteSegment;
     try {
       segment = await input.ports.route({ waypoints: [input.start, ...built.points, input.start] });
@@ -283,11 +315,11 @@ export async function buildStreetLoop(input: StreetLoopInput): Promise<StreetLoo
       // отказали — честная деградация ниже (NO_ROUTE), не ошибка экрана.
       useSnap = false;
       built = buildFor(radius);
-      if (routeCalls >= MAX_ROUTE_CALLS) {
+      if (calls.count >= maxCalls) {
         lastError = errMessage(e);
         continue;
       }
-      routeCalls += 1;
+      calls.count += 1;
       try {
         segment = await input.ports.route({ waypoints: [input.start, ...built.points, input.start] });
       } catch (retryError) {
@@ -318,9 +350,9 @@ export async function buildStreetLoop(input: StreetLoopInput): Promise<StreetLoo
       } else {
         break; // обе стороны исчерпаны — берём как есть
       }
-      if (routeCalls >= MAX_ROUTE_CALLS) break;
+      if (calls.count >= maxCalls) break;
       const rebuilt = buildFor(radius);
-      routeCalls += 1;
+      calls.count += 1;
       try {
         segment = await input.ports.route({ waypoints: [input.start, ...rebuilt.points, input.start] });
         built = rebuilt;
@@ -329,12 +361,12 @@ export async function buildStreetLoop(input: StreetLoopInput): Promise<StreetLoo
           // Tune-отказ со снапнутыми точками — тот же ретрай на геометрию (B3).
           useSnap = false;
           const geometric = buildFor(radius);
-          if (routeCalls >= MAX_ROUTE_CALLS) {
+          if (calls.count >= maxCalls) {
             lastError = errMessage(e);
             broken = true;
             break;
           }
-          routeCalls += 1;
+          calls.count += 1;
           try {
             segment = await input.ports.route({ waypoints: [input.start, ...geometric.points, input.start] });
             built = geometric;
@@ -364,17 +396,33 @@ export async function buildStreetLoop(input: StreetLoopInput): Promise<StreetLoo
       budget,
       built.snappedIndices.length,
       input.streetFeatures,
+      input.streetHints?.hasData === true,
     );
     const overlap = maxStreetOverlap(plan.legs.map((leg) => leg.geometry));
     if (overlap <= SAME_STREET_OVERLAP_THRESHOLD) {
-      // Первый вариант с чистой петлёй закрывает задачу — порядок вариантов
-      // и есть приоритет (детерминизм §13).
-      return { ok: true, plan };
+      // Чистый вариант: при maxCleanPlans=1 первый же закрывает задачу —
+      // прежнее поведение лестницы; при большем — собираем до лимита,
+      // порядок вариантов и есть приоритет (детерминизм §13).
+      if (cleanPlans.some((collected) => ringSignature(collected) === ringSignature(plan))) {
+        continue; // дубликат формы (симметричная сетка) — не клон в слайдере
+      }
+      cleanPlans.push(plan);
+      if (cleanPlans.length >= maxCleanPlans) {
+        const [plan, ...rest] = cleanPlans;
+        return rest.length > 0 ? { ok: true, plan, extraPlans: rest } : { ok: true, plan };
+      }
+      continue;
     }
     survivors.push({ plan, overlap });
     lastError = `все варианты розы дают перекрытие улиц (лучшее ~${Math.round(
       Math.min(...survivors.map((s) => s.overlap)) * 100,
     )}%)`;
+  }
+
+  // Собранные чистые варианты (перебор кончился или кап вызовов) — отдаём.
+  if (cleanPlans.length > 0) {
+    const [plan, ...rest] = cleanPlans;
+    return rest.length > 0 ? { ok: true, plan, extraPlans: rest } : { ok: true, plan };
   }
 
   // Ни один вариант не прошёл гейт улиц — отдаём минимальное перекрытие:
@@ -393,14 +441,20 @@ export async function buildStreetLoop(input: StreetLoopInput): Promise<StreetLoo
   };
 }
 
+/** Подпись кольца ног: дедуп клонов формы при сборе вариантов (§19.2). */
+function ringSignature(plan: WalkPlan): string {
+  return plan.legs.map((leg) => `${leg.from[0]},${leg.from[1]}>${leg.to[0]},${leg.to[1]}`).join('|');
+}
+
 // --- Сборка плана и утилиты ---
 
 /**
- * План без якорей: ноги разрезаны по вейпоинтам ради консистентного рендера.
- * snappedCount ≥ 2 (S3) — петля осмысленно притянута к среде: план помечается
- * streetInterest вместо метки loop-only (закрытый union уровней не расширяется);
- * заметку для карточки берёт uiAdapter. Один снап или ни одного — деградация
- * как раньше: геометрическая роза без сигнала среды.
+ * План уличной петли (§19.5): ноги разрезаны по вейпоинтам ради консистентного
+ * рендера; kind 'street' и факт снапа (streetSnappedSectors, streetInterest
+ * при ≥ 2) ставятся здесь — маркировку деградации (loop-only у дождя,
+ * street-no-data без данных) ставит вызывающий конвейер, у них она разная.
+ * Гейты — уличный набор §19.4: без anchors/long_legs, со street_interest
+ * при живых данных среды.
  */
 function assemblePlan(
   start: WalkLatLng,
@@ -409,6 +463,7 @@ function assemblePlan(
   budgetMinutes: number,
   snappedCount: number,
   streetFeatures?: WalkStreetFeature[],
+  streetHasData = false,
 ): WalkPlan {
   const path: WalkLatLng[] = [start, ...waypoints, start];
   const segments = splitPolylineByWaypoints(segment.geometry ?? [], waypoints);
@@ -431,8 +486,8 @@ function assemblePlan(
   });
 
   const totalWalkMinutes = legs.reduce((sum, leg) => sum + leg.durationMinutes, 0);
-  // Гейты считаются честно против реального бюджета: при пустых якорях
-  // anchors закономерно падает, бюджет — если коррекции радиуса исчерпались.
+  // Гейты — уличный набор (§19.4): бюджет (при коррекциях радиуса,
+  // исчерпавших лимиты, честно падает), ходьба, улицы, интерес среды.
   const gates = evaluateGates({
     budgetMinutes,
     totalMinutes: totalWalkMinutes,
@@ -440,6 +495,9 @@ function assemblePlan(
     legDurations: legs.map((leg) => leg.durationMinutes),
     legGeometries: legs.map((leg) => leg.geometry),
     isLoop: true,
+    planType: 'street',
+    streetSnappedSectors: snappedCount,
+    streetHasData,
   });
 
   return {
@@ -451,10 +509,11 @@ function assemblePlan(
     score: 0,
     gates,
     allGatesPass: gates.every((g) => g.pass),
-    // ≥2 снапнутых сектора — петля осмысленно притянута к среде (S3), это не
-    // «чистая геометрия без сигнала»: другая формулировка карточки, не новый
-    // уровень деградации.
-    ...(snappedCount >= 2 ? { streetInterest: true as const } : { degraded: { level: 'loop-only' as const } }),
+    kind: 'street',
+    streetSnappedSectors: snappedCount,
+    // ≥2 снапнутых сектора — петля осмысленно притянута к среде (S3): другая
+    // формулировка карточки, не уровень деградации.
+    ...(snappedCount >= 2 ? { streetInterest: true as const } : {}),
   };
 }
 

@@ -1,7 +1,9 @@
 // src/lib/walk/gates.ts
-// Гейты «Метрики хорошей прогулки» (PRODUCT.md), docs/walk-engine.md §8:
-// бюджет ±10%; ≥2 якоря с непустой причиной; нет ноги > 25 мин;
-// петля не возвращается по той же улице; петля: ходьба ≥ 35% бюджета.
+// Гейты «Метрики хорошей прогулки» (PRODUCT.md), docs/walk-engine.md §8 и §19.4:
+// якорь-драйвен план — бюджет ±10%; ≥2 якоря с непустой причиной; нет ноги
+// > 25 мин; петля не возвращается по той же улице; ходьба ≥ 35% бюджета.
+// Уличный план (planType 'street', ревизия 2026-11-18) — свой набор: без
+// anchors и long_legs (содержание идёт под ногами), со street_interest.
 
 import type { GateReport, WalkGateName, WalkLatLng, WalkStop } from './types';
 import { BUDGET_TOLERANCE, MAX_LEG_MINUTES, MIN_WALK_SHARE } from './types';
@@ -11,6 +13,8 @@ import { fractionWithinCorridor, polylineLengthMeters } from './internal/geo';
 export const SAME_STREET_CORRIDOR_M = 30;
 /** «Большая часть ноги переиспользована»; перекрёстки на светофорах не наказываются. */
 export const SAME_STREET_OVERLAP_THRESHOLD = 0.6;
+/** Уличный план: снап-секторов столько, сколько нужно гейту интереса (§19.4). */
+export const STREET_INTEREST_MIN_SNAPPED = 2;
 
 export interface GateFacts {
   budgetMinutes: number;
@@ -19,16 +23,46 @@ export interface GateFacts {
   legDurations: number[];
   legGeometries: WalkLatLng[][];
   isLoop: boolean;
+  /**
+   * Тип плана (walk-engine.md §19.4): 'anchored' (по умолчанию) — якорь-драйвен
+   * набор §8; 'street' — уличная петля: без anchors/long_legs, со
+   * street_interest при наличии данных среды.
+   */
+  planType?: 'anchored' | 'street';
+  /** Сколько секторов розы снапнуто (факт WalkPlan.streetSnappedSectors). */
+  streetSnappedSectors?: number;
+  /** Данные среды живы (hasData) — без них гейт интереса не выпускается. */
+  streetHasData?: boolean;
 }
 
 export function evaluateGates(facts: GateFacts): GateReport[] {
+  const street = facts.planType === 'street';
   const reports: GateReport[] = [];
   reports.push(budgetGate(facts));
-  reports.push(anchorsGate(facts));
-  reports.push(longLegsGate(facts));
+  if (!street) reports.push(anchorsGate(facts));
+  if (!street) reports.push(longLegsGate(facts));
   if (facts.isLoop) reports.push(walkShareGate(facts));
   if (facts.isLoop) reports.push(loopStreetGate(facts.legGeometries));
+  if (street && facts.streetHasData) reports.push(streetInterestGate(facts));
   return reports;
+}
+
+/**
+ * Гейт интереса уличного плана (§19.4): при живых данных среды роза обязана
+ * притянуться к характерным секторам (≥ 2). Без данных гейт не выпускается —
+ * план не наказывается за то, чего мы не знаем (принцип 5 PRODUCT.md).
+ */
+function streetInterestGate(facts: GateFacts): GateReport {
+  const gate: WalkGateName = 'street_interest';
+  const snapped = facts.streetSnappedSectors ?? 0;
+  const pass = snapped >= STREET_INTEREST_MIN_SNAPPED;
+  return {
+    gate,
+    pass,
+    detail: pass
+      ? `петля притянута к ${snapped} характерным секторам`
+      : `снап-секторов: ${snapped} из ${STREET_INTEREST_MIN_SNAPPED} — петля прошла мимо характера улиц`,
+  };
 }
 
 /** Петля — это прогулка: суммарная ходьба ≥ 35% бюджета (стоит в карточке

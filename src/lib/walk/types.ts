@@ -79,7 +79,9 @@ export type WalkGateName =
   | 'anchors'
   | 'long_legs'
   | 'walk_share'
-  | 'loop_no_repeat_street';
+  | 'loop_no_repeat_street'
+  /** Уличный план (§19.4): ≥2 снап-сектора при живых данных среды. */
+  | 'street_interest';
 
 /** Отчёт по одному гейту «Метрики хорошей прогулки» (PRODUCT.md). */
 export interface GateReport {
@@ -88,9 +90,11 @@ export interface GateReport {
   detail: string;
 }
 
-/** Уровень деградации плана лестницы fallback (PRODUCT: «почти всегда прогулка»).
- *  partial — петля через лучших кандидатов; loop-only — чистая уличная петля. */
-export type WalkDegradedLevel = 'partial' | 'loop-only';
+/** Уровень деградации плана (PRODUCT: «почти всегда прогулка»).
+ *  partial — петля через лучших кандидатов (дождь, L2); loop-only — чистая
+ *  уличная петля деградации дождя (L3); street-no-data — уличная петля
+ *  первичного конвейера без данных о среде (§19.5). */
+export type WalkDegradedLevel = 'partial' | 'loop-only' | 'street-no-data';
 
 export interface WalkPlan {
   stops: WalkStop[];
@@ -107,10 +111,17 @@ export interface WalkPlan {
   degraded?: { level: WalkDegradedLevel };
   /**
    * Уличная петля, притянутая к характерным секторам (S3): ≥2 вейпоинта снапа
-   * к attraction-точкам. Заменяет метку loop-only (закрытый union
-   * WalkDegradedLevel не расширяется) — заметка для карточки в uiAdapter.
+   * к attraction-точкам — заметка для карточки в uiAdapter.
    */
   streetInterest?: true;
+  /**
+   * Тип плана (ревизия 2026-11-18 «улица первична», §19): 'street' — уличная
+   * петля первичного конвейера (свой набор гейтов §19.4, замена гарниша
+   * §19.6). Отсутствие поля — якорь-драйвен план (строгий движок, L2).
+   */
+  kind?: 'street';
+  /** Факт снапа для гейта street_interest: сколько секторов притянуто (§19.4). */
+  streetSnappedSectors?: number;
 }
 
 export type WalkFailureCode =

@@ -6,9 +6,15 @@
 // уже стоящих остановок. Остановки и ноги текущего плана приходят с клиента
 // и переиспользуются как есть; полная пересборка через buildQuickWalk остаётся
 // фолбэком на случай отказа замены.
+//
+// Ревизия 2026-11-18 «улица первична» (walk-engine.md §19.6): street-планы
+// (planKind 'street') обслуживает replaceStreetGarnish — якорь-гарниш
+// меняется без пересборки петли (кольцо ног из вершин розы переезжает по
+// ссылке, перестраиваются только две ноги к новому кандидату). Когда якорей
+// 0, кнопка «Заменить» не рендерится — сюда такие планы не доходят.
 import { getCloudProvider } from '@/lib/geo/instance';
 import { memoizeRoutingPort } from '@/lib/walk/memoPort';
-import { replaceStopInPlan, type ReplaceablePlan } from '@/lib/walk/replaceStop';
+import { replaceStopInPlan, replaceStreetGarnish, type ReplaceablePlan } from '@/lib/walk/replaceStop';
 import { DEFAULT_WALKING_SPEED_KMH, type WalkGateName, type GateReport } from '@/lib/walk/types';
 import {
   buildScoreReasonsMap,
@@ -20,6 +26,7 @@ import {
   MAX_BUDGET,
   MIN_BUDGET,
   REPLACE_CANDIDATE_CAP,
+  type ScoredPoolEntry,
 } from '@/lib/walk/quickPipeline';
 import { enginePlansToUiPlans } from '@/lib/walk/uiAdapter';
 import { fetchWeatherContext } from '@/lib/weather';
@@ -61,6 +68,14 @@ export interface QuickWalkReplaceInput {
   excludeStopIds?: string[];
   /** Ноги текущего плана (walkMin + geometry) для реиспользования геометрии. */
   currentLegs: { walkMin: number; geometry?: [number, number][] }[];
+  /**
+   * Тип плана (walk-engine.md §19.6): 'street' — уличная петля с якорями-
+   * гарнишем, замена идёт через replaceStreetGarnish (петля не пересобирается).
+   * Не передан — якорь-драйвен план, replaceStopInPlan как раньше.
+   */
+  planKind?: 'street';
+  /** Прошёл ли текущий план гейт street_interest — факт снапа переносится. */
+  streetInterestPass?: boolean;
   /**
    * Отчёты гейтов текущего плана (R5, из UiWalkPlan.gatesSummary): база
    * фолбэка замены считается из них, а не из хардкода «петля = 4».
@@ -120,6 +135,7 @@ const KNOWN_GATES: ReadonlySet<string> = new Set([
   'long_legs',
   'walk_share',
   'loop_no_repeat_street',
+  'street_interest',
 ]);
 
 function gatesSummaryToReports(
@@ -237,6 +253,82 @@ export async function replaceQuickStop(input: QuickWalkReplaceInput): Promise<Qu
       )
     : shortlist;
 
+  // Уличный план (§19.6): замена гарниша без пересборки петли. Ноги приходят
+  // с клиента с геометриями — кольцо розы выводится из их концов; без
+  // геометрий честно отказываем (перестройка старт→якорь→старт уничтожила бы
+  // петлю), полная пересборка через «Заменить»-тост остаётся фолбэком.
+  if (input.planKind === 'street') {
+    const clientLegs = Array.isArray(input.currentLegs) ? input.currentLegs : [];
+    const legsIncomplete =
+      clientLegs.length < 2 ||
+      clientLegs.some((leg) => !Array.isArray(leg.geometry) || leg.geometry.length < 2);
+    if (legsIncomplete) {
+      return {
+        ok: false,
+        error: 'Замена для этой прогулки недоступна — пересоберите её с теми же параметрами',
+      };
+    }
+    const streetResult = await replaceStreetGarnish(
+      {
+        start,
+        budgetMinutes: input.budgetMinutes,
+        categoryWeights: profile.categoryWeights,
+        // Стоянки — из архетипа с сезонной поправкой, как в сборке: без них
+        // новый якорь получает дефолтную таблицу и рассинхронизируется.
+        categoryStayMinutes: seasonalStayMinutes(
+          archetype.stayMinutes,
+          month,
+          weather ? weather.tempC : null,
+        ) as Record<string, number>,
+        currentPlan: {
+          stops: input.currentStops.map((stop) => ({
+            place: {
+              id: stop.id,
+              name: stop.name ?? '',
+              category: stop.category,
+              coordinates: stop.coordinates,
+              ...(stop.rating !== undefined ? { rating: stop.rating } : {}),
+              ...(stop.tags ? { tags: stop.tags } : {}),
+            },
+            stayMinutes: stop.stayMin,
+            reason: stop.reason,
+          })),
+          legs: clientLegs.map((leg) => ({
+            // Кольцо из фактов ног: конец геометрии — вершина кольца.
+            from: leg.geometry![0],
+            to: leg.geometry![leg.geometry!.length - 1],
+            distanceMeters: Math.round((leg.walkMin * DEFAULT_WALKING_SPEED_KMH * 1000) / 60),
+            durationMinutes: leg.walkMin,
+            geometry: leg.geometry!,
+          })),
+        },
+        replaceIndex: input.currentStops.findIndex((stop) => stop.id === input.replaceStopId),
+        candidates: orderedShortlist.map((entry) => entry.place),
+        ...(input.currentGatesPassed !== undefined
+          ? { currentGatesPassed: input.currentGatesPassed }
+          : {}),
+        // Факт снапа не меняется (петля не трогается) — перенос как есть.
+        ...(input.streetInterestPass ? { streetInterestReport: STREET_INTEREST_REPORT } : {}),
+      },
+      memoizeRoutingPort(provider),
+    );
+    if (!streetResult.ok) {
+      const messages: Record<string, string> = {
+        NO_CANDIDATES: 'Достойной замены рядом не нашлось — попробуйте пересобрать прогулку',
+        NO_ROUTE: 'Не удалось построить пешеходный маршрут — попробуйте ещё раз',
+        INVALID_INPUT: 'Замена для этой прогулки недоступна — пересоберите её',
+      };
+      return {
+        ok: false,
+        error: messages[streetResult.failure.code] ?? 'Не удалось заменить остановку',
+      };
+    }
+    const streetLocale = input.locale ?? 'ru';
+    const reasons = mergeReasonsForPlan(input, shortlist);
+    const [streetPlan] = enginePlansToUiPlans([streetResult.plan], input.budgetMinutes, streetLocale, reasons);
+    return { ok: true, plan: streetPlan };
+  }
+
   const result = await replaceStopInPlan(
     {
       start,
@@ -272,13 +364,27 @@ export async function replaceQuickStop(input: QuickWalkReplaceInput): Promise<Qu
 
   // Причины выживших остановок — с клиента (факты прошлого скоринга тех же
   // мест); карта шорт-листа покрывает только новую остановку и её конкурентов.
+  const locale = input.locale ?? 'ru';
+  const reasonsMap = mergeReasonsForPlan(input, shortlist);
+  const [plan] = enginePlansToUiPlans([result.plan], input.budgetMinutes, locale, reasonsMap);
+  return { ok: true, plan };
+}
+
+/** Отчёт гейта интереса для переноса в заменённый street-план (факт снапа). */
+const STREET_INTEREST_REPORT: GateReport = {
+  gate: 'street_interest',
+  pass: true,
+  detail: 'петля притянута к характерным секторам (сохранено при замене)',
+};
+
+/** Карта причин: скоринг шорт-листа + причины выживших с клиента как есть. */
+function mergeReasonsForPlan(
+  input: QuickWalkReplaceInput,
+  shortlist: ScoredPoolEntry[],
+): Map<string, WalkScoreReasons> {
   const clientReasons = new Map<string, WalkScoreReasons>();
   for (const stop of input.currentStops) {
     if (isScoreReasons(stop.scoreReasons)) clientReasons.set(stop.id, stop.scoreReasons);
   }
-  const reasonsMap = mergeScoreReasons(buildScoreReasonsMap(shortlist), clientReasons);
-
-  const locale = input.locale ?? 'ru';
-  const [plan] = enginePlansToUiPlans([result.plan], input.budgetMinutes, locale, reasonsMap);
-  return { ok: true, plan };
+  return mergeScoreReasons(buildScoreReasonsMap(shortlist), clientReasons);
 }

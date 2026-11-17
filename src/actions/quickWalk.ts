@@ -1,7 +1,13 @@
 "use server";
 
 // Серверный экшен главного сценария «Прогуляться сейчас» (docs/PRODUCT.md, вход №1).
-// Конвейер: CloudProvider → погода → архетип+контекст → скоринг → движок → UI-планы.
+// Ревизия 2026-11-18 «улица первична» (docs/walk-engine.md §19): конвейер
+// зависит от вайба —
+//   rain  → якорь-драйвен: пул POI → скоринг → строгий движок → лестница
+//           деградации. Дождь — единственное исключение из уличного правила:
+//           крытые музеи/галереи — честно местовая логика.
+//   иначе → street-first: уличная петля (умная роза со снапом) сама заполняет
+//           бюджет, POI — гарниш 0–2 в коридоре петли; пустой пул — не отказ.
 // Экшен тонкий: склейка пула и скоринга живёт в quickPipeline (её же ест
 // локальная замена остановки), логика — в чистых модулях (geo/vibes/walk).
 import { getCloudProvider } from '@/lib/geo/instance';
@@ -10,9 +16,11 @@ import { fetchWeatherContext } from '@/lib/weather';
 import { getArchetype } from '@/lib/vibes/archetypes';
 import { combineContext, seasonalStayMinutes } from '@/lib/vibes/combine';
 import { userLocalHour, userLocalMonth } from '@/lib/vibes/localHour';
+import { streetLoopNote } from '@/lib/vibes/streetInterest';
 import {
   createWalkPlan,
   buildWalkWithFallback,
+  buildStreetFirstPlans,
   isUnderfloor,
   minimalLoopZoneMeters,
 } from '@/lib/walk';
@@ -37,11 +45,12 @@ import type { WalkPlan as EnginePlan } from '@/lib/walk/types';
 import type { GeoPlace } from '@/lib/geo';
 
 /**
- * Вайб приходит с главного экрана в словаре UI (logic.ts VIBE_IDS);
- * 'sightseeing' — архетип входа «Новый город» (PRODUCT.md, сценарий №2),
- * кнопки вайба у него нет.
+ * Вайб приходит с главного экрана в словаре UI (logic.ts VIBE_IDS).
+ * Ревизия 2026-11-18: 'sightseeing' убран — вкладка «Новый город» удалена
+ * (PRODUCT.md, «Два сценария входа»); архетип sightseeing остался в vibes
+ * как запасной профиль, но экшен его больше не принимает.
  */
-export type QuickVibe = VibeId | 'sightseeing';
+export type QuickVibe = VibeId;
 
 export interface QuickWalkInput {
   /** [lat, lng] — точка старта (геолокация или адрес). */
@@ -80,6 +89,24 @@ function validateInput(input: QuickWalkInput): string | null {
   return null;
 }
 
+/** Общий контекст сборки: один и тот же для обоих конвейеров (§19.1). */
+interface BuildContext {
+  start: [number, number];
+  budgetMinutes: number;
+  input: QuickWalkInput;
+  profile: ReturnType<typeof combineContext>;
+  archetype: ReturnType<typeof getArchetype>;
+  weather: Awaited<ReturnType<typeof fetchWeatherContext>>;
+  hour?: number;
+  timezone: string;
+  now: Date;
+  excluded: ReadonlySet<string>;
+  categoryStayMinutes: Record<string, number>;
+  routingPort: ReturnType<typeof memoizeRoutingPort>;
+  fastMode: boolean;
+  context: WalkContextInfo;
+}
+
 export async function buildQuickWalk(input: QuickWalkInput): Promise<QuickWalkResult> {
   const invalid = validateInput(input);
   if (invalid) return { ok: false, error: invalid };
@@ -112,7 +139,7 @@ export async function buildQuickWalk(input: QuickWalkInput): Promise<QuickWalkRe
 
   // Порт маршрутизации: структурная совместимость GeoProvider ↔ WalkRoutingPort.
   // Мемо-слой гасит дубли route-запросов между вариантами и зеркалом кольца;
-  // общий на обе волны — второй заход по тому же району почти бесплатен.
+  // общий на оба конвейера — повторный заход по тому же району почти бесплатен.
   const routingPort = memoizeRoutingPort(provider);
   // Стоянки — из архетипа с сезонной поправкой (холод: улица короче); без них
   // таблица живёт на дефолтах (парк 25 вместо 30).
@@ -121,11 +148,44 @@ export async function buildQuickWalk(input: QuickWalkInput): Promise<QuickWalkRe
     month,
     weather ? weather.tempC : null,
   ) as Record<string, number>;
-  const engineInputBase = {
+
+  const build: BuildContext = {
     start,
     budgetMinutes: input.budgetMinutes,
-    categoryWeights: profile.categoryWeights,
+    input,
+    profile,
+    archetype,
+    weather,
+    hour,
+    timezone: timeZone,
+    now,
+    excluded,
     categoryStayMinutes,
+    routingPort,
+    fastMode: await provider.isFastArea(start),
+    context,
+  };
+
+  // Дождь — якорь-драйвен исключение (§19.1): под дождём улица не содержание,
+  // а проблема; ядро плана — крытые музеи/галереи/ТЦ с честными причинами.
+  if (input.vibe === 'rain') {
+    return buildAnchoredWalk(build);
+  }
+  // Все остальные вайбы — улица первична (§19): петля решает, якоря — гарниш.
+  return buildStreetWalk(build);
+}
+
+// --- Конвейер дождя: якорь-драйвен (§4–§18 без изменений) --------------------
+
+async function buildAnchoredWalk(build: BuildContext): Promise<QuickWalkResult> {
+  const { start, budgetMinutes, input, profile, archetype, weather, hour, timezone, now, excluded } = build;
+  const provider = getCloudProvider();
+
+  const engineInputBase = {
+    start,
+    budgetMinutes,
+    categoryWeights: profile.categoryWeights,
+    categoryStayMinutes: build.categoryStayMinutes,
     // Категориальные потолки архетипа (зелёная: один магазин) — движок
     // берёт их как есть, погодный контекст лимиты не меняет.
     ...(archetype.categoryLimits
@@ -148,7 +208,7 @@ export async function buildQuickWalk(input: QuickWalkInput): Promise<QuickWalkRe
           : 'Рядом не нашлось интересных мест — попробуйте увеличить бюджет или сменить вайб',
       };
     }
-    const scored = scoreCandidatePool({ pool, profile, weather, hour, timezone: timeZone, now, excludeIds: excluded });
+    const scored = scoreCandidatePool({ pool, profile, weather, hour, timezone, now, excludeIds: excluded });
     if (scored.length === 0) {
       return { ok: false, error: 'Все найденные места вы исключили — попробуйте пересобрать прогулку' };
     }
@@ -157,7 +217,7 @@ export async function buildQuickWalk(input: QuickWalkInput): Promise<QuickWalkRe
     // отсечёт по зоне, и он умрёт NO_CANDIDATES. Разреженный пул (спальный
     // район) добирается внешними кандидатами по скору: ядро узкого варианта
     // уже набрано, широкий вариант получает свой радиус.
-    const minZone = minimalLoopZoneMeters(input.budgetMinutes);
+    const minZone = minimalLoopZoneMeters(budgetMinutes);
     const withCoords = scored.map((entry) => ({ entry, coordinates: entry.place.coordinates }));
     const core = diversifyByAzimuth(
       withCoords.filter((item) => haversineMeters(start, item.coordinates) <= minZone),
@@ -178,7 +238,7 @@ export async function buildQuickWalk(input: QuickWalkInput): Promise<QuickWalkRe
       ...engineInputBase,
       ...(street ? { streetFeatures: street.features, streetHints: street.hints } : {}),
     };
-    const planResult = await createWalkPlan({ ...engineInput, candidates }, routingPort);
+    const planResult = await createWalkPlan({ ...engineInput, candidates }, build.routingPort);
 
     if (!planResult.ok) {
       // Лестница деградации (PRODUCT: почти всегда прогулка): строгий движок
@@ -187,7 +247,7 @@ export async function buildQuickWalk(input: QuickWalkInput): Promise<QuickWalkRe
       // Отказ строгого движка передаётся как есть: лестница не прогоняет его второй раз.
       const fallback = await buildWalkWithFallback(
         { ...engineInput, candidates },
-        routingPort,
+        build.routingPort,
         { strict: planResult },
       );
       if (!fallback.ok) {
@@ -203,7 +263,7 @@ export async function buildQuickWalk(input: QuickWalkInput): Promise<QuickWalkRe
       const locale = input.locale ?? 'ru';
       return {
         ok: true,
-        uiPlans: enginePlansToUiPlans(fallback.plans, input.budgetMinutes, locale, buildScoreReasonsMap(shortlist)),
+        uiPlans: enginePlansToUiPlans(fallback.plans, budgetMinutes, locale, buildScoreReasonsMap(shortlist)),
         enginePlans: fallback.plans,
       };
     }
@@ -213,16 +273,16 @@ export async function buildQuickWalk(input: QuickWalkInput): Promise<QuickWalkRe
       ok: true,
       // Скоринговые причины едут в карточку вместе с планом: якорная строка
       // из движка остаётся главной, PlaceScore — вторичные чипы.
-      uiPlans: enginePlansToUiPlans(planResult.plans, input.budgetMinutes, locale, buildScoreReasonsMap(shortlist)),
+      uiPlans: enginePlansToUiPlans(planResult.plans, budgetMinutes, locale, buildScoreReasonsMap(shortlist)),
       enginePlans: planResult.plans,
     };
   };
 
-  const { places: pool, searchFailed } = await collectCandidates(provider, start, profile, input.budgetMinutes);
+  const { places: pool, searchFailed } = await collectCandidates(provider, start, build.profile, budgetMinutes);
   // Улицы с характером (S6/S7): фичи улиц — отдельным «батчем из 1» ПОСЛЕ
   // последней категории POI (пауза внутри, вне ретрай-волны, упал → null).
   // Бандл общий для обеих волн поиска: в провайдере TTL-кэш 10 мин.
-  const streetBundle = await fetchStreetInterest(provider, start, input.budgetMinutes, archetype);
+  const streetBundle = await fetchStreetInterest(provider, start, budgetMinutes, build.archetype);
   const first = await assemble(pool, searchFailed, streetBundle);
   let result = first;
 
@@ -230,12 +290,12 @@ export async function buildQuickWalk(input: QuickWalkInput): Promise<QuickWalkRe
   // пола коридора — единственная эскалация на уровне экшена: вторая волна
   // поиска с расширенным радиусом и пересборка. Вторая волна не дотянула
   // или отказала — возвращаем первую как есть: фиктивных минут не бывает.
-  if (first.ok && isUnderfloor(first.enginePlans[0], input.budgetMinutes)) {
-    const secondPool = await collectCandidates(provider, start, profile, input.budgetMinutes, {
+  if (first.ok && isUnderfloor(first.enginePlans[0], budgetMinutes)) {
+    const secondPool = await collectCandidates(provider, start, build.profile, budgetMinutes, {
       radiusMultiplier: SECOND_WAVE_MULTIPLIER,
     });
     const second = await assemble(secondPool.places, secondPool.searchFailed, streetBundle);
-    if (second.ok && !isUnderfloor(second.enginePlans[0], input.budgetMinutes)) {
+    if (second.ok && !isUnderfloor(second.enginePlans[0], budgetMinutes)) {
       result = second;
     }
   }
@@ -244,7 +304,68 @@ export async function buildQuickWalk(input: QuickWalkInput): Promise<QuickWalkRe
   return {
     ok: true,
     plans: result.uiPlans,
-    fastMode: await provider.isFastArea(start),
-    context,
+    fastMode: build.fastMode,
+    context: build.context,
+  };
+}
+
+// --- Конвейер «улица первична»: петля + гарниш (walk-engine.md §19) ----------
+
+async function buildStreetWalk(build: BuildContext): Promise<QuickWalkResult> {
+  const { start, budgetMinutes, input, profile, archetype, weather, hour, timezone, now, excluded } = build;
+  const provider = getCloudProvider();
+
+  // Пул гарниша (§19.1): пустой пул или упавший поиск — это 0 якорей, а не
+  // отказ прогулки; петля от POI не зависит.
+  const { places: pool } = await collectCandidates(provider, start, profile, budgetMinutes);
+  const scored =
+    pool.length > 0
+      ? scoreCandidatePool({ pool, profile, weather, hour, timezone, now, excludeIds: excluded })
+      : [];
+
+  // Улицы с характером (S6/S7): отдельным «батчем из 1» после POI (пауза
+  // внутри); упал → null → петля без данных среды с честной заметкой (§19.5).
+  const streetBundle = await fetchStreetInterest(provider, start, budgetMinutes, archetype);
+
+  const streetResult = await buildStreetFirstPlans({
+    start,
+    budgetMinutes,
+    // Скор-порядок пула = порядок выбора гарниша (§19.3); никакой зонной
+    // обрезки и диверсификации — гарниш отбирается коридором петли, а не
+    // зоной вариантов якорь-драйвена.
+    candidates: scored.map((entry) => entry.place),
+    categoryWeights: profile.categoryWeights,
+    categoryStayMinutes: build.categoryStayMinutes,
+    ...(archetype.categoryLimits
+      ? { categoryLimits: archetype.categoryLimits as Record<string, number> }
+      : {}),
+    ...(streetBundle ? { streetFeatures: streetBundle.features, streetHints: streetBundle.hints } : {}),
+    ports: build.routingPort,
+  });
+  if (!streetResult.ok) {
+    // Отказ уличной петли — мёртвый роутер (§19.1); INVALID_INPUT — параметры.
+    return {
+      ok: false,
+      error:
+        streetResult.failure.code === 'INVALID_INPUT'
+          ? 'Некорректные параметры прогулки'
+          : 'Даже простая петля не построилась — роутер недоступен, попробуй ещё раз через минуту',
+    };
+  }
+
+  const locale = input.locale ?? 'ru';
+  return {
+    ok: true,
+    // Заметка «почему петля идёт тут» (§19.7): архетипные множители решили,
+    // куда пошла роза, — формулировка называет это словами вайба.
+    plans: enginePlansToUiPlans(
+      streetResult.plans,
+      budgetMinutes,
+      locale,
+      buildScoreReasonsMap(scored),
+      streetLoopNote(archetype.id),
+    ),
+    fastMode: build.fastMode,
+    context: build.context,
   };
 }

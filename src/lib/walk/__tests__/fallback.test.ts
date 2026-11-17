@@ -135,14 +135,15 @@ describe('buildWalkWithFallback: лестница деградации', () => {
     expect(res.plans[0].totalMinutes).toBeLessThanOrEqual(60 * 1.1 + 1e-6);
   });
 
-  it('кандидатов ноль → L3: уличная петля в бюджет ×1.15, якорей нет, гейты честные', async () => {
+  it('кандидатов ноль → L3: уличная петля в бюджет ×1.15, street-гейты без anchors', async () => {
     const { city, input } = setup([], { budgetMinutes: 60 });
     const counted = countingPort(city.port);
     const res = await buildWalkWithFallback(input, counted.port);
-    if (!res.ok) throw new Error(`ожидался план-петля, получен отказ ${res.failure.code}: ${res.failure.detail}`);
+    if (!res.ok) throw new Error(`ожидались план-петля, получен отказ ${res.failure.code}: ${res.failure.detail}`);
 
     expect(res.plans).toHaveLength(1);
     const plan = res.plans[0];
+    // Деградация дождя (§19.5): «интересных мест не нашлось» — правда без якорей.
     expect(plan.degraded).toEqual({ level: 'loop-only' });
     expect(plan.stops).toHaveLength(0);
     // Квадрат: старт + 4 вейпоинта + замыкание → 5 разрезанных ног.
@@ -152,12 +153,15 @@ describe('buildWalkWithFallback: лестница деградации', () => {
     for (const leg of plan.legs) {
       expect(leg.geometry.length).toBeGreaterThanOrEqual(2);
     }
-    // Коррекции радиуса обязаны посадить петлю в окно 0.5..1.15 бюджета
+    // Коррекции радиуса обязаны посадить петлю в окно 0.9..1.15 бюджета
     // (манхэттен-периметр квадрата ≤ 1.414 евклидова, ×0.85² гасит любой запас).
     expect(plan.totalMinutes).toBeLessThanOrEqual(60 * 1.15 + 1e-6);
-    // Гейты честные: без якорей anchors падает, полный pass невозможен.
-    expect(plan.allGatesPass).toBe(false);
-    expect(plan.gates.find((g) => g.gate === 'anchors')?.pass).toBe(false);
+    // Уличный набор гейтов (§19.4): без anchors и long_legs; без данных среды
+    // street_interest не выпускается — полный pass честен.
+    expect(plan.kind).toBe('street');
+    expect(plan.gates.find((g) => g.gate === 'anchors')).toBeUndefined();
+    expect(plan.gates.find((g) => g.gate === 'street_interest')).toBeUndefined();
+    expect(plan.allGatesPass).toBe(true);
     expect(counted.calls.route).toBeGreaterThanOrEqual(1);
   });
 
@@ -255,7 +259,7 @@ describe('streetLoop: углы розы', () => {
 });
 
 describe('streetLoop: реакция на перекрытие улиц', () => {
-  const BAD_DURATION_SECONDS = 2880; // 48 мин — в окне 30..69, коррекций радиуса нет
+  const BAD_DURATION_SECONDS = 3660; // 61 мин — в окне 54..69, коррекций радиуса нет
 
   /**
    * Фейк-роутер: первые badCalls вызовов возвращают полилинию «туда-обратно»

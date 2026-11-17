@@ -194,8 +194,10 @@ describe('attachMicroNotes: интеграция с петлёй L3 (S4)', () =>
     expect(plan.totalMinutes).toBe(plan.totalWalkMinutes);
     // Инвариант B2: микро-минуты не пробивают потолок 1.1·B.
     expect(plan.totalMinutes).toBeLessThanOrEqual(66 + 1e-9);
-    // Гейт anchors не засчитывает микро-стопы: stops пуст.
+    // Гейт anchors у street-плана не выпускается (§19.4): микро-стопы — не
+    // якоря, а stops пуст; микростопы не гейтуются ничем.
     expect(plan.stops).toHaveLength(0);
-    expect(plan.gates.find((g) => g.gate === 'anchors')?.pass).toBe(false);
+    expect(plan.gates.find((g) => g.gate === 'anchors')).toBeUndefined();
+    expect(plan.kind).toBe('street');
   });
 });

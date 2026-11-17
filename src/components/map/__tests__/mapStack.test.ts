@@ -2,9 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { shouldRenderMaplibre } from '../mapStack';
 
 describe('mapStack: критерий переключения стеков (docs/ux-human-wave.md, B2)', () => {
-  it('quick/sightseeing без эксперт-маршрута — maplibre', () => {
+  it('quick без эксперт-маршрута — maplibre (режим sightseeing удалён, §19)', () => {
     expect(shouldRenderMaplibre('quick', 0)).toBe(true);
-    expect(shouldRenderMaplibre('sightseeing', 0)).toBe(true);
   });
 
   it('вкладка «Маршрут» — Яндекс, даже если mapPoints ещё пуст', () => {

@@ -25,6 +25,9 @@ declare module '@/components/walk/types' {
     streetInterest?: boolean;
     /** Человекочитаемая заметка streetInterest параллельными ru/en (как degradedNote). */
     streetInterestNote?: { ru: string; en: string };
+    /** Тип плана (rev 2026-11-18 «улица первична», §19): таймлайн и замена
+     *  гарниша у street-планов свои. Отсутствие — якорь-драйвен план. */
+    kind?: 'street';
   }
   interface WalkLeg {
     /** Микро-стопы «по пути» (S4 волны «Улицы с характером»): имя, класс и
@@ -48,6 +51,10 @@ export const GATE_NOTES: Partial<Record<WalkGateName, { ru: string; en: string }
   walk_share: {
     ru: 'Много сидения, мало ходьбы',
     en: 'More sitting than walking',
+  },
+  street_interest: {
+    ru: 'Характерные улицы нашлись, но петля прошла мимо них',
+    en: 'Character streets are there, but the loop missed them',
   },
 };
 
@@ -85,6 +92,10 @@ export const DEGRADED_NOTES: Record<WalkDegradedLevel, { ru: string; en: string 
   'loop-only': {
     ru: 'Интересных мест рядом не нашлось — вот пешеходная петля на всё твоё время',
     en: 'No interesting places nearby — here is a walking loop for your time',
+  },
+  'street-no-data': {
+    ru: 'Характер улиц района не подгрузился — вот честная петля по пешеходной сети',
+    en: 'Street character data is unavailable — here is an honest loop over the walking network',
   },
 };
 
@@ -161,12 +172,17 @@ export type ScoreReasonsById = ReadonlyMap<string, WalkScoreReasons>;
  * scoreReasons — опциональная карта скоринговых причин: якорная причина
  * (stop.reason) остаётся главной строкой, скоринговые едут вторичными чипами.
  * Без карты (старые планы, история) карточка рендерится как раньше.
+ *
+ * streetNote (rev «улица первична», §19.7) — архетипная формулировка «почему
+ * петля идёт тут» (vibes.md §3.7, streetLoopNote): экшен передаёт её для
+ * street-планов; без неё — общая STREET_INTEREST_NOTE.
  */
 export function enginePlanToUiPlan(
   engine: EngineWalkPlan,
   budgetMin: number,
   locale: 'ru' | 'en' = 'ru',
   scoreReasons?: ScoreReasonsById,
+  streetNote?: { ru: string; en: string },
 ): UiWalkPlan {
   const stops = engine.stops.map((stop) => {
     const place = stop.place;
@@ -236,10 +252,14 @@ export function enginePlanToUiPlan(
     ...(engine.degraded
       ? { degraded: engine.degraded, degradedNote: DEGRADED_NOTES[engine.degraded.level] }
       : {}),
+    // Тип плана (§19): таймлайн street-плана показывает ногу до первого
+    // якоря, замена гарниша идёт своим путём.
+    ...(engine.kind ? { kind: engine.kind } : {}),
     // Уличный интерес (S3): флаг + параллельная заметка вместо бейджа
-    // деградации — у петли по характерным улицам своя формулировка.
+    // деградации — у петли по характерным улицам своя формулировка,
+    // архетипная заметка (§19.7) перебивает общую.
     ...(engine.streetInterest
-      ? { streetInterest: true, streetInterestNote: STREET_INTEREST_NOTE }
+      ? { streetInterest: true, streetInterestNote: streetNote ?? STREET_INTEREST_NOTE }
       : {}),
   };
 }
@@ -250,8 +270,9 @@ export function enginePlansToUiPlans(
   budgetMin: number,
   locale: 'ru' | 'en' = 'ru',
   scoreReasons?: ScoreReasonsById,
+  streetNote?: { ru: string; en: string },
 ): UiWalkPlan[] {
-  return engines.map((plan) => enginePlanToUiPlan(plan, budgetMin, locale, scoreReasons));
+  return engines.map((plan) => enginePlanToUiPlan(plan, budgetMin, locale, scoreReasons, streetNote));
 }
 
 /** Полная полилиния прогулки для карты: старт + геометрии всех легов подряд. */

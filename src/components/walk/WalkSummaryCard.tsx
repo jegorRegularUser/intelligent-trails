@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/utils/cn";
 import { budgetOverrunPercent, isWithinBudget, type WalkPhase } from "./logic";
-import type { WalkDegradedLevel, WalkPlan } from "./types";
+import type { WalkDegradedLevel, WalkPlan, WalkStop } from "./types";
 import { StopRow, WalkLegRow } from "./StopRow";
 
 /**
@@ -64,6 +64,10 @@ export function WalkSummaryCard({
   className,
 }: WalkSummaryCardProps) {
   const t = useTranslations("WalkUI");
+  // Уличный план (§19.7): раскладка гарниша по кольцу ног; несостыковка
+  // (старые/расшаренные планы без координат) → прежний таймлайн.
+  const streetRing =
+    plan && plan.kind === "street" && plan.stops.length > 0 ? buildStreetRing(plan) : null;
 
   return (
     <div className={cn("flex flex-col gap-5", className)}>
@@ -146,7 +150,19 @@ export function WalkSummaryCard({
               {t("timelineTitle")}
             </h4>
             <div className="relative">
-              {plan.stops.length > 0 && (
+              {/* Уличный план (rev «улица первична», walk-engine.md §19.7): якоря-
+                  гарниш сидят НА петле — между ними слитые перегоны ног, иначе
+                  ходьба до первого якоря была бы невидима. Ноги не совпали с
+                  якорями (старые/расшаренные планы) — прежний таймлайн. */}
+              {plan.stops.length > 0 && streetRing ? (
+                <StreetTimeline
+                  items={streetRing}
+                  swappingStopIds={swappingStopIds}
+                  swapDisabled={interactionsDisabled}
+                  onSwapRequest={onSwapRequest}
+                />
+              ) : null}
+              {plan.stops.length > 0 && !streetRing && (
                 <>
                   {/* Сплошная линия таймлайна позади кругов — модель эксперт-билдера:
                       круги w-10 с border-white перекрывают линию, leg-тексты по
@@ -260,7 +276,12 @@ interface DegradationNoteProps {
 function DegradationNote({ level, note }: DegradationNoteProps) {
   const t = useTranslations("WalkUI");
   const locale = useLocale();
-  const dictText = level === "partial" ? t("degradedPartial") : t("degradedLoopOnly");
+  const dictText =
+    level === "partial"
+      ? t("degradedPartial")
+      : level === "loop-only"
+        ? t("degradedLoopOnly")
+        : t("degradedStreetNoData");
   const text = dictText || (note ? (locale === "en" ? note.en : note.ru) : "");
   return (
     <p
@@ -275,14 +296,14 @@ function DegradationNote({ level, note }: DegradationNoteProps) {
 
 /**
  * Заметка уличного интереса (S3): брендовая (не amber) — петля по характерным
- * улицам не является деградацией. Текст — словарная заметка из данных
- * (параллельные ru/en адаптера) с фолбэком на словарь WalkUI.
+ * улицам не является деградацией. Текст — только из данных (параллельные
+ * ru/en адаптера): словарь WalkUI уличных заметок не содержит намеренно
+ * (гвард-тест uiAdapter), без заметки компонент не рендерится.
  */
 function StreetInterestNote({ note }: { note?: { ru: string; en: string } }) {
-  const t = useTranslations("WalkUI");
   const locale = useLocale();
-  const text =
-    (locale === "en" ? note?.en : note?.ru) ?? t("streetInterestNote");
+  const text = locale === "en" ? note?.en : note?.ru;
+  if (!text) return null;
   return (
     <p
       role="status"
@@ -310,6 +331,9 @@ function FailedGatesNotes({ plan }: { plan: WalkPlan }) {
   }
   if (failed.has("walk_share")) {
     notes.push(t("gateNoteWalkShare"));
+  }
+  if (failed.has("street_interest")) {
+    notes.push(t("gateNoteStreetInterest"));
   }
   if (notes.length === 0) return null;
   return (
@@ -424,5 +448,112 @@ export function OfflineBanner({ className }: { className?: string }) {
         <p className="mt-0.5 text-xs text-slate-500">{t("offlineHint")}</p>
       </div>
     </div>
+  );
+}
+
+// --- Таймлайн уличного плана (rev «улица первична», walk-engine.md §19.7) ---
+
+type MicroNote = NonNullable<WalkPlan["legs"][number]["microNotes"]>[number];
+
+type StreetRingItem =
+  | { kind: "leg"; walkMin: number; microNotes?: MicroNote[]; back?: boolean }
+  | { kind: "stop"; stop: WalkStop; stopIndex: number };
+
+/** Координаты совпали (движковые планы несут точные массивы; JSON — с допуском). */
+function samePoint(
+  a: [number, number] | undefined,
+  b: [number, number] | undefined
+): boolean {
+  if (!a || !b) return false;
+  return Math.abs(a[0] - b[0]) < 1e-6 && Math.abs(a[1] - b[1]) < 1e-6;
+}
+
+/** Конец ноги UI-плана = последняя точка геометрии (UI-тип несёт только геометрию). */
+function legEnd(leg: WalkPlan["legs"][number]): [number, number] | undefined {
+  const geometry = leg.geometry;
+  return geometry && geometry.length > 0 ? geometry[geometry.length - 1] : undefined;
+}
+
+/**
+ * Раскладка гарниша по кольцу ног: якорь-слот = нога, чей конец совпал с
+ * координатами якоря; ноги между якорями сливаются в один перегон с суммой
+ * минут и общими микро-стопами. Каждый якорь встанет на свою ногу (движок
+ * кладёт один якорь на ногу, stops — в порядке кольца); если хоть один не
+ * лег — null, вызывающий рендерит прежний таймлайн.
+ */
+function buildStreetRing(plan: WalkPlan): StreetRingItem[] | null {
+  const slots = plan.stops.map((stop) => {
+    if (!stop.coordinates) return -1;
+    return plan.legs.findIndex((leg) => samePoint(legEnd(leg), stop.coordinates));
+  });
+  if (slots.some((slot) => slot < 0)) return null;
+
+  const ordered = plan.stops
+    .map((stop, i) => ({ stop, slot: slots[i] }))
+    .sort((a, b) => a.slot - b.slot);
+
+  const items: StreetRingItem[] = [];
+  let cursor = 0;
+  for (const { stop, slot } of ordered) {
+    const legs = plan.legs.slice(cursor, slot + 1);
+    if (legs.length === 0) return null;
+    items.push(mergedLegRow(legs));
+    items.push({ kind: "stop", stop, stopIndex: plan.stops.indexOf(stop) });
+    cursor = slot + 1;
+  }
+  const tail = plan.legs.slice(cursor);
+  if (tail.length === 0) return null;
+  items.push({ ...mergedLegRow(tail), back: true });
+  return items;
+}
+
+function mergedLegRow(legs: WalkPlan["legs"]): { kind: "leg"; walkMin: number; microNotes?: MicroNote[] } {
+  const microNotes = legs.flatMap((leg) => leg.microNotes ?? []);
+  return {
+    kind: "leg",
+    walkMin: legs.reduce((sum, leg) => sum + leg.walkMin, 0),
+    ...(microNotes.length > 0 ? { microNotes } : {}),
+  };
+}
+
+interface StreetTimelineProps {
+  items: StreetRingItem[];
+  swappingStopIds?: string[];
+  swapDisabled?: boolean;
+  onSwapRequest?: (stopId: string) => void;
+}
+
+/**
+ * Таймлайн уличной петли с якорями-гарнишем: та же визуальная модель
+ * (сплошная линия, круги w-10, leg-тексты pl-52px), но перегоны — слитые
+ * куски петли между якорями; замыкание помечено «до старта».
+ */
+function StreetTimeline({ items, swappingStopIds = [], swapDisabled = false, onSwapRequest }: StreetTimelineProps) {
+  const t = useTranslations("WalkUI");
+  return (
+    <>
+      {/* Сплошная линия таймлайна позади кругов — как в якорь-драйвен модели */}
+      <div aria-hidden className="absolute left-[19px] top-5 bottom-8 w-0.5 bg-slate-200" />
+      {items.map((item, i) =>
+        item.kind === "leg" ? (
+          <WalkLegRow
+            key={`street-leg-${i}`}
+            walkMin={item.walkMin}
+            label={item.back ? t("legWalkBack", { minutes: item.walkMin }) : undefined}
+            microNotes={item.microNotes}
+            className={i === items.length - 1 ? "pb-6" : "pb-4"}
+          />
+        ) : (
+          <StopRow
+            key={item.stop.id}
+            stop={item.stop}
+            isSwapping={swappingStopIds.includes(item.stop.id)}
+            swapDisabled={swapDisabled}
+            onSwapRequest={onSwapRequest}
+            className="pb-4"
+          />
+        )
+      )}
+    </>
   );
 }

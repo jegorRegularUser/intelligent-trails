@@ -2,8 +2,6 @@
   "WalkUI": {
     "screenTitle": "A walk nearby",
     "screenSubtitle": "Pick your time — we'll plan the rest. No sign-up.",
-    "sightseeingTitle": "Overview walk",
-    "sightseeingSubtitle": "A loop through the character spots: pick time and a starting point.",
     "timeLegend": "How much time do you have?",
     "time30": "30 min",
     "time60": "1 hour",
@@ -78,8 +76,10 @@
     "qualityOk": "All quality gates passed",
     "degradedPartial": "Not many anchors nearby — the walk has fewer stops than usual",
     "degradedLoopOnly": "No interesting places nearby — here is a walking loop for your time",
+    "degradedStreetNoData": "Street character data is unavailable — here is an honest loop over the walking network",
     "gateNoteUnderfloor": "The walk came out shorter than planned: not enough places nearby",
     "gateNoteWalkShare": "More sitting than walking",
+    "gateNoteStreetInterest": "Character streets are there, but the loop missed them",
     "loopOnlyLeg": "Street loop: {minutes} min of walking",
     "variantOf": "Variant {index} of {count}",
     "startPinLabel": "Walk start",
@@ -87,7 +87,6 @@
     "variantNext": "Next variant",
     "modeQuick": "Quick walk",
     "modeRoute": "Route",
-    "modeSightseeing": "New city",
     "startFromAddressOptional": "Where do we start? (optional — otherwise from geolocation)",
     "howItWorks": "How it works",
     "geoDenied": "Location access denied — tell us where to start instead",
@@ -97,10 +96,7 @@
     "shareCta": "Share",
     "shareCopied": "Walk link copied",
     "shareFailed": "Couldn't share — please try again",
-    "routeRestored": "Route restored from the link: stops and timing are intact",
-    "cityInputLabel": "City for the walk",
-    "citySelected": "City: {city}",
-    "cityClear": "Clear city"
+    "routeRestored": "Route restored from the link: stops and timing are intact"
   },
   "Builder": {
     "title": "Intelligent Route Planner",
