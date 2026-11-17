@@ -2,12 +2,14 @@
 // Сценарии локальной замены остановки на сетке-городе (синтетика — gridCity.ts).
 //
 // Геометрия сценария (узлы манхэттенской сетки, 75 м/мин):
-//   старт (0,0) → парк A (0,500) → кафе Б (500,0) → старт, бюджет 78:
-//   текущее кольцо 2000 м ≈ 26.7 мин + 45 стоянок ≈ 71.7 мин (в ±10%).
+//   старт (0,0) → парк A (0,600) → кафе Б (600,0) → старт, бюджет 85:
+//   текущее кольцо 2400 м ≈ 32 мин + 45 стоянок ≈ 77 мин (в ±10%; ходьба
+//   32 ≥ 29.75 = 35% бюджета — walk_share у базового плана пройден).
 // Кандидаты:
-//   cafe_se (500,-500): замена Б → кольцо 3000 м ≈ 85 мин — в допуске, все гейты;
-//   park_s (0,-500):    замена Б → 71.7 мин, но ноги retracing по east-0 —
-//                       гейт улиц провален (фолбэк: 3 из 4);
+//   cafe_se (600,-600): замена Б → кольцо 3600 м ≈ 93 мин — в допуске, все гейты;
+//   park_s (0,-600):    замена Б → 77 мин, но нога парк А → парк С идёт по
+//                       той же оси x=0 через старт — гейт улиц провален
+//                       (фолбэк: 4 из 5, допуск «база − 1»);
 //   island, far_cafe — отсекаются матрицей до заказов route.
 
 import { describe, expect, it } from 'vitest';
@@ -17,14 +19,14 @@ import { makeCity, makeNode, type CityPlaceDef } from './gridCity';
 import type { WalkRoutingPort } from '../ports';
 import type { WalkLatLng, WalkLeg, WalkPlan, WalkStop } from '../types';
 
-const BUDGET = 78;
+const BUDGET = 85;
 
 const DEFS: CityPlaceDef[] = [
-  { id: 'park_a', name: 'Парк А', category: 'park', east: 0, north: 500, rating: 4.5 },
-  { id: 'cafe_b', name: 'Кафе Б', category: 'cafe', east: 500, north: 0 },
-  { id: 'cafe_se', name: 'Кафе на юго-востоке', category: 'cafe', east: 500, north: -500 },
-  { id: 'park_s', name: 'Парк на юге', category: 'park', east: 0, north: -500 },
-  { id: 'island', name: 'Музей на острове', category: 'museum', east: -500, north: -500, island: true },
+  { id: 'park_a', name: 'Парк А', category: 'park', east: 0, north: 600, rating: 4.5 },
+  { id: 'cafe_b', name: 'Кафе Б', category: 'cafe', east: 600, north: 0 },
+  { id: 'cafe_se', name: 'Кафе на юго-востоке', category: 'cafe', east: 600, north: -600 },
+  { id: 'park_s', name: 'Парк на юге', category: 'park', east: 0, north: -600 },
+  { id: 'island', name: 'Музей на острове', category: 'museum', east: -600, north: -600, island: true },
   { id: 'far_cafe', name: 'Далёкое кафе', category: 'cafe', east: 3000, north: 0 },
 ];
 
@@ -262,17 +264,22 @@ describe('replaceStopInPlan: локальная замена остановки 
     expect(res.plan.gates.find((g) => g.gate === 'budget')?.pass).toBe(true);
   });
 
-  it('фолбэк не опускает план ниже базы: при 4 пройденных гейтах — отказ', async () => {
+  it('фолбэк допускает один деградационный гейт: при базе 4 принимается план с провалом улиц', async () => {
     const city = makeCity(DEFS);
-    // Тот же кандидат, но у текущего плана все гейты pass → база 4 > 3.
+    // У текущего плана все гейты pass (база 4). Кандидат park_s вносит новые
+    // ноги с retracing — гейт улиц падает, но требовать «не хуже базы» целиком
+    // значило бы отказывать почти всегда: замена — единственное место, где
+    // геометрия кольца меняется. Допуск ровно одного гейта (база − 1).
     const currentPlan = await buildCurrentPlan(city);
     expect(currentPlan.gates!.every((g) => g.pass)).toBe(true);
     const res = await replaceStopInPlan(
       makeInput(city, currentPlan, { candidates: [placeById(city, 'park_s')] }),
       city.port,
     );
-    expectFail(res);
-    expect(res.failure.code).toBe('NO_CANDIDATES');
+    expectOk(res);
+    expect(res.plan.allGatesPass).toBe(false);
+    expect(res.plan.gates.find((g) => g.gate === 'loop_no_repeat_street')?.pass).toBe(false);
+    expect(res.plan.gates.find((g) => g.gate === 'budget')?.pass).toBe(true);
   });
 
   it('ног не передано — движок перестраивает всю петлю через порт', async () => {

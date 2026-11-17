@@ -8,6 +8,7 @@ import { evaluateGates } from '@/lib/walk/gates';
 import { mulberry32 } from '@/lib/walk/internal/rng';
 import { makeCity, makeNode, type CityPlaceDef } from './gridCity';
 import type { WalkInput, WalkPlace, WalkPlanResult } from '@/lib/walk/types';
+import type { WalkRoutingPort } from '@/lib/walk/ports';
 
 function expectOk(res: WalkPlanResult): asserts res is Extract<WalkPlanResult, { ok: true }> {
   if (!res.ok) throw new Error(`ожидался план, получен отказ ${res.failure.code}: ${res.failure.detail}`);
@@ -65,11 +66,14 @@ function setup(
 
 describe('createWalkPlan: петля', () => {
   it('бюджет соблюдён, гейты pass, петля замкнута, причины заданы', async () => {
-    const { input, port } = setup(LOOP_DEFS);
+    // Бюджет 70: ходьба лучшей петли (26.7 мин) ≥ 35% бюджета — walk_share pass.
+    const { input, port } = setup(LOOP_DEFS, { budgetMinutes: 70 });
     const res = await createWalkPlan(input, port);
     expectOk(res);
 
-    expect(res.plans.length).toBeGreaterThanOrEqual(2);
+    // Дедуп по составу: на этой сетке все три варианта собирают одних якорей
+    // (кучный пул) — возвращается один неклонированный план.
+    expect(res.plans.length).toBeGreaterThanOrEqual(1);
     expect(res.plans.length).toBeLessThanOrEqual(3);
 
     const best = res.plans[0];
@@ -78,12 +82,13 @@ describe('createWalkPlan: петля', () => {
       'budget',
       'anchors',
       'long_legs',
+      'walk_share',
       'loop_no_repeat_street',
     ]);
 
-    // Бюджет ±10%: план 91.7 мин против бюджета 90.
-    expect(best.totalMinutes).toBeGreaterThanOrEqual(81 - 1e-6);
-    expect(best.totalMinutes).toBeLessThanOrEqual(99 + 1e-6);
+    // Бюджет ±10%: план ~71.7 мин против бюджета 70.
+    expect(best.totalMinutes).toBeGreaterThanOrEqual(63 - 1e-6);
+    expect(best.totalMinutes).toBeLessThanOrEqual(77 + 1e-6);
 
     // ≥ 2 якоря с непустой причиной; stay по таблице (парк 25, кафе 20).
     expect(best.stops.length).toBeGreaterThanOrEqual(2);
@@ -108,8 +113,9 @@ describe('createWalkPlan: петля', () => {
       }
     }
 
-    // Джиттер живой: варианты различаются скором (веса перемножены по-разному).
-    expect(new Set(res.plans.map((p) => p.score)).size).toBeGreaterThanOrEqual(2);
+    // Дедуп: составы якорей уникальны — клонов в списке нет.
+    const signatures = res.plans.map((p) => p.stops.map((s) => s.place.id).sort().join(','));
+    expect(new Set(signatures).size).toBe(signatures.length);
   });
 
   it('детерминизм: тот же вход — тот же результат бит-в-бит', async () => {
@@ -374,6 +380,29 @@ describe('createWalkPlan: случайные сиды (инварианты)', (
   });
 });
 
+describe('createWalkPlan: единая матрица вариантов', () => {
+  it('3 варианта → один вызов matrix порта (квота роутера ×3 дешевле)', async () => {
+    const defs = LOOP_DEFS;
+    const { port, places } = makeCity(defs);
+    let matrixCalls = 0;
+    const countingPort: WalkRoutingPort = {
+      matrix: async (s, t) => { matrixCalls += 1; return port.matrix(s, t); },
+      route: async (req) => port.route(req),
+    };
+    const input: WalkInput = {
+      start: makeNode(0, 0),
+      budgetMinutes: 70,
+      categoryWeights: { park: 3, cafe: 2, museum: 2, restaurant: 1 },
+      candidates: places,
+      isLoop: true,
+    };
+    const res = await createWalkPlan(input, countingPort);
+    expectOk(res);
+    expect(res.plans.length).toBeGreaterThan(0);
+    expect(matrixCalls).toBe(1);
+  });
+});
+
 describe('createWalkPlan: поводки на типы (structural compat)', () => {
   it('GeoPlace-подобный объект с лишними полями принимается', async () => {
     const extra = {
@@ -405,5 +434,44 @@ describe('createWalkPlan: поводки на типы (structural compat)', () 
     );
     expectOk(res);
     expect(res.plans[0].stops.map((s) => s.place.id)).toContain('x1');
+  });
+});
+
+// --- Категориальный кап (§4.6) ----------------------------------------------
+// Без капа жадный набор забивает план однотипными якорями: два магазина на
+// зелёной, три театра на обзорной. Дефолт — 2 одной категории, архетип может
+// сузить (categoryLimits, например зелёная: shopping 1).
+
+describe('createWalkPlan: категориальный кап', () => {
+  // Три кафе вокруг квадрата (роза из четырёх ног): стоянки по 5 минут
+  // (categoryStayMinutes), кольцо из трёх кафе ~42 мин и без капа влезает
+  // целиком — отсекает его именно кап, а не бюджет.
+  const CAP_DEFS: CityPlaceDef[] = [
+    { id: 'cafe1', name: 'Кафе 1', category: 'cafe', east: 500, north: 0 },
+    { id: 'cafe2', name: 'Кафе 2', category: 'cafe', east: 500, north: 500 },
+    { id: 'cafe3', name: 'Кафе 3', category: 'cafe', east: 0, north: 500 },
+  ];
+  const CAP_STAY = { cafe: 5 };
+
+  const cafeCount = (plan: { stops: { place: { category: string } }[] }): number =>
+    plan.stops.filter((s) => s.place.category === 'cafe').length;
+
+  it('дефолтный кап 2: третий однотипный якорь в план не попадает', async () => {
+    const { input, port } = setup(CAP_DEFS, { budgetMinutes: 45, categoryStayMinutes: CAP_STAY });
+    const res = await createWalkPlan(input, port);
+    expectOk(res);
+    expect(res.plans.length).toBeGreaterThan(0);
+    expect(cafeCount(res.plans[0])).toBe(2);
+  });
+
+  it('контр-проверка: лимит 3 снимает кап — влезают все три кафе', async () => {
+    const { input, port } = setup(CAP_DEFS, {
+      budgetMinutes: 45,
+      categoryStayMinutes: CAP_STAY,
+      categoryLimits: { cafe: 3 },
+    });
+    const res = await createWalkPlan(input, port);
+    expectOk(res);
+    expect(cafeCount(res.plans[0])).toBe(3);
   });
 });

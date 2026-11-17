@@ -130,6 +130,11 @@ export async function buildQuickWalk(input: QuickWalkInput): Promise<QuickWalkRe
       budgetMinutes: input.budgetMinutes,
       categoryWeights: profile.categoryWeights,
       categoryStayMinutes,
+      // Категориальные потолки архетипа (зелёная: один магазин) — движок
+      // берёт их как есть, погодный контекст лимиты не меняет.
+      ...(archetype.categoryLimits
+        ? { categoryLimits: archetype.categoryLimits as Record<string, number> }
+        : {}),
       candidates: shortlist.map((entry) => entry.place),
       isLoop: true,
     },
@@ -140,16 +145,21 @@ export async function buildQuickWalk(input: QuickWalkInput): Promise<QuickWalkRe
     // Лестница деградации (PRODUCT: почти всегда прогулка): строгий движок
     // честен, но спальный район не должен ронять главный сценарий. Тот же
     // мемо-порт; INVALID_INPUT деградацией не лечится — отсекается в оркестраторе.
+    // Отказ строгого движка передаётся как есть: лестница не прогоняет его второй раз.
     const fallback = await buildWalkWithFallback(
       {
         start,
         budgetMinutes: input.budgetMinutes,
         categoryWeights: profile.categoryWeights,
         categoryStayMinutes,
+        ...(archetype.categoryLimits
+          ? { categoryLimits: archetype.categoryLimits as Record<string, number> }
+          : {}),
         candidates: shortlist.map((entry) => entry.place),
         isLoop: true,
       },
       routingPort,
+      { strict: planResult },
     );
     if (!fallback.ok) {
       // Упала и уличная петля — роутер недоступен; INVALID_INPUT — наши параметры.

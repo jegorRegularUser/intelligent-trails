@@ -77,15 +77,18 @@ function deadRoutePort(port: WalkRoutingPort): WalkRoutingPort {
 
 describe('buildWalkWithFallback: лестница деградации', () => {
   it('strict ок — планы без признака деградации', async () => {
-    const { city, input } = setup(STRICT_DEFS);
+    // Бюджет 75: ходьба лучшей строгой петли (26.7 мин) ≥ 35% бюджета
+    // (walk_share pass); варианты с кучкованием честно падают на walk_share,
+    // но деградационными они не считаются — это альтернативы, не лестница.
+    const { city, input } = setup(STRICT_DEFS, { budgetMinutes: 75 });
     const res = await buildWalkWithFallback(input, city.port);
     if (!res.ok) throw new Error(`ожидались планы, получен отказ ${res.failure.code}: ${res.failure.detail}`);
 
     expect(res.plans.length).toBeGreaterThanOrEqual(1);
     for (const plan of res.plans) {
       expect(plan.degraded).toBeUndefined();
-      expect(plan.allGatesPass).toBe(true);
     }
+    expect(res.plans[0].allGatesPass).toBe(true);
   });
 
   it('кандидаты вне строгих зон → L2 с одним якорем: реальная геометрия, бюджет в допуске', async () => {

@@ -6,7 +6,7 @@
 // упала и она — честный отказ L1 (самый информативный).
 // Чистый модуль: вход/выход — типы движка, никакого UI и сети.
 
-import type { WalkFailure, WalkInput, WalkPlan } from './types';
+import type { WalkFailure, WalkInput, WalkPlan, WalkPlanResult } from './types';
 import type { WalkRoutingPort } from './ports';
 import { createWalkPlan } from './createWalkPlan';
 import { buildLoopThroughCandidates } from './loopThrough';
@@ -16,11 +16,21 @@ export type WalkWithFallbackResult =
   | { ok: true; plans: WalkPlan[] }
   | { ok: false; failure: WalkFailure };
 
+export interface WalkWithFallbackOptions {
+  /**
+   * Уже посчитанный результат строгого движка. Оркестратор уровня экшена
+   * зовёт createWalkPlan сам и передаёт отказ сюда — без него лестница
+   * прогоняла бы строгий движок второй раз (матрица 60×60 — не бесплатна).
+   */
+  strict?: WalkPlanResult;
+}
+
 export async function buildWalkWithFallback(
   input: WalkInput,
   ports: WalkRoutingPort,
+  options: WalkWithFallbackOptions = {},
 ): Promise<WalkWithFallbackResult> {
-  const strict = await createWalkPlan(input, ports);
+  const strict = options.strict ?? (await createWalkPlan(input, ports));
   if (strict.ok) return strict; // деградация не понадобилась, гейты строгие
 
   // Кривой вход — деградацией не лечится, честный отказ сразу.

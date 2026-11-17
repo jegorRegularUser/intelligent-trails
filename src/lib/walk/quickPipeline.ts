@@ -19,10 +19,16 @@ export const MIN_BUDGET = 15;
 export const MAX_BUDGET = 240;
 export const DEFAULT_TIMEZONE = 'Europe/Moscow';
 
-/** Пул кандидатов, который движок готов переварить: скоринг режет до этого. */
-export const ENGINE_CANDIDATE_CAP = 40;
+/**
+ * Пул кандидатов, который движок готов переварить: скоринг режет до этого.
+ * 24, а не «сколько влезет»: матрица времён растёт квадратично (N+1)² —
+ * 41×41 = 1681 ячеек ORS на КАЖДУЮ сборку при суточной квоте free-ключа
+ * на несколько сотен ячеек; топ-24 по скору не хуже топа-40 (качество
+ * набора определяют лучшие, а не хвост шорт-листа).
+ */
+export const ENGINE_CANDIDATE_CAP = 24;
 /** Сколько лучших кандидатов уходит в локальную замену остановки. */
-export const REPLACE_CANDIDATE_CAP = 8;
+export const REPLACE_CANDIDATE_CAP = 12;
 
 /**
  * Радиус поиска POI: примерно 40% бюджета времени — на радиус петли
@@ -45,11 +51,23 @@ export interface CandidatePool {
 const SECOND_WAVE_MULTIPLIER = 1.75;
 /** Порог эскалации: меньше этого числа кандидатов — ищем шире. */
 const MIN_POOL_SIZE = 3;
+/** Категорий в одном батче: 9 параллельных Overpass-запросов ловят rate-окно
+ *  и молча теряются (пул прилетал « park 8 + museum 12 » вместо ~60 мест). */
+const OVERPASS_BATCH_SIZE = 3;
+/** Пауза между батчами и перед ретраем — выходим из rate-окна Overpass. */
+const OVERPASS_BATCH_PAUSE_MS = 350;
+const OVERPASS_RETRY_PAUSE_MS = 900;
+
+function pause(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 /**
- * Поиск кандидатов по всем категориям профиля (вес > 0), параллельно,
- * с деградацией. Если пул слишком мал (спальный район: POI за зоной) —
- * вторая волна с радиусом ×1.75, результаты смёржены без дублей.
+ * Поиск кандидатов по всем категориям профиля (вес > 0). Категории ходят
+ * батчами с паузами, упавшие — один мгновенный ретрай: Overpass режет
+ * параллельные серии по rate-лимиту, и без ретрая пул каждый раз разный.
+ * Если пул слишком мал (спальный район: POI за зоной) — вторая волна
+ * с радиусом ×1.75, результаты смёржены без дублей.
  */
 export async function collectCandidates(
   provider: GeoProvider,
@@ -63,8 +81,30 @@ export async function collectCandidates(
     .map(([c]) => c)
     .filter((c) => c in PLACE_CATEGORIES);
 
-  const first = await Promise.allSettled(
-    categories.map((category) => provider.searchPlaces(start, category, { radiusMeters: radius, limit: 12 })),
+  const search = (category: string, radiusMeters: number) =>
+    provider.searchPlaces(start, category, { radiusMeters, limit: 12 });
+
+  // 1. Батчи по 3 категории с паузами.
+  const settled = new Map<string, PromiseSettledResult<GeoPlace[]>>();
+  for (let i = 0; i < categories.length; i += OVERPASS_BATCH_SIZE) {
+    const batch = categories.slice(i, i + OVERPASS_BATCH_SIZE);
+    const wave = await Promise.allSettled(batch.map((category) => search(category, radius)));
+    batch.forEach((category, j) => settled.set(category, wave[j]));
+    if (i + OVERPASS_BATCH_SIZE < categories.length) await pause(OVERPASS_BATCH_PAUSE_MS);
+  }
+
+  // 2. Ретрай упавших: rate-окно краткое, мгновенный повтор обычно проходит.
+  const failed = categories.filter(
+    (c) => settled.get(c)?.status === 'rejected',
+  );
+  if (failed.length > 0 && failed.length < categories.length) {
+    await pause(OVERPASS_RETRY_PAUSE_MS);
+    const retryWave = await Promise.allSettled(failed.map((category) => search(category, radius)));
+    failed.forEach((category, j) => settled.set(category, retryWave[j]));
+  }
+
+  const first: PromiseSettledResult<GeoPlace[]>[] = categories.map(
+    (c) => settled.get(c) ?? { status: 'rejected' as const, reason: new Error('skipped') },
   );
   const byKey = mergeWaves([first]);
   // Упали ВСЕ категории — сеть/сервис недоступны; частичные отказы — деградация.
@@ -72,12 +112,7 @@ export async function collectCandidates(
 
   if (byKey.size < MIN_POOL_SIZE && categories.length > 0) {
     const second = await Promise.allSettled(
-      categories.map((category) =>
-        provider.searchPlaces(start, category, {
-          radiusMeters: Math.round(radius * SECOND_WAVE_MULTIPLIER),
-          limit: 12,
-        }),
-      ),
+      categories.map((category) => search(category, Math.round(radius * SECOND_WAVE_MULTIPLIER))),
     );
     if (second.every((outcome) => outcome.status === 'rejected')) searchFailed = true;
     mergeWaves([second], byKey);

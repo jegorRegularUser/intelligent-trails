@@ -178,6 +178,16 @@ export async function replaceQuickStop(input: QuickWalkReplaceInput): Promise<Qu
   if (shortlist.length === 0) {
     return { ok: false, error: 'Кандидатов на замену не нашлось — попробуйте пересобрать прогулку' };
   }
+  // «Заменить» означает «дай другое такое же»: кандидаты той же категории,
+  // что и заменяемая, идут первыми (стабильная сортировка — скор-порядок
+  // внутри групп сохраняется), остальные типы — вторым эшелоном.
+  const replaceCategory = input.currentStops.find((stop) => stop.id === input.replaceStopId)?.category;
+  const orderedShortlist = replaceCategory
+    ? [...shortlist].sort(
+        (a, b) =>
+          Number(a.place.category !== replaceCategory) - Number(b.place.category !== replaceCategory),
+      )
+    : shortlist;
 
   const result = await replaceStopInPlan(
     {
@@ -194,7 +204,7 @@ export async function replaceQuickStop(input: QuickWalkReplaceInput): Promise<Qu
       ) as Record<string, number>,
       currentPlan: buildEnginePlan(input),
       replaceIndex: input.currentStops.findIndex((stop) => stop.id === input.replaceStopId),
-      candidates: shortlist.map((entry) => entry.place),
+      candidates: orderedShortlist.map((entry) => entry.place),
       ...(input.currentGatesPassed !== undefined
         ? { currentGatesPassed: input.currentGatesPassed }
         : {}),

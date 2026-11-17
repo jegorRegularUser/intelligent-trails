@@ -34,6 +34,8 @@ export interface WalkInput {
   walkingSpeedKmh?: number;
   /** Переопределение таблицы stay (минут на якорь по категории). */
   categoryStayMinutes?: Record<string, number>;
+  /** Потолок остановок одной категории в плане; нет записи — DEFAULT_CATEGORY_LIMIT. */
+  categoryLimits?: Record<string, number>;
 }
 
 /** Остановка-якорь. */
@@ -61,6 +63,7 @@ export type WalkGateName =
   | 'budget'
   | 'anchors'
   | 'long_legs'
+  | 'walk_share'
   | 'loop_no_repeat_street';
 
 /** Отчёт по одному гейту «Метрики хорошей прогулки» (PRODUCT.md). */
@@ -109,9 +112,15 @@ export type WalkPlanResult =
 export const DEFAULT_WALKING_SPEED_KMH = 4.5;
 /** Верхняя граница шорт-листа кандидатов перед заказом матрицы. */
 export const MAX_CANDIDATES = 60;
-/** Продуктовый потолок остановок (PRODUCT: 2–4, запас для длинных бюджетов). */
-export const MAX_STOPS = 6;
+/** Продуктовый потолок остановок: максимум для длинных бюджетов (жадный
+ *  набор берёт 4/6/8 по бюджету — см. createWalkPlan.maxStopsForBudget). */
+export const MAX_STOPS = 8;
+/** Две остановки одной категории — предел разнообразия без архетипных overrides. */
+export const DEFAULT_CATEGORY_LIMIT = 2;
 /** Нет сегмента длиннее ~25 минут без остановки. */
 export const MAX_LEG_MINUTES = 25;
 /** Бюджет ±10%. */
 export const BUDGET_TOLERANCE = 0.1;
+/** Петля: ходьба — не меньше этой доли бюджета (прогулка, не экскурсия с
+ *  сидением). План с меньшей ходьбой теряет allGatesPass, но не отказ. */
+export const MIN_WALK_SHARE = 0.35;

@@ -1,10 +1,10 @@
 // src/lib/walk/gates.ts
 // Гейты «Метрики хорошей прогулки» (PRODUCT.md), docs/walk-engine.md §8:
 // бюджет ±10%; ≥2 якоря с непустой причиной; нет ноги > 25 мин;
-// петля не возвращается по той же улице.
+// петля не возвращается по той же улице; петля: ходьба ≥ 35% бюджета.
 
 import type { GateReport, WalkGateName, WalkLatLng, WalkStop } from './types';
-import { BUDGET_TOLERANCE, MAX_LEG_MINUTES } from './types';
+import { BUDGET_TOLERANCE, MAX_LEG_MINUTES, MIN_WALK_SHARE } from './types';
 import { fractionWithinCorridor, polylineLengthMeters } from './internal/geo';
 
 /** Коридор одной улицы: проезжая часть + тротуары + джиттер роутинга. */
@@ -26,8 +26,25 @@ export function evaluateGates(facts: GateFacts): GateReport[] {
   reports.push(budgetGate(facts));
   reports.push(anchorsGate(facts));
   reports.push(longLegsGate(facts));
+  if (facts.isLoop) reports.push(walkShareGate(facts));
   if (facts.isLoop) reports.push(loopStreetGate(facts.legGeometries));
   return reports;
+}
+
+/** Петля — это прогулка: суммарная ходьба ≥ 35% бюджета (стоит в карточке
+ *  отдельной строкой, и «путь 7 минут, а пишет 60» — провал этого гейта). */
+function walkShareGate(facts: GateFacts): GateReport {
+  const gate: WalkGateName = 'walk_share';
+  const walk = facts.legDurations.reduce((sum, d) => sum + d, 0);
+  const minWalk = facts.budgetMinutes * MIN_WALK_SHARE;
+  const pass = walk >= minWalk - 1e-9;
+  return {
+    gate,
+    pass,
+    detail: pass
+      ? `ходьба ${Math.round(walk)} мин из бюджета ${Math.round(facts.budgetMinutes)}`
+      : `ходьба ${Math.round(walk)} мин — меньше ${Math.round(minWalk)} мин (35% бюджета)`,
+  };
 }
 
 function budgetGate(facts: GateFacts): GateReport {

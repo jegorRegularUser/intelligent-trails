@@ -42,21 +42,17 @@ function categoryRu(category: string): string {
 export function buildAnchorReason(facts: ReasonFacts): string {
   const parts: string[] = [];
   if (facts.isBestOfCategory) {
-    parts.push(`Лучший скор категории «${categoryRu(facts.place.category)}» в ${facts.zoneWord}`);
+    parts.push(`Лучший «${categoryRu(facts.place.category)}» поблизости`);
   }
   if ((facts.place.rating ?? 0) >= NOTABLE_RATING) {
-    parts.push(`высокий рейтинг (${facts.place.rating!.toFixed(1)})`);
+    parts.push(`рейтинг ${facts.place.rating!.toFixed(1)}`);
   }
   if (parts.length === 0) {
     if (facts.isClosest) {
       const meters = Math.round(facts.proximityMeters);
-      parts.push(
-        facts.zoneWord === 'радиусе'
-          ? `Самый близкий к старту среди выбранных (~${meters} м)`
-          : `Минимальный крюк с линии маршрута (~${meters} м)`,
-      );
+      parts.push(`Прямо по пути (~${meters} м)`);
     } else {
-      parts.push(`Заходит в план по весу категории «${categoryRu(facts.place.category)}»`);
+      parts.push(`Ещё один хороший «${categoryRu(facts.place.category)}» рядом`);
     }
   }
   return parts.join(', ');
@@ -70,24 +66,19 @@ export function zoneWordEn(zone: ZoneWord): ZoneWordEn {
 
 /** Английская версия buildAnchorReason. Категории — английские ключи реестра. */
 export function buildAnchorReasonEn(facts: ReasonFacts): string {
-  const zone = zoneWordEn(facts.zoneWord);
   const parts: string[] = [];
   if (facts.isBestOfCategory) {
-    parts.push(`Best-scoring ${facts.place.category} in the ${zone}`);
+    parts.push(`The best ${facts.place.category} around`);
   }
   if ((facts.place.rating ?? 0) >= NOTABLE_RATING) {
-    parts.push(`high rating (${facts.place.rating!.toFixed(1)})`);
+    parts.push(`rated ${facts.place.rating!.toFixed(1)}`);
   }
   if (parts.length === 0) {
     if (facts.isClosest) {
       const meters = Math.round(facts.proximityMeters);
-      parts.push(
-        facts.zoneWord === 'радиусе'
-          ? `Closest to the start among picks (~${meters} m)`
-          : `Smallest detour from the route line (~${meters} m)`,
-      );
+      parts.push(`Right on the way (~${meters} m)`);
     } else {
-      parts.push(`Picked for its ${facts.place.category} weight`);
+      parts.push(`Another good ${facts.place.category} nearby`);
     }
   }
   return parts.join(', ');

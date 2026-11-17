@@ -20,6 +20,8 @@ export interface Archetype {
   shadePriority: number;
   /** Сколько минут сидеть на остановке этой категории. */
   stayMinutes: Record<CategoryId, number>;
+  /** Потолок остановок одной категории в плане; нет записи — дефолт движка (2). */
+  categoryLimits?: Partial<Record<CategoryId, number>>;
   /** Насколько архетип «светится» в данный час (0..23), 0..1. Кусочно-линейная. */
   hourAffinity: (hour: number) => number;
   descriptionRu: string;
@@ -127,11 +129,13 @@ export const GREEN: Archetype = {
     cafe: 0.4, restaurant: 0.3, park: 1.0, museum: 0.2, attraction: 0.5,
     bar: 0.2, cinema: 0.1, shopping: 0.1, viewpoint: 0.7,
   }),
+  // Магазин на зелёной прогулке — перекус/букет, не якорь: один на план.
+  categoryLimits: { shopping: 1 },
   indoorBias: 0.05,
   shadePriority: 0.9,
   stayMinutes: record9({
     cafe: 20, restaurant: 30, park: 30, museum: 25, attraction: 15,
-    bar: 25, cinema: 120, shopping: 20, viewpoint: 15,
+    bar: 25, cinema: 120, shopping: 12, viewpoint: 15,
   }),
   hourAffinity: piecewiseAffinity(GREEN_AFFINITY),
 };
@@ -146,11 +150,13 @@ export const COFFEE: Archetype = {
     cafe: 1.0, restaurant: 0.7, park: 0.4, museum: 0.2, attraction: 0.4,
     bar: 0.3, cinema: 0.1, shopping: 0.5, viewpoint: 0.3,
   }),
+  // Кофейная — про сидячие остановки, не про шопинг: один магазин на план.
+  categoryLimits: { shopping: 1 },
   indoorBias: 0.6,
   shadePriority: 0.3,
   stayMinutes: record9({
     cafe: 30, restaurant: 35, park: 15, museum: 25, attraction: 15,
-    bar: 30, cinema: 120, shopping: 15, viewpoint: 10,
+    bar: 30, cinema: 120, shopping: 12, viewpoint: 10,
   }),
   hourAffinity: piecewiseAffinity(COFFEE_AFFINITY),
 };
@@ -184,6 +190,8 @@ export const RAINY: Archetype = {
     cafe: 0.8, restaurant: 0.7, park: 0.05, museum: 1.0, attraction: 0.3,
     bar: 0.5, cinema: 0.9, shopping: 0.9, viewpoint: 0.05,
   }),
+  // ТЦ под дождём — одна длинная остановка, а не три подряд.
+  categoryLimits: { shopping: 1 },
   indoorBias: 0.95,
   shadePriority: 0.2,
   stayMinutes: record9({

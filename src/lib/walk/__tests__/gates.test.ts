@@ -112,11 +112,17 @@ describe('gate loop_no_repeat_street', () => {
 });
 
 describe('набор гейтов по режимам', () => {
-  it('в А→Б нет гейта петли, в петле — все четыре', () => {
+  it('в А→Б нет гейтов петли, в петле — все пять', () => {
     const ab = evaluateGates(facts({ isLoop: false })).map((g) => g.gate);
     expect(ab).toEqual(['budget', 'anchors', 'long_legs']);
 
     const loop = evaluateGates(facts({ isLoop: true })).map((g) => g.gate);
-    expect(loop).toEqual(['budget', 'anchors', 'long_legs', 'loop_no_repeat_street']);
+    expect(loop).toEqual([
+      'budget',
+      'anchors',
+      'long_legs',
+      'walk_share',
+      'loop_no_repeat_street',
+    ]);
   });
 });

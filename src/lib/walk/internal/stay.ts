@@ -19,7 +19,9 @@ export const DEFAULT_STAY_MINUTES: Record<string, number> = {
   viewpoint: 15,
   attraction: 25,
   cinema: 90,
-  shopping: 40,
+  // Магазин — короткая остановка (перекус, букет), не сидячая: 40 минут
+  // в магазине посреди прогулки ломали тайминг («стоянки 40 из 60»).
+  shopping: 12,
 };
 
 export const DEFAULT_UNKNOWN_STAY_MINUTES = 20;
