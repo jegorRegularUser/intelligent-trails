@@ -13,6 +13,12 @@ export function getCloudProvider(): CloudProvider {
     // Пустая строка = «ключа нет» — роутинг честно деградирует в NO_ROUTE.
     instance = new CloudProvider({
       orsApiKey: process.env.OPENROUTESERVICE_API_KEY ?? '',
+      // ORS мигрирует api.openrouteservice.org → api.heigit.org — дефолт
+      // переключается env'ом без передеплоя кода (спред только при наличии,
+      // чтобы не перетереть дефолт resolveCloudConfig явным undefined).
+      ...(process.env.ORS_BASE_URL
+        ? { orsBaseUrl: process.env.ORS_BASE_URL }
+        : {}),
     });
   }
   return instance;
