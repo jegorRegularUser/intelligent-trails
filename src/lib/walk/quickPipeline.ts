@@ -13,6 +13,8 @@ import type { WeatherContext } from '@/lib/weather';
 import { evaluateOpeningHoursDetailed } from '@/lib/places/hours';
 import { PLACE_CATEGORIES } from '@/constants/categories';
 import type { WalkScoreReasons } from '@/components/walk/types';
+import { DEFAULT_WALKING_SPEED_KMH } from './types';
+import { zoneMetersForBudget } from './internal/geo';
 
 /** Границы бюджета главного сценария — едины для сборки и замены. */
 export const MIN_BUDGET = 15;
@@ -30,13 +32,17 @@ export const ENGINE_CANDIDATE_CAP = 24;
 /** Сколько лучших кандидатов уходит в локальную замену остановки. */
 export const REPLACE_CANDIDATE_CAP = 12;
 
+/** Доля бюджета под радиус поиска POI: остальное — ходьба туда-обратно и стоянки. */
+const SEARCH_RADIUS_WALK_SHARE = 0.4;
+
 /**
- * Радиус поиска POI: примерно 40% бюджета времени — на радиус петли
- * (остальное — ходьба туда-обратно и стоянки). Скорость из движка (4.5 км/ч).
+ * Радиус поиска POI: 40% бюджета времени, скорость из движка
+ * (DEFAULT_WALKING_SPEED_KMH, R6 — та же формула зоны, что у движка).
  */
 export function searchRadiusMeters(budgetMinutes: number): number {
-  const mPerMin = (4.5 * 1000) / 60;
-  return Math.round(mPerMin * budgetMinutes * 0.4);
+  return Math.round(
+    zoneMetersForBudget(budgetMinutes, DEFAULT_WALKING_SPEED_KMH, SEARCH_RADIUS_WALK_SHARE, 1),
+  );
 }
 
 /** Результат поиска кандидатов: пул + честный флаг «поиск недоступен». */

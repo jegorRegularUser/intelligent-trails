@@ -41,6 +41,23 @@ export function localProjection(center: WalkLatLng): LocalProjection {
   };
 }
 
+/**
+ * Радиус зоны в метрах из бюджета времени — консолидация формулы (R6),
+ * арифметика прежняя: доля бюджета на ходьбу × скорость / делитель.
+ * Делитель движка мотивирован «кольцом через якорь на противоположной
+ * стороне» (docs/walk-engine.md §5); пайплайн быстрого прогона зовёт её же
+ * с долей 0.4 под радиус поиска POI (quickPipeline.searchRadiusMeters).
+ */
+export function zoneMetersForBudget(
+  budgetMinutes: number,
+  speedKmh: number,
+  walkShare: number,
+  divisor: number,
+): number {
+  const mPerMin = (speedKmh * 1000) / 60;
+  return (mPerMin * walkShare * budgetMinutes) / divisor;
+}
+
 function pointToSegmentMetersXY(
   p: { x: number; y: number },
   a: { x: number; y: number },

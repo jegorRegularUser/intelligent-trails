@@ -16,6 +16,7 @@ import type { WalkFailure, WalkLatLng, WalkLeg, WalkPlan } from './types';
 import { DEFAULT_WALKING_SPEED_KMH } from './types';
 import type { WalkRouteSegment, WalkRoutingPort } from './ports';
 import { splitPolylineByWaypoints, splitRouteMetrics } from './internal/geo';
+import { errMessage, validateWalkCore } from './internal/geo-utils';
 import { mulberry32 } from './internal/rng';
 import { evaluateGates, maxStreetOverlap, SAME_STREET_OVERLAP_THRESHOLD } from './gates';
 
@@ -284,20 +285,8 @@ function validMetrics(segment: WalkRouteSegment): boolean {
 }
 
 function validateInput(input: StreetLoopInput): WalkFailure | null {
-  const [lat, lng] = input.start ?? [];
-  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
-    return { code: 'INVALID_INPUT', detail: 'start: ожидается [широта, долгота] с конечными числами' };
-  }
-  if (
-    typeof input.budgetMinutes !== 'number' ||
-    !Number.isFinite(input.budgetMinutes) ||
-    input.budgetMinutes <= 0
-  ) {
-    return { code: 'INVALID_INPUT', detail: 'budgetMinutes: положительное конечное число' };
-  }
+  // Стержень старт/бюджет — общий модуль geo-utils (R6); кандидатов у L3 нет.
+  const coreIssue = validateWalkCore(input);
+  if (coreIssue) return { code: 'INVALID_INPUT', detail: coreIssue };
   return null;
-}
-
-function errMessage(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
 }

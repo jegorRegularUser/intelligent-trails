@@ -20,6 +20,7 @@ import type {
 import { BUDGET_TOLERANCE, DEFAULT_WALKING_SPEED_KMH, MAX_LEG_MINUTES } from './types';
 import type { WalkRouteSegment, WalkRoutingPort } from './ports';
 import { haversineMeters, splitPolylineByWaypoints, splitRouteMetrics } from './internal/geo';
+import { errMessage, validateWalkCore } from './internal/geo-utils';
 import { resolveStayMinutes } from './internal/stay';
 import { mulberry32 } from './internal/rng';
 import { evaluateGates } from './gates';
@@ -270,33 +271,8 @@ export function triangleSideFor(start: WalkLatLng): 1 | -1 {
 const EPS = 1e-9;
 
 function validateInput(input: LoopThroughInput): WalkFailure | null {
-  if (!isFiniteLatLng(input.start)) {
-    return { code: 'INVALID_INPUT', detail: 'start: ожидается [широта, долгота] с конечными числами' };
-  }
-  if (
-    typeof input.budgetMinutes !== 'number' ||
-    !Number.isFinite(input.budgetMinutes) ||
-    input.budgetMinutes <= 0
-  ) {
-    return { code: 'INVALID_INPUT', detail: 'budgetMinutes: положительное конечное число' };
-  }
-  if (!Array.isArray(input.candidates)) {
-    return { code: 'INVALID_INPUT', detail: 'candidates: массив мест' };
-  }
+  // Стержень старт/бюджет/candidates — общий модуль geo-utils (R6).
+  const coreIssue = validateWalkCore(input);
+  if (coreIssue) return { code: 'INVALID_INPUT', detail: coreIssue };
   return null;
-}
-
-function isFiniteLatLng(p: unknown): p is WalkLatLng {
-  return (
-    Array.isArray(p) &&
-    p.length === 2 &&
-    Number.isFinite(p[0]) &&
-    Number.isFinite(p[1]) &&
-    Math.abs(p[0] as number) <= 90 &&
-    Math.abs(p[1] as number) <= 180
-  );
-}
-
-function errMessage(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
 }

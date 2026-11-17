@@ -23,6 +23,7 @@ import type {
 import { BUDGET_TOLERANCE, MAX_LEG_MINUTES } from './types';
 import type { WalkMatrixCell, WalkRoutingPort } from './ports';
 import { haversineMeters } from './internal/geo';
+import { isFiniteLatLng, errMessage, validateWalkCore } from './internal/geo-utils';
 import { resolveStayMinutes } from './internal/stay';
 import { evaluateGates } from './gates';
 import { buildAnchorReason, buildAnchorReasonEn } from './reasons';
@@ -349,16 +350,9 @@ function buildTrioTimes(cells: WalkMatrixCell[]): number[][] {
 // --- Валидация и утилиты ---
 
 function validateInput(input: ReplaceStopInput): WalkFailure | null {
-  if (!isFiniteLatLng(input.start)) {
-    return { code: 'INVALID_INPUT', detail: 'start: ожидается [широта, долгота] с конечными числами' };
-  }
-  if (
-    typeof input.budgetMinutes !== 'number' ||
-    !Number.isFinite(input.budgetMinutes) ||
-    input.budgetMinutes <= 0
-  ) {
-    return { code: 'INVALID_INPUT', detail: 'budgetMinutes: положительное конечное число' };
-  }
+  // Стержень старт/бюджет/candidates — общий модуль geo-utils (R6).
+  const coreIssue = validateWalkCore(input);
+  if (coreIssue) return { code: 'INVALID_INPUT', detail: coreIssue };
   const stops = input.currentPlan?.stops;
   if (!Array.isArray(stops) || stops.length === 0) {
     return { code: 'INVALID_INPUT', detail: 'currentPlan.stops: непустой массив остановок' };
@@ -378,27 +372,9 @@ function validateInput(input: ReplaceStopInput): WalkFailure | null {
       return { code: 'INVALID_INPUT', detail: `stayMinutes у «${stop.place.name}»: конечное число ≥ 0` };
     }
   }
-  if (!Array.isArray(input.candidates)) {
-    return { code: 'INVALID_INPUT', detail: 'candidates: массив мест' };
-  }
   return null;
-}
-
-function isFiniteLatLng(p: unknown): p is WalkLatLng {
-  return (
-    Array.isArray(p) &&
-    p.length === 2 &&
-    Number.isFinite(p[0]) &&
-    Number.isFinite(p[1]) &&
-    Math.abs(p[0] as number) <= 90 &&
-    Math.abs(p[1] as number) <= 180
-  );
 }
 
 function coordKey(p: WalkLatLng): string {
   return `${p[0].toFixed(6)},${p[1].toFixed(6)}`;
-}
-
-function errMessage(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
 }

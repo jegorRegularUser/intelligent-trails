@@ -23,7 +23,8 @@ import {
   MAX_LEG_MINUTES,
 } from './types';
 import type { WalkMatrixCell, WalkRouteSegment, WalkRoutingPort } from './ports';
-import { haversineMeters } from './internal/geo';
+import { haversineMeters, zoneMetersForBudget } from './internal/geo';
+import { isFiniteLatLng, errMessage, validateWalkCore } from './internal/geo-utils';
 import { resolveStayMinutes } from './internal/stay';
 import { mulberry32 } from './internal/rng';
 import { selectCandidates, type SelectionResult } from './selection';
@@ -97,7 +98,7 @@ export async function createWalkPlan(
     const w = input.categoryWeights[category];
     return typeof w === 'number' && Number.isFinite(w) && w > 0 ? w : 0;
   };
-  const baseZoneMeters = baseZone(input, variants, speedMPerMin);
+  const baseZoneMeters = baseZone(input, variants, speedKmh);
   const baseSelection = selectCandidates({
     start: input.start,
     end: input.end,
@@ -171,7 +172,7 @@ export async function createWalkPlan(
     liveBase,
   };
   for (const variant of variants) {
-    const outcome = await buildPlanForVariant(input, ports, variant, ctx, speedMPerMin);
+    const outcome = await buildPlanForVariant(input, ports, variant, ctx, speedKmh);
     if (outcome.plan) plans.push(outcome.plan);
     else if (outcome.failure) failures.push(outcome.failure);
   }
@@ -263,11 +264,11 @@ export interface VariantContext {
 function baseZone(
   input: WalkInput,
   variants: VariantParams[],
-  speedMPerMin: number,
+  speedKmh: number,
 ): number {
   if (input.isLoop) {
     const minDivider = Math.min(...variants.map((v) => v.radiusDivider));
-    return (speedMPerMin * LOOP_WALK_SHARE * input.budgetMinutes) / minDivider;
+    return zoneMetersForBudget(input.budgetMinutes, speedKmh, LOOP_WALK_SHARE, minDivider);
   }
   const straight = haversineMeters(input.start, input.end!);
   const maxFactor = Math.max(...variants.map((v) => v.corridorFactor));
@@ -291,7 +292,7 @@ async function buildPlanForVariant(
   ports: WalkRoutingPort,
   variant: VariantParams,
   ctx: VariantContext,
-  speedMPerMin: number,
+  speedKmh: number,
 ): Promise<VariantOutcome> {
   const isLoop = input.isLoop;
   const budget = input.budgetMinutes;
@@ -301,7 +302,7 @@ async function buildPlanForVariant(
   // 1. Зона варианта (§5) — фильтр единого отбора.
   let zoneMeters: number;
   if (isLoop) {
-    zoneMeters = (speedMPerMin * LOOP_WALK_SHARE * budget) / variant.radiusDivider;
+    zoneMeters = zoneMetersForBudget(budget, speedKmh, LOOP_WALK_SHARE, variant.radiusDivider);
   } else {
     const straight = haversineMeters(input.start, input.end!);
     zoneMeters = clamp(
@@ -578,9 +579,10 @@ function buildVariants(input: WalkInput, candidates: WalkPlace[]): VariantParams
 // --- Валидация и утилиты ---
 
 function validateInput(input: WalkInput): WalkFailure | null {
-  if (!isFiniteLatLng(input.start)) {
-    return { code: 'INVALID_INPUT', detail: 'start: ожидается [широта, долгота] с конечными числами' };
-  }
+  // Стержень (старт/бюджет/candidates) — общий с лестницей деградации (R6);
+  // ниже — специфика движка: финиш А→Б, скорость, веса.
+  const coreIssue = validateWalkCore(input);
+  if (coreIssue) return { code: 'INVALID_INPUT', detail: coreIssue };
   if (!input.isLoop) {
     if (!input.end || !isFiniteLatLng(input.end)) {
       return { code: 'INVALID_INPUT', detail: 'режим А→Б (isLoop: false) требует end: [широта, долгота]' };
@@ -588,13 +590,6 @@ function validateInput(input: WalkInput): WalkFailure | null {
     if (haversineMeters(input.start, input.end) < 1) {
       return { code: 'INVALID_INPUT', detail: 'старт и финиш совпадают — для кольца используйте isLoop: true' };
     }
-  }
-  if (
-    typeof input.budgetMinutes !== 'number' ||
-    !Number.isFinite(input.budgetMinutes) ||
-    input.budgetMinutes <= 0
-  ) {
-    return { code: 'INVALID_INPUT', detail: 'budgetMinutes: положительное конечное число' };
   }
   if (input.walkingSpeedKmh !== undefined) {
     const speed = input.walkingSpeedKmh;
@@ -611,21 +606,7 @@ function validateInput(input: WalkInput): WalkFailure | null {
   if (!hasPositiveWeight) {
     return { code: 'INVALID_INPUT', detail: 'categoryWeights: нужен хотя бы один конечный вес > 0' };
   }
-  if (!Array.isArray(input.candidates)) {
-    return { code: 'INVALID_INPUT', detail: 'candidates: массив мест' };
-  }
   return null;
-}
-
-function isFiniteLatLng(p: unknown): p is WalkLatLng {
-  return (
-    Array.isArray(p) &&
-    p.length === 2 &&
-    Number.isFinite(p[0]) &&
-    Number.isFinite(p[1]) &&
-    Math.abs(p[0] as number) <= 90 &&
-    Math.abs(p[1] as number) <= 180
-  );
 }
 
 function buildTimeMatrix(cells: WalkMatrixCell[], size: number): number[][] {
@@ -659,8 +640,4 @@ function clamp(v: number, min: number, max: number): number {
 
 function round1(v: number): number {
   return Math.round(v * 10) / 10;
-}
-
-function errMessage(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
 }
