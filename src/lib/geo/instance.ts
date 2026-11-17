@@ -10,7 +10,8 @@ let instance: CloudProvider | null = null;
 
 export function getCloudProvider(): CloudProvider {
   if (!instance) {
-    // Пустая строка = «ключа нет» — роутинг честно деградирует в NO_ROUTE.
+    // Пустая строка = «ключа нет» — роутинг уходит в OSRM-фолбэк (ADR-004),
+    // продукт работает без ключей вообще.
     instance = new CloudProvider({
       orsApiKey: process.env.OPENROUTESERVICE_API_KEY ?? '',
       // ORS мигрирует api.openrouteservice.org → api.heigit.org — дефолт
@@ -18,6 +19,11 @@ export function getCloudProvider(): CloudProvider {
       // чтобы не перетереть дефолт resolveCloudConfig явным undefined).
       ...(process.env.ORS_BASE_URL
         ? { orsBaseUrl: process.env.ORS_BASE_URL }
+        : {}),
+      // OSRM-фолбэк: тот же паттерн — свой инстанс/профиль подставляется
+      // без передеплоя (например, self-hosted routed-foot).
+      ...(process.env.OSRM_BASE_URL
+        ? { osrmBaseUrl: process.env.OSRM_BASE_URL }
         : {}),
     });
   }

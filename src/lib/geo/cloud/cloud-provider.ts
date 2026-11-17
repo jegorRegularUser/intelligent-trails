@@ -1,14 +1,17 @@
 // src/lib/geo/cloud/cloud-provider.ts
 // CloudProvider — тир 1 из ADR-001: универсальный GeoProvider на публичных
-// сервисах. Композиция адаптеров: валидация → кэш → ORS/Photon/Nominatim/
-// Overpass. Движок прогулки не знает, кто под ним; PackProvider встанет сюда же.
+// сервисах. Композиция адаптеров: валидация → кэш → ORS/OSRM/Photon/Nominatim/
+// Overpass. Роутинг — ORS с фолбэком на OSRM (ADR-004): без ключа ORS OSRM
+// первичный, с ключом — одна запасная попытка после отказа ORS. Движок
+// прогулки не знает, кто под ним; PackProvider встанет сюда же.
 
-import { GeoProvider, GeoPlace, LatLng, MatrixCell, PlaceCategory, ReverseGeocodeResult, RouteRequest, RouteSegment, SearchPlacesOptions, StreetFeature, SuggestItem } from '../types';
+import { GeoError, GeoErrorCode, GeoProvider, GeoPlace, LatLng, MatrixCell, PlaceCategory, ReverseGeocodeResult, RouteRequest, RouteSegment, SearchPlacesOptions, StreetFeature, SuggestItem } from '../types';
 import { pointKey, TtlLruCache } from '../cache';
 import { clampStreetRadius } from '../streetFeatures';
 import { CloudProviderConfig, resolveCloudConfig, resolveTimeouts, UPSTREAM_TIMEOUTS, UpstreamTimeouts } from './config';
 import { assertValidAlternatives, assertValidPoint, assertValidWaypoints } from './validate';
 import { OrsRoutingAdapter } from './ors';
+import { OsrmRoutingAdapter } from './osrm';
 import { PhotonAdapter } from './photon';
 import { NominatimAdapter } from './nominatim';
 import { OverpassPlacesAdapter } from './overpass-places';
@@ -42,6 +45,18 @@ const STREET_FEATURES_TIMEOUT_MS = 20_000;
 /** Payload фич на порядок жирнее placesCache — потолок записей ниже (S6). */
 const STREET_FEATURES_CACHE_ENTRIES = 50;
 
+/**
+ * Коды отказа ORS, после которых уходит ОДНА фолбэк-попытка OSRM (ADR-004):
+ * квота/ключ отклонён (маппятся в NO_ROUTE), лежка и мусор апстрима.
+ * UPSTREAM_TIMEOUT в списке нет — это наш клиентский бюджет, время запроса
+ * уже съедено, повторная попытка удвоила бы латентность без шанса на ответ.
+ */
+const ORS_FALLBACK_CODES: ReadonlySet<GeoErrorCode> = new Set([
+  'NO_ROUTE',
+  'UPSTREAM_UNAVAILABLE',
+  'UPSTREAM_INVALID',
+]);
+
 export class CloudProvider implements GeoProvider {
   readonly id = 'cloud' as const;
 
@@ -49,6 +64,9 @@ export class CloudProvider implements GeoProvider {
   private readonly timeouts: UpstreamTimeouts;
   private readonly fetchImpl: typeof fetch;
   private readonly ors: OrsRoutingAdapter;
+  private readonly osrm: OsrmRoutingAdapter;
+  /** Есть ли хоть один ключ ORS: без него роутинг целиком уходит в OSRM. */
+  private readonly hasOrsKey: boolean;
   private readonly photon: PhotonAdapter;
   private readonly nominatim: NominatimAdapter;
   private readonly overpass: OverpassPlacesAdapter;
@@ -97,6 +115,15 @@ export class CloudProvider implements GeoProvider {
       routeTimeoutMs: this.timeouts.orsRouteMs,
       matrixTimeoutMs: this.timeouts.orsMatrixMs,
     });
+    this.hasOrsKey = orsApiKeys.length > 0;
+    // Фолбэк-роутер (ADR-004): публичный FOSSGIS OSRM без ключа, fair use
+    // (семафор 1 запрос в полёте на примитив) — внутри адаптера.
+    this.osrm = new OsrmRoutingAdapter({
+      baseUrl: this.config.osrmBaseUrl,
+      fetchImpl: this.fetchImpl,
+      routeTimeoutMs: this.timeouts.osrmRouteMs,
+      matrixTimeoutMs: this.timeouts.osrmMatrixMs,
+    });
     this.photon = new PhotonAdapter({
       baseUrl: this.config.photonBaseUrl,
       fetchImpl: this.fetchImpl,
@@ -123,6 +150,20 @@ export class CloudProvider implements GeoProvider {
     });
   }
 
+  /**
+   * Одна фолбэк-попытка OSRM после отказа ORS (ADR-004). Ошибки не из
+   * ORS_FALLBACK_CODES (сейчас только UPSTREAM_TIMEOUT) пробрасываются как
+   * есть — время уже съедено. Ошибка фолбэка уходит наверх вместо ошибки
+   * ORS: первичный провайдер свою попытку уже провалил, наверху важен итог
+   * последней попытки.
+   */
+  private async withOsrmFallback<T>(orsError: unknown, run: () => Promise<T>): Promise<T> {
+    if (!(orsError instanceof GeoError) || !ORS_FALLBACK_CODES.has(orsError.code)) {
+      throw orsError;
+    }
+    return run();
+  }
+
   async route(req: RouteRequest): Promise<RouteSegment> {
     assertValidWaypoints(req.waypoints);
     assertValidAlternatives(req.alternatives);
@@ -135,7 +176,13 @@ export class CloudProvider implements GeoProvider {
     if (cached) return cached;
 
     // Ошибки не кэшируются: севшая квота не должна «отравить» маршрут на TTL.
-    const segment = await this.ors.route(req.waypoints, alternatives);
+    // Без ключа ORS сеть не дёргаем вовсе — OSRM первичный (ADR-004); с ключом
+    // ORS первичный, его отказ (403/429/5xx/мусор) → одна попытка OSRM.
+    const segment = this.hasOrsKey
+      ? await this.ors.route(req.waypoints, alternatives).catch((error) =>
+          this.withOsrmFallback(error, () => this.osrm.route(req.waypoints)),
+        )
+      : await this.osrm.route(req.waypoints);
     this.routeCache.set(cacheKey, segment);
     return segment;
   }
@@ -143,7 +190,9 @@ export class CloudProvider implements GeoProvider {
   /**
    * Альтернативные маршруты, основной первым (R3.a): до 3 одним
    * directions-запросом — это 1 запрос на ногу, не 3. Отдельный кэш: ответ
-   * шире одиночного route, смешивать ключи нельзя.
+   * шире одиночного route, смешивать ключи нельзя. Фолбэк (ADR-004): OSRM
+   * альтернатив не строит — отдаёт [основной], это легальная деградация
+   * контракта «альтернатив нет, маршрут есть».
    */
   async routeAlternatives(req: RouteRequest): Promise<RouteSegment[]> {
     assertValidWaypoints(req.waypoints);
@@ -154,7 +203,11 @@ export class CloudProvider implements GeoProvider {
     const cached = this.routeAltCache.get(cacheKey);
     if (cached) return cached;
 
-    const segments = await this.ors.routeWithAlternatives(req.waypoints, alternatives);
+    const segments = this.hasOrsKey
+      ? await this.ors.routeWithAlternatives(req.waypoints, alternatives).catch((error) =>
+          this.withOsrmFallback(error, async () => [await this.osrm.route(req.waypoints)]),
+        )
+      : [await this.osrm.route(req.waypoints)];
     this.routeAltCache.set(cacheKey, segments);
     return segments;
   }
@@ -163,8 +216,14 @@ export class CloudProvider implements GeoProvider {
     if (sources.length === 0 || targets.length === 0) return [];
     sources.forEach((point, index) => assertValidPoint(point, `sources[${index}]`));
     targets.forEach((point, index) => assertValidPoint(point, `targets[${index}]`));
-    // Чанкинг ≤40 источников, glue индексов и кэш чанков — в OrsRoutingAdapter.
-    return this.ors.matrix(sources, targets);
+    // Чанкинг, glue индексов и кэш чанков — в адаптерах: ORS режет по 40
+    // источников (POST), OSRM — по бюджету длины URL (GET). Политика фолбэка
+    // та же, что у route (ADR-004).
+    return this.hasOrsKey
+      ? await this.ors.matrix(sources, targets).catch((error) =>
+          this.withOsrmFallback(error, () => this.osrm.matrix(sources, targets)),
+        )
+      : this.osrm.matrix(sources, targets);
   }
 
   /**

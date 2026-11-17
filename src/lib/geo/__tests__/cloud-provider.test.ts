@@ -16,9 +16,22 @@ const ORS_ROUTE = {
 
 const MIRRORS = ['https://mirror-a.example/api/interpreter'] as const;
 
+const OSRM_ROUTE = {
+  code: 'Ok',
+  routes: [
+    {
+      legs: [{ duration: 80, distance: 100 }],
+      duration: 80,
+      distance: 100,
+      geometry: { coordinates: [[37.6184, 55.7512]] },
+    },
+  ],
+};
+
 /** Один fake fetch на все апстримы: роутинг по хосту. */
 function world(handlers: {
   ors?: (url: string, body: Record<string, unknown>) => Response;
+  osrm?: (url: string) => Response;
   photon?: (url: string) => Response;
   nominatim?: (url: string) => Response;
   overpass?: (url: string) => Response;
@@ -26,6 +39,10 @@ function world(handlers: {
   return createFakeFetch((url) => {
     if (url.startsWith('https://api.openrouteservice.org')) {
       throw new Error('ORS не должен вызываться в этом сценарии');
+    }
+    if (url.startsWith('https://routing.openstreetmap.de')) {
+      if (!handlers.osrm) throw new Error('OSRM не должен вызываться в этом сценарии');
+      return handlers.osrm(url);
     }
     if (url.startsWith('https://photon.komoot.io')) return handlers.photon?.(url) ?? jsonResponse({ features: [] });
     if (url.startsWith('https://nominatim.openstreetmap.org')) return handlers.nominatim?.(url) ?? jsonResponse([]);
@@ -92,21 +109,27 @@ describe('валидация входов — до сети', () => {
   });
 });
 
-describe('нет ключа ORS', () => {
-  it('route → NO_ROUTE, сеть не дёргается', async () => {
-    const fake = world({ overpass: () => jsonResponse({ elements: [] }) });
+describe('нет ключа ORS (ADR-004: OSRM — первичный роутер)', () => {
+  it('route уходит в OSRM, ORS не дёргается', async () => {
+    const fake = world({ osrm: () => jsonResponse(OSRM_ROUTE) });
     const provider = makeProvider(fake, '');
-    const err = (await provider.route({ waypoints: [MOSCOW, ZARYADYE] }).catch((e) => e)) as GeoError;
-    expect(err.code).toBe('NO_ROUTE');
-    expect(fake.calls).toHaveLength(0);
+    const segment = await provider.route({ waypoints: [MOSCOW, ZARYADYE] });
+    expect(segment.source).toBe('osrm');
+    expect(fake.calls).toHaveLength(1);
+    expect(new URL(fake.calls[0].url).host).toBe('routing.openstreetmap.de');
   });
 
-  it('matrix → NO_ROUTE, сеть не дёргается', async () => {
-    const fake = world({});
+  it('matrix уходит в OSRM, ORS не дёргается', async () => {
+    const fake = world({
+      osrm: () => jsonResponse({ code: 'Ok', durations: [[42]], distances: [[60]] }),
+    });
     const provider = makeProvider(fake, '');
-    const err = (await provider.matrix([MOSCOW], [ZARYADYE]).catch((e) => e)) as GeoError;
-    expect(err.code).toBe('NO_ROUTE');
-    expect(fake.calls).toHaveLength(0);
+    const cells = await provider.matrix([MOSCOW], [ZARYADYE]);
+    expect(cells).toEqual([
+      { sourceIndex: 0, targetIndex: 0, durationSeconds: 42, distanceMeters: 60 },
+    ]);
+    expect(fake.calls).toHaveLength(1);
+    expect(new URL(fake.calls[0].url).host).toBe('routing.openstreetmap.de');
   });
 });
 
