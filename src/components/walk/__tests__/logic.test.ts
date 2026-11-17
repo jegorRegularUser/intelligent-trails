@@ -11,6 +11,9 @@ import {
   estimateBuildRange,
   isWithinBudget,
   normalizeCustomMinutes,
+  swipeStepHeight,
+  sheetHeightForPhase,
+  SHEET_HEIGHTS,
   toggleVibe,
   walkMachine,
   type WalkMachineState,
@@ -293,5 +296,73 @@ describe("nextSwapCandidate (замена в один тап)", () => {
 
   it("DEFAULT_CUSTOM_MINUTES в разумном диапазоне степпера", () => {
     expect(normalizeCustomMinutes(DEFAULT_CUSTOM_MINUTES)).toBe(DEFAULT_CUSTOM_MINUTES);
+  });
+});
+
+describe("sheetHeightForPhase (шторка 45/60/85, M3)", () => {
+  it("idle/params → 45dvh: чипы времени видны без раскрытия", () => {
+    expect(sheetHeightForPhase("idle")).toBe(45);
+    expect(sheetHeightForPhase("params")).toBe(45);
+  });
+
+  it("building/error → 60dvh: статус и скелетон с запасом", () => {
+    expect(sheetHeightForPhase("building")).toBe(60);
+    expect(sheetHeightForPhase("error")).toBe(60);
+  });
+
+  it("ready → 85dvh: таймлайн раскрывается", () => {
+    expect(sheetHeightForPhase("ready")).toBe(85);
+  });
+
+  it("высоты — ровно ступени SHEET_HEIGHTS (свайп ведёт между ними)", () => {
+    for (const phase of ["idle", "params", "building", "error", "ready"] as const) {
+      expect(SHEET_HEIGHTS).toContain(sheetHeightForPhase(phase));
+    }
+  });
+});
+
+describe("swipeStepHeight (свайп ручки, порог 24px)", () => {
+  it("жест короче порога — это тап, шторка не двигается", () => {
+    expect(swipeStepHeight(-20, 45)).toBeNull();
+    expect(swipeStepHeight(20, 85)).toBeNull();
+  });
+
+  it("свайп вверх раскрывает на соседнюю высоту", () => {
+    expect(swipeStepHeight(-24, 45)).toBe(60);
+    expect(swipeStepHeight(-60, 60)).toBe(85);
+  });
+
+  it("свайп вниз сворачивает", () => {
+    expect(swipeStepHeight(24, 85)).toBe(60);
+    expect(swipeStepHeight(60, 60)).toBe(45);
+  });
+
+  it("на границах не выходит за таблицу", () => {
+    expect(swipeStepHeight(-24, 85)).toBe(85);
+    expect(swipeStepHeight(24, 45)).toBe(45);
+  });
+});
+
+describe("walkMachine: HYDRATE (гидрация ?w= без сети, M4/B4)", () => {
+  it("idle → ready: чужая прогулка открывается минуя building", () => {
+    expect(walkMachine(INITIAL_WALK_STATE, { type: "HYDRATE" })).toEqual({
+      phase: "ready",
+      resumePhase: null,
+    });
+  });
+
+  it("params → ready: открытая по ссылке прогулка заменяет ввод", () => {
+    const params: WalkMachineState = { phase: "params", resumePhase: null };
+    expect(walkMachine(params, { type: "HYDRATE" })).toEqual({
+      phase: "ready",
+      resumePhase: null,
+    });
+  });
+
+  it("building/ready не перебивается поздним HYDRATE", () => {
+    const building: WalkMachineState = { phase: "building", resumePhase: null };
+    expect(walkMachine(building, { type: "HYDRATE" })).toBe(building);
+    const ready: WalkMachineState = { phase: "ready", resumePhase: null };
+    expect(walkMachine(ready, { type: "HYDRATE" })).toBe(ready);
   });
 });

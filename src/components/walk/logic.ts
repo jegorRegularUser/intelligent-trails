@@ -88,7 +88,8 @@ export type WalkEvent =
   | { type: "RETRY" }
   | { type: "OFFLINE" }
   | { type: "ONLINE" }
-  | { type: "RESET" };
+  | { type: "RESET" }
+  | { type: "HYDRATE" };
 
 export interface WalkMachineState {
   phase: WalkPhase;
@@ -135,7 +136,60 @@ export function walkMachine(state: WalkMachineState, event: WalkEvent): WalkMach
         return { phase: resumePhase, resumePhase: null };
       }
       return state;
+    case "HYDRATE":
+      // Открытие чужой прогулки по ссылке ?w= (docs/ux-human-wave.md M4, B4):
+      // план готов без сети — машина сразу в ready, минуя building.
+      if (phase === "idle" || phase === "params") {
+        return { phase: "ready", resumePhase: null };
+      }
+      return state;
     case "RESET":
       return INITIAL_WALK_STATE;
   }
+}
+
+// --- Мобильная шторка по фазам (docs/ux-human-wave.md M3, docs/ux-main-screen.md §3) ---
+
+/** Высоты шторки, % от dvh: 45 — чипы первого экрана, 60 — сборка/ошибка, 85 — карточка. */
+export type SheetHeight = 45 | 60 | 85;
+
+export const SHEET_HEIGHTS: readonly SheetHeight[] = [45, 60, 85];
+
+/**
+ * Высота шторки по фазе экрана (M3): idle/params → 45dvh (чипы времени видны
+ * без раскрытия), building/error → 60dvh (статус + скелетон), ready → 85dvh
+ * (таймлайн). 'expert' не входит в таблицу — эксперт-обёртки живут без фазы
+ * и получают прежнее бинарное поведение.
+ */
+export function sheetHeightForPhase(phase: WalkPhase): SheetHeight {
+  switch (phase) {
+    case "ready":
+      return 85;
+    case "building":
+    case "error":
+      return 60;
+    default:
+      // idle / params / offline (offline приходит уже с resume-фазой)
+      return 45;
+  }
+}
+
+/** Порог свайпа ручки шторки, px (M3): жест короче порога — это тап. */
+export const SWIPE_THRESHOLD_PX = 24;
+
+/**
+ * Свайп ручки (M3): вертикальный жест ≥ порога ведёт на соседнюю высоту —
+ * вверх раскрывает, вниз сворачивает. Жест горизонтальный/короткий —
+ * null (это скролл или тап, ручка не вмешивается).
+ */
+export function swipeStepHeight(
+  deltaY: number,
+  current: SheetHeight,
+  threshold: number = SWIPE_THRESHOLD_PX,
+): SheetHeight | null {
+  if (Math.abs(deltaY) < threshold) return null;
+  const index = SHEET_HEIGHTS.indexOf(current);
+  if (index === -1) return null;
+  const next = deltaY < 0 ? index + 1 : index - 1;
+  return SHEET_HEIGHTS[Math.min(SHEET_HEIGHTS.length - 1, Math.max(0, next))];
 }
