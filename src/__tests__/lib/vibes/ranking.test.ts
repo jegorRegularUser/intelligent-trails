@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { GeoPlace } from '@/lib/geo/types';
-import { GREEN, COFFEE, RAINY } from '@/lib/vibes/archetypes';
+import { GREEN, COFFEE, EVENING, RAINY } from '@/lib/vibes/archetypes';
 import {
   scorePlace,
   selectDiverseAlternatives,
@@ -181,10 +181,97 @@ describe('scorePlace', () => {
     expect(s.reasonsRu.length).toBeGreaterThan(0);
     expect(s.reasonsRu).toContain('рейтинг 4.8 из 5');
     expect(s.reasonsRu).toContain('упоминается в Википедии');
-    expect(s.reasonsRu).toContain('ядро вайба «Зелёная»');
+    // M5: факт категории вместо скорингового «ядро вайба „X“».
+    expect(s.reasonsRu).toContain('в зелени');
     expect(s.reasonsRu).toContain('работает сейчас');
-    expect(s.reasonsRu).toContain('даст тень и зелень в жару');
-    expect(s.reasonsEn).toContain('core of the "Green" vibe');
+    expect(s.reasonsRu).toContain('тень в жару');
+    expect(s.reasonsEn).toContain('surrounded by greenery');
+    expect(s.reasonsEn).toContain('shade in the heat');
+  });
+
+  it('чипы — по фактам тегов и категории, не по месту в сортировке (M5)', () => {
+    // Парк в COFFEE (вес 0.4, не ядро вайба) — чип «в зелени» всё равно факт.
+    const park = scorePlace(makePlace({ category: 'park' }), { archetype: COFFEE });
+    expect(park.reasonsRu).toContain('в зелени');
+    expect(park.reasonsRu).not.toContain('ядро вайба');
+
+    // Смотровая — панорама: факт категории, не вес в архетипе.
+    const view = scorePlace(makePlace({ category: 'viewpoint' }), { archetype: COFFEE });
+    expect(view.reasonsRu).toContain('панорамный вид');
+    expect(view.reasonsEn).toContain('panoramic views');
+
+    // Тег факта: летняя терраса.
+    const terrace = scorePlace(
+      makePlace({ tags: { outdoor_seating: 'yes' } }),
+      { archetype: COFFEE },
+    );
+    expect(terrace.reasonsRu).toContain('столики на улице');
+    expect(terrace.reasonsEn).toContain('outdoor seating');
+
+    // Тег воды: «рядом с водой», но без дубля у waterfront-категории.
+    const water = scorePlace(makePlace({ tags: { natural: 'water' } }), { archetype: GREEN });
+    expect(water.reasonsRu).toContain('рядом с водой');
+    const embankment = scorePlace(
+      makePlace({ category: 'waterfront', tags: { natural: 'water' } }),
+      { archetype: GREEN },
+    );
+    expect(embankment.reasonsRu.filter((r) => r === 'рядом с водой')).toHaveLength(1);
+  });
+
+  it('открыто до HH:MM: известное время закрытия называет факт, неизвестное — «работает сейчас»', () => {
+    const until = scorePlace(makePlace(), {
+      archetype: COFFEE,
+      hoursState: 'open',
+      closesAtText: '22:00',
+    });
+    expect(until.reasonsRu).toContain('открыто до 22:00');
+    expect(until.reasonsEn).toContain('open until 22:00');
+
+    const noTime = scorePlace(makePlace(), { archetype: COFFEE, hoursState: 'open' });
+    expect(noTime.reasonsRu).toContain('работает сейчас');
+    expect(noTime.reasonsRu).not.toContain('открыто до');
+    // null — 24/7 или непарсируемые часы: время не выдумываем.
+    const unknown = scorePlace(makePlace(), {
+      archetype: COFFEE,
+      hoursState: 'open',
+      closesAtText: null,
+    });
+    expect(unknown.reasonsRu).toContain('работает сейчас');
+  });
+
+  it('табу на язык скоринга в чипах: ни «скора», ни «в радиусе», ни «ядра вайба»', () => {
+    const battery = [
+      scorePlace(makePlace({ category: 'park', rating: 4.8 }), {
+        archetype: GREEN,
+        hoursState: 'open',
+        closesInMinutes: 120,
+        closesAtText: '22:00',
+      }),
+      scorePlace(makePlace({ category: 'museum' }), { archetype: RAINY, hoursState: 'closed' }),
+      scorePlace(makePlace({ category: 'cafe' }), { archetype: COFFEE, hour: 23 }),
+      scorePlace(makePlace({ category: 'bar' }), {
+        archetype: EVENING,
+        weather: weather({ isDark: true }),
+      }),
+      scorePlace(makePlace({ category: 'viewpoint', rating: 4.6 }), {
+        archetype: GREEN,
+        weather: weather({ tempC: 30 }),
+      }),
+    ];
+    for (const s of battery) {
+      expect(s.reasonsRu.length).toBe(s.reasonsEn.length);
+      for (const ru of s.reasonsRu) {
+        expect(ru).not.toContain('скор');
+        expect(ru).not.toContain('в радиусе');
+        expect(ru).not.toContain('лучший скор');
+        expect(ru).not.toContain('ядро вайба');
+      }
+      for (const en of s.reasonsEn) {
+        expect(en.toLowerCase()).not.toContain('score');
+        expect(en.toLowerCase()).not.toContain('radius');
+        expect(en.toLowerCase()).not.toContain('core of the');
+      }
+    }
   });
 
   it('закрытое место получает причину «сейчас закрыто»', () => {

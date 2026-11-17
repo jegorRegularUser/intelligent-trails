@@ -45,8 +45,29 @@ const LIT_TAG_BONUS = 0.05;
 
 /** Порог рейтинга, начиная с которого он попадает в reasons. */
 const REASON_RATING_MIN = 4.2;
-/** Веса от 0.75 и выше считаем «ядром» архетипа для reasons. */
-const CORE_WEIGHT_MIN = 0.75;
+
+/**
+ * Человеческие чипы по факту категории (M5, docs/ux-human-wave.md): физическое
+ * описание места вместо скорингового «ядро вайба „X“». Категории без телесного
+ * факта (кафе, музей, магазин…) — без чипа: повторять категорию — тавтология,
+ * выдумывать описание без данных — враньё (PRODUCT.md, принцип 5).
+ */
+const CATEGORY_FACT_CHIP: Record<string, { ru: string; en: string }> = {
+  park: { ru: 'в зелени', en: 'surrounded by greenery' },
+  waterfront: { ru: 'рядом с водой', en: 'by the water' },
+  viewpoint: { ru: 'панорамный вид', en: 'panoramic views' },
+};
+
+/** Теги OSM, говорящие «место у самой воды»: факт тега, не место в сортировке. */
+function isByWater(tags: Record<string, string>): boolean {
+  return (
+    tags.natural === 'water' ||
+    tags.natural === 'beach' ||
+    tags.waterway !== undefined ||
+    tags.man_made === 'pier' ||
+    tags.amenity === 'fountain'
+  );
+}
 
 // --- Типы ----------------------------------------------------------------------
 
@@ -63,6 +84,12 @@ export interface ScorePlaceContext {
    * (lib/places/hours, evaluateOpeningHoursDetailed). null/undefined — не знаем.
    */
   closesInMinutes?: number | null;
+  /**
+   * Текст времени закрытия («22:00») от того же парсера часов: чип
+   * «открыто до 22:00» называет факт, а не «работает сейчас» наугад.
+   * null/undefined — круглосуточные/непонятные часы: время не выдумываем.
+   */
+  closesAtText?: string | null;
   /** Погода; null/undefined = деградация без погодных модификаторов. */
   weather?: WeatherContext | null;
   /** Текущий час 0..23 — включает множитель hourAffinity архетипа. */
@@ -140,7 +167,10 @@ function planarDistance(a: LatLng, b: LatLng, origin: LatLng): number {
 /**
  * Скор места под архетип и контекст:
  *   score = clamp01(base · w · hourAffinity? + bonusIndoor + bonusOpen + bonusWeather)
- * reasons — человекочитаемые обоснования (параллельные массивы ru/en).
+ * reasons — человеческие чипы (параллельные массивы ru/en, M5): факты места
+ * (категория-факт, теги, часы) и слагаемые скора, которые видны человеку
+ * («рейтинг 4.8 из 5», «тень в жару»). Никакого языка скоринга: ни позиции в
+ * сортировке, ни «ядра вайба» — если честного факта нет, чипа тоже нет.
  */
 export function scorePlace(place: GeoPlace, ctx: ScorePlaceContext): PlaceScore {
   const a = ctx.archetype;
@@ -165,8 +195,16 @@ export function scorePlace(place: GeoPlace, ctx: ScorePlaceContext): PlaceScore 
   if (tags.wikipedia || tags.wikidata) {
     push('упоминается в Википедии', 'featured on Wikipedia');
   }
-  if (w >= CORE_WEIGHT_MIN) {
-    push(`ядро вайба «${a.labelRu}»`, `core of the "${a.labelEn}" vibe`);
+  // Человеческие чипы — факты места (M5), не слагаемые скора: что здесь есть,
+  // а не почему место обгоняет соседей. Чип по категории + чипы по тегам;
+  // waterfront-категория и водяной тег не дают дубль «рядом с водой».
+  const categoryChip = CATEGORY_FACT_CHIP[place.category];
+  if (categoryChip) push(categoryChip.ru, categoryChip.en);
+  if (place.category !== 'waterfront' && isByWater(tags)) {
+    push('рядом с водой', 'by the water');
+  }
+  if (tags.outdoor_seating === 'yes') {
+    push('столики на улице', 'outdoor seating');
   }
 
   // fit: качество × принадлежность архетипу × (опционально) аффинность часа.
@@ -199,7 +237,13 @@ export function scorePlace(place: GeoPlace, ctx: ScorePlaceContext): PlaceScore 
   // bonusOpen: инъекция часов работы; unknown/отсутствие — ноль.
   if (ctx.hoursState === 'open') {
     score += OPEN_BONUS;
-    push('работает сейчас', 'open right now');
+    // Время закрытия известно — называем факт «открыто до 22:00»;
+    // круглосуточные/непонятные часы — честное «работает сейчас» (M5).
+    if (ctx.closesAtText) {
+      push(`открыто до ${ctx.closesAtText}`, `open until ${ctx.closesAtText}`);
+    } else {
+      push('работает сейчас', 'open right now');
+    }
     // Открыто, но закроется раньше, чем юзер успеет насладиться — причина-минус.
     if (
       ctx.closesInMinutes !== null &&
@@ -220,7 +264,7 @@ export function scorePlace(place: GeoPlace, ctx: ScorePlaceContext): PlaceScore 
     if (hints.preferShade) {
       if (place.category === 'park') {
         score += SHADE_PARK_BONUS;
-        push('даст тень и зелень в жару', 'offers shade and greenery in the heat');
+        push('тень в жару', 'shade in the heat');
       } else if (!isPlaceIndoor) {
         score -= SHADE_EXPOSED_PENALTY;
         push('открытая остановка в жару', 'an exposed stop in the heat', true);

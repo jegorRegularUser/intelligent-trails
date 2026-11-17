@@ -286,6 +286,9 @@ export function scoreCandidatePool(params: ScorePoolParams): ScoredPoolEntry[] {
           hour,
           hoursState: hours.state,
           closesInMinutes: hours.minutesUntilClose,
+          // M5: чип «открыто до 22:00» называет факт, а не «работает сейчас»
+          // наугад; у 24/7 и непарсируемых часов closesAtText = null.
+          closesAtText: hours.closesAtText,
         }),
       };
     })
@@ -302,6 +305,8 @@ const MIN_ALIVE_FOR_FILTER = 12;
  * Карта скоринговых причин для карточки по id места. Негативные причины
  * («сейчас закрыто», жара, тьма) попадают в данные только когда позитивных
  * нет вовсе: они объясняют хвост шорт-листа и показываются приглушённо.
+ * Формулы чипов — человеческие факты места (M5), живут в vibes/ranking.ts;
+ * здесь только позитив/негатив-разводка по флагу причины.
  */
 export function buildScoreReasonsMap(scored: ScoredPoolEntry[]): Map<string, WalkScoreReasons> {
   const map = new Map<string, WalkScoreReasons>();

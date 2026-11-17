@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  buildScoreReasonsMap,
   collectCandidates,
   diversifyByAzimuth,
   fetchStreetInterest,
@@ -53,6 +54,61 @@ describe('quickPipeline: мерж карты скоринговых причин
     expect(merged.size).toBe(2);
     expect(merged).not.toBe(base);
     expect(base.size).toBe(1);
+  });
+});
+
+describe('quickPipeline: карта причин для чипов — человеческие формулы (M5)', () => {
+  const NOW = new Date('2024-01-15T20:00:00Z'); // понедельник 20:00 UTC
+  const PROFILE = {
+    categoryWeights: { park: 1, cafe: 1 },
+    adjustments: [],
+  } as unknown as AdjustedProfile;
+
+  it('чипы — факты места (категория, теги, часы), без языка скоринга', () => {
+    const pool: GeoPlace[] = [
+      {
+        id: 'park1',
+        name: 'Парк',
+        category: 'park',
+        coordinates: [55.75, 37.62],
+        tags: { opening_hours: 'Mo-Fr 08:00-22:00' }, // 20:00 UTC — открыто до 22:00
+      },
+      {
+        id: 'cafe1',
+        name: 'Кафе',
+        category: 'cafe',
+        coordinates: [55.751, 37.62],
+        tags: { opening_hours: 'Mo-Fr 09:00-18:00' }, // уже закрыто — негатив-чип
+      },
+    ];
+    const scored = scoreCandidatePool({ pool, profile: PROFILE, weather: null, timezone: 'UTC', now: NOW });
+    const map = buildScoreReasonsMap(scored);
+
+    const park = map.get('park1')!;
+    expect(park.ru).toContain('в зелени');
+    expect(park.ru).toContain('открыто до 22:00');
+    expect(park.en).toContain('open until 22:00');
+    expect(park.ru).not.toContain('ядро вайба');
+
+    const cafe = map.get('cafe1')!;
+    expect(cafe.ru).toContain('сейчас закрыто');
+    expect(cafe.en).toContain('currently closed');
+
+    // Табу на язык скоринга (docs/ux-human-wave.md M5): ни «скора», ни
+    // «в радиусе», ни «лучший скор» — ни в одном чипе фикстурного пула.
+    for (const { ru, en } of map.values()) {
+      for (const chip of ru) {
+        expect(chip).not.toContain('скор');
+        expect(chip).not.toContain('в радиусе');
+        expect(chip).not.toContain('лучший скор');
+        expect(chip).not.toContain('ядро вайба');
+      }
+      for (const chip of en) {
+        expect(chip.toLowerCase()).not.toContain('score');
+        expect(chip.toLowerCase()).not.toContain('radius');
+      }
+      expect(ru.length).toBe(en.length);
+    }
   });
 });
 
