@@ -13,9 +13,12 @@ import type {
   WalkPlan,
   WalkPlanResult,
   WalkPlace,
+  WalkStreetFeature,
+  WalkStreetFeatureKind,
   WalkStop,
 } from './types';
 import {
+  ALT_INTEREST_BUFFER_M,
   BUDGET_TOLERANCE,
   DEFAULT_CATEGORY_LIMIT,
   DEFAULT_WALKING_SPEED_KMH,
@@ -24,13 +27,18 @@ import {
   MAX_CANDIDATES,
   MAX_LEG_MINUTES,
   SAFETY_MARGIN_SHARE,
+  STREET_FEATURE_KIND_WEIGHTS,
 } from './types';
 import type { WalkMatrixCell, WalkRouteSegment, WalkRoutingPort } from './ports';
 import {
+  bboxIntersects,
+  bboxOf,
+  fractionWithinAnyCorridor,
   fractionWithinCorridor,
   haversineMeters,
   loopAreaMeters,
   polylineLengthMeters,
+  resamplePolyline,
   splitPolylineByWaypoints,
   splitRouteMetrics,
   viaOffsetForExtraMeters,
@@ -270,14 +278,61 @@ export interface LegVariantCandidate {
   distanceMeters: number;
   durationMinutes: number;
   geometry: WalkLatLng[];
+  /**
+   * Доля полилинии альтернативы в буфере ALT_INTEREST_BUFFER_M от
+   * green/water/pedestrian фич (S5); фич нет — undefined (тайбрейкер
+   * вырождается в прежнее поведение).
+   */
+  interestShare?: number;
+}
+
+// --- Интерес-тайбрейкер альтернатив (docs/street-interest-wave.md S5/C11) ---
+
+/** Классы фич, чьи коридоры интересны тайбрейкеру: viewpoint/art — точки, не коридоры. */
+const ALT_INTEREST_KINDS: readonly WalkStreetFeatureKind[] = ['green', 'water', 'pedestrian'];
+/** Кап «топ-K фич по весу» на ногу (C11): сотни полилиний × 64 точки × ноги
+ *  × ≤3 альтернативы не должны стать самым дорогим шагом сборки. */
+const ALT_INTEREST_TOP_FEATURES = 32;
+
+/**
+ * Полилинии фич вокруг ноги для S5-тайбрейкера: bbox-префильтр (буфер 80 м)
+ * + топ-K по весу класса (STREET_FEATURE_KIND_WEIGHTS — единый с S2),
+ * ресемпл 64 точек заранее — полилинии общие для всех альтернатив ноги.
+ * Пусто при отсутствии фич — критерий (а) непересечение остаётся первичным.
+ */
+export function altInterestPolylinesForLeg(
+  features: WalkStreetFeature[] | undefined,
+  from: WalkLatLng,
+  to: WalkLatLng,
+): WalkLatLng[][] {
+  if (!features || features.length === 0) return [];
+  const legBox = bboxOf([from, to], ALT_INTEREST_BUFFER_M);
+  const near = features.filter(
+    (feature) =>
+      ALT_INTEREST_KINDS.includes(feature.kind) &&
+      feature.geometry.length >= 2 &&
+      bboxIntersects(bboxOf(feature.geometry, 0), legBox),
+  );
+  if (near.length === 0) return [];
+  const top =
+    near.length <= ALT_INTEREST_TOP_FEATURES
+      ? near
+      : near
+          .slice()
+          .sort(
+            (a, b) => STREET_FEATURE_KIND_WEIGHTS[b.kind] - STREET_FEATURE_KIND_WEIGHTS[a.kind],
+          )
+          .slice(0, ALT_INTEREST_TOP_FEATURES);
+  return top.map((feature) => resamplePolyline(feature.geometry, 64));
 }
 
 /**
  * Выбор варианта ноги среди ответов routeAlternatives. Правила дока:
  *  (а) минимум пересечения с уже принятыми ногами — та же механика, что у
  *      гейта «та же улица» (коридор 30 м, короткая нога в коридоре длинной);
- *  (б) при равном пересечении — самый длинный, влезающий в потолок 1.1·B
- *      (fitsCeiling — оценка полного плана с этой ногой);
+ *  (б) при равном пересечении — бОльшая доля интереса (S5: доля полилинии в
+ *      буфере 80 м от зелени/воды/пешеходных улиц; «прогулка, а не кратчайший
+ *      путь»), при равном интересе — самый длинный, влезающий в потолок 1.1·B;
  *  (в) тайбрейкер — порядок входа: основной маршрут у порта всегда первый.
  * Кандидаты без геометрии (<2 точек) из сравнения пересечений исключены:
  * fractionWithinCorridor на пустой полилинии даёт 0, и такая нога вытесняла
@@ -293,18 +348,23 @@ export function chooseLegVariant(
   let best = -1;
   let bestOverlap = Infinity;
   let bestMinutes = -1;
+  let bestInterest = -1;
   for (let i = 0; i < candidates.length; i++) {
     const candidate = candidates[i];
     if (!fitsCeiling(candidate.durationMinutes)) continue;
     if (candidate.geometry.length < 2) continue;
     const overlap = maxOverlapOnAccepted(candidate.geometry, acceptedGeometries);
+    const interest = candidate.interestShare ?? 0;
     if (
       overlap < bestOverlap - 1e-9 ||
-      (overlap <= bestOverlap + 1e-9 && candidate.durationMinutes > bestMinutes)
+      (overlap <= bestOverlap + 1e-9 &&
+        (interest > bestInterest + 1e-9 ||
+          (interest >= bestInterest - 1e-9 && candidate.durationMinutes > bestMinutes)))
     ) {
       best = i;
       bestOverlap = overlap;
       bestMinutes = candidate.durationMinutes;
+      bestInterest = interest;
     }
   }
   if (best >= 0) return best;
@@ -909,6 +969,9 @@ async function buildPlanForVariant(
         typeof ports.routeAlternatives === 'function'
       ) {
         ctx.routeCalls.count += 1;
+        // S5/C11: полилинии фич вокруг ноги считаются ОДИН раз на ногу и
+        // делятся всеми альтернативами (ресемпл 64 заранее).
+        const interestPolylines = altInterestPolylinesForLeg(input.streetFeatures, from, to);
         try {
           const alternatives = (await ports.routeAlternatives({ waypoints: [from, to] })).filter(
             validMetrics,
@@ -919,6 +982,15 @@ async function buildPlanForVariant(
                 distanceMeters: s.distanceMeters,
                 durationMinutes: s.durationSeconds / 60,
                 geometry: s.geometry ?? [],
+                ...(interestPolylines.length > 0
+                  ? {
+                      interestShare: fractionWithinAnyCorridor(
+                        s.geometry ?? [],
+                        interestPolylines,
+                        ALT_INTEREST_BUFFER_M,
+                      ),
+                    }
+                  : {}),
               })),
               legs.map((leg) => leg.geometry),
               fitsCeiling,

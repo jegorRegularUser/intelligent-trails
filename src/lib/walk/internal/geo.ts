@@ -324,6 +324,45 @@ export function resamplePolyline(points: WalkLatLng[], maxPoints: number): WalkL
 }
 
 /**
+ * Доля точек `points`, лежащих в коридоре corridorM хотя бы от одной из
+ * полилиний (S5-тайбрейкер альтернатив: доля пути в буфере 80 м от зелени/
+ * воды/пешеходных улиц). points ресемплятся здесь; входные полилинии
+ * предполагаются уже прореженными (ресемпл 64 — S1), но подстрахуемся.
+ */
+export function fractionWithinAnyCorridor(
+  points: WalkLatLng[],
+  polylines: WalkLatLng[][],
+  corridorM: number,
+): number {
+  if (points.length === 0 || polylines.length === 0) return 0;
+  const proj = localProjection(points[0]);
+  const sampled = resamplePolyline(points, 64).map((p) => proj.toMeters(p));
+  const others = polylines
+    .filter((polyline) => polyline.length >= 2)
+    .map((polyline) => resamplePolyline(polyline, 64).map((q) => proj.toMeters(q)));
+  const singles = polylines.filter((polyline) => polyline.length === 1).map((p) => proj.toMeters(p[0]));
+  if (others.length === 0 && singles.length === 0) return 0;
+
+  let inside = 0;
+  for (const p of sampled) {
+    let best = Number.POSITIVE_INFINITY;
+    for (const polyline of others) {
+      for (let i = 0; i < polyline.length - 1; i++) {
+        best = Math.min(best, pointToSegmentMetersXY(p, polyline[i], polyline[i + 1]));
+        if (best <= corridorM) break;
+      }
+      if (best <= corridorM) break; // точка уже в коридоре — точнее мерить незачем
+    }
+    for (const single of singles) {
+      best = Math.min(best, Math.hypot(p.x - single.x, p.y - single.y));
+      if (best <= corridorM) break;
+    }
+    if (best <= corridorM) inside++;
+  }
+  return inside / sampled.length;
+}
+
+/**
  * Доля точек `points`, лежащих в коридоре corridorMeters от полилинии.
  * Гейт «петля не возвращается по той же улице»: docs/walk-engine.md §8
  * (коридор 30 м, порог 0.6, обе полилинии прорежены до 64 точек).

@@ -190,6 +190,13 @@ export const STREET_FEATURE_KIND_WEIGHTS: Record<WalkStreetFeatureKind, number> 
   art: 0.7,
 };
 
+/**
+ * Буфер интересности альтернатив ног (S5): при равном непересечении (критерий
+ * (а) первичен) побеждает альтернатива с большей долей полилинии в буфере
+ * 80 м от green/water/pedestrian фич.
+ */
+export const ALT_INTEREST_BUFFER_M = 80;
+
 // --- Улицы с характером: структурные двойники (S6; types.ts не импортирует lib/geo) ---
 
 /** Фича улиц — двойник StreetFeature (lib/geo/types): конверсия на границе в quickPipeline. */

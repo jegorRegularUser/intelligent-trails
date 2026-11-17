@@ -4,35 +4,37 @@
 // синтетических полилиниях (частичные перекрытия 0.3–0.7) — без порта.
 
 import { describe, expect, it } from 'vitest';
-import { chooseLegVariant } from '@/lib/walk/createWalkPlan';
+import { altInterestPolylinesForLeg, chooseLegVariant } from '@/lib/walk/createWalkPlan';
 import { createWalkPlan } from '@/lib/walk/createWalkPlan';
 import { makeCity, makeNode, type CityPlaceDef } from './gridCity';
-import type { WalkPlanResult, WalkLatLng } from '@/lib/walk/types';
+import type { WalkPlanResult, WalkLatLng, WalkStreetFeature } from '@/lib/walk/types';
 
 function expectOk(res: WalkPlanResult): asserts res is Extract<WalkPlanResult, { ok: true }> {
   if (!res.ok) throw new Error(`ожидался план, получен отказ ${res.failure.code}: ${res.failure.detail}`);
 }
 
+/** Горизонтальная «принятая» нога длиной L с шагом ~1/8 (общая для двух describe). */
+const accepted: WalkLatLng[] = Array.from({ length: 9 }, (_, i) => [55.75, 37.6 + i * 0.001]);
+
+/** Кандидат: идёт по accepted долю share длины, затем уходит на север. */
+function partialLeg(share: number): WalkLatLng[] {
+  const leg: WalkLatLng[] = [];
+  const steps = 8;
+  const sharedSteps = Math.round(steps * share);
+  for (let i = 0; i <= sharedSteps; i++) leg.push([55.75, 37.6 + (i / steps) * 0.008]);
+  const last = leg[leg.length - 1];
+  leg.push([last[0] + 0.008, last[1]]);
+  return leg;
+}
+
+const candidate = (minutes: number, geometry: WalkLatLng[], interestShare?: number) => ({
+  distanceMeters: minutes * 75,
+  durationMinutes: minutes,
+  geometry,
+  ...(interestShare !== undefined ? { interestShare } : {}),
+});
+
 describe('chooseLegVariant: синтетические полилинии (без порта)', () => {
-  /** Горизонтальная «принятая» нога длиной L с шагом ~1/8. */
-  const accepted: WalkLatLng[] = Array.from({ length: 9 }, (_, i) => [55.75, 37.6 + i * 0.001]);
-
-  /** Кандидат: идёт по accepted долю share длины, затем уходит на север. */
-  function partialLeg(share: number): WalkLatLng[] {
-    const leg: WalkLatLng[] = [];
-    const steps = 8;
-    const sharedSteps = Math.round(steps * share);
-    for (let i = 0; i <= sharedSteps; i++) leg.push([55.75, 37.6 + (i / steps) * 0.008]);
-    const last = leg[leg.length - 1];
-    leg.push([last[0] + 0.008, last[1]]);
-    return leg;
-  }
-
-  const candidate = (minutes: number, geometry: WalkLatLng[]) => ({
-    distanceMeters: minutes * 75,
-    durationMinutes: minutes,
-    geometry,
-  });
 
   it('перекрытия 0.7 и 0.3 → выбран кандидат с меньшим пересечением', () => {
     const candidates = [
@@ -66,6 +68,74 @@ describe('chooseLegVariant: синтетические полилинии (бе�
     expect(chooseLegVariant([noGeometry, honest], [accepted], () => true)).toBe(1);
     // Сравнимых нет вовсе → первый влезающий (основной первым).
     expect(chooseLegVariant([candidate(5, []), candidate(6, [])], [accepted], () => true)).toBe(0);
+  });
+});
+
+describe('chooseLegVariant: интерес-тайбрейкер (S5)', () => {
+  it('равное непересечение → бОльшая доля интереса побеждает; длина решает лишь при равном интересе', () => {
+    const cleanA: WalkLatLng[] = [[55.76, 37.6], [55.76, 37.65]]; // чистая, короткая
+    const cleanB: WalkLatLng[] = [[55.77, 37.6], [55.77, 37.7]]; // чистая, длиннее
+    // Оба чистые (~0 перекрытия): интерес 0.1 vs 0.7 — интересный, хоть и
+    // короче, выигрывает («прогулка, а не кратчайший путь»).
+    expect(
+      chooseLegVariant(
+        [candidate(15, cleanA, 0.1), candidate(20, cleanB, 0.7)],
+        [accepted],
+        () => true,
+      ),
+    ).toBe(1);
+    // Равный интерес → прежнее правило: длиннейший влезающий.
+    expect(
+      chooseLegVariant(
+        [candidate(15, cleanA, 0.5), candidate(20, cleanB, 0.5)],
+        [accepted],
+        () => true,
+      ),
+    ).toBe(1);
+    // interestShare отсутствует у всех (нет фич) → прежнее поведение.
+    expect(
+      chooseLegVariant([candidate(15, cleanA), candidate(20, cleanB)], [accepted], () => true),
+    ).toBe(1);
+  });
+
+  it('непересечение первично: интересный, но пересекающийся вариант проигрывает', () => {
+    const clean: WalkLatLng[] = [[55.76, 37.6], [55.76, 37.7]];
+    const crossing = candidate(20, partialLeg(0.7), 0.9);
+    const cleanLowInterest = candidate(15, clean, 0.1);
+    expect(chooseLegVariant([crossing, cleanLowInterest], [accepted], () => true)).toBe(1);
+  });
+
+  it('префильтр S5/C11: bbox вокруг ноги, viewpoint/пустые мимо, топ-32 по весу класса', () => {
+    const from: WalkLatLng = [55.75, 37.6];
+    const to: WalkLatLng = [55.755, 37.61];
+    const nearRing: WalkLatLng[] = [
+      [55.752, 37.605],
+      [55.753, 37.606],
+      [55.7525, 37.6055],
+      [55.752, 37.605],
+    ];
+    const farRing: WalkLatLng[] = [
+      [55.78, 37.8],
+      [55.781, 37.81],
+      [55.78, 37.8],
+    ];
+    const many = Array.from({ length: 40 }, (_, i) => ({
+      kind: (i % 3 === 0 ? 'pedestrian' : i % 3 === 1 ? 'green' : 'water') as 'pedestrian' | 'green' | 'water',
+      geometry: nearRing,
+    }));
+    const features: WalkStreetFeature[] = [
+      ...many,
+      { kind: 'viewpoint', geometry: [from] }, // точка — не коридор, мимо тайбрейкера
+      { kind: 'green', geometry: farRing }, // вне bbox ноги
+      { kind: 'water', geometry: [] }, // пустая геометрия
+    ];
+
+    const polylines = altInterestPolylinesForLeg(features, from, to);
+    expect(polylines.length).toBe(32); // топ-K из 40 кандидатов
+    expect(polylines.every((p) => p.length >= 2 && p.length <= 64)).toBe(true);
+    // Фичей нет — пусто (критерий (а) остаётся первичным).
+    expect(altInterestPolylinesForLeg(undefined, from, to)).toEqual([]);
+    expect(altInterestPolylinesForLeg([], from, to)).toEqual([]);
   });
 });
 
