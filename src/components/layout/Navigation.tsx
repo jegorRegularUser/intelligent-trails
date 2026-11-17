@@ -79,7 +79,7 @@ export function Navigation({ isAuthenticated = false }: NavigationProps) {
       {/* Mobile - компактная кнопка бургера */}
       <button
         onClick={toggleMobileMenu}
-        className="md:hidden fixed top-4 right-4 z-50 w-12 h-12 bg-brand-500 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-brand-600 transition-all active:scale-95"
+        className="md:hidden fixed top-4 right-4 z-50 w-12 h-12 bg-brand-600 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-brand-700 transition-all active:scale-95"
         aria-label="Toggle menu"
       >
         {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}

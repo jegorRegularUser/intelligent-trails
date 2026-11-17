@@ -1,4 +1,16 @@
+import type { Metadata } from "next";
 import { getLocale, getTranslations } from "next-intl/server";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getLocale();
+  const ru = locale !== "en";
+  return {
+    title: ru ? "Профиль" : "Profile",
+    description: ru
+      ? "Настройки профиля, безопасность и предпочтения прогулок."
+      : "Profile settings, security and walk preferences.",
+  };
+}
 import { Avatar } from "@/components/ui/Avatar";
 import { ProfileSettings } from "@/components/features/profile/ProfileSettings";
 import { SecuritySettings } from "@/components/features/profile/SecuritySettings";

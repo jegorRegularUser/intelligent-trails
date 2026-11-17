@@ -60,7 +60,11 @@ export const PLACE_CATEGORIES = {
   shopping: {
     id: 'shopping',
     icon: ShoppingBag,
-    osmTag: '["shop"]',
+    // Whitelist вместо голого ["shop"]: последний тянет супермаркеты, аптеки и
+    // салоны связи — на прогулке это не якорь. Оставлены «приятные» магазины:
+    // еда ручной работы, книги, цветы, антиквариат, спорт, ремёсла.
+    osmTag:
+      '["shop"~"^(antiques|art|bakery|books|cheese|chocolate|coffee|confectionery|cosmetics|craft|deli|farm|florist|garden_centre|gift|greengrocer|interior_decoration|jewelry|marketplace|massage|music|musical_instrument|organic|outdoor|pastry|photo|pottery|sports|stationery|tea|toys|wine)$"]',
     radiuses: [200, 800, 2500, 6000]
   },
   viewpoint: {

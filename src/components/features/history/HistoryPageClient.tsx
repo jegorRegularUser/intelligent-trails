@@ -7,6 +7,7 @@
 // $text-поиск и пагинация были недостижимы из UI.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
+import { Info } from "lucide-react";
 import { SavedRoute, RouteFilters, SortOption } from "@/types/history";
 import { RouteCard } from "@/components/features/history/RouteCard";
 import { RouteSearchBar } from "@/components/features/history/RouteSearchBar";
@@ -25,6 +26,8 @@ const REFETCH_DEBOUNCE_MS = 400;
 interface HistoryPageClientProps {
   initialRoutes: any[];
   initialTotal: number;
+  /** Mongo недоступна: честный баннер вместо 500 (страница остаётся читаемой). */
+  unavailable?: boolean;
 }
 
 function toSavedRoute(r: any): SavedRoute {
@@ -36,7 +39,7 @@ function toSavedRoute(r: any): SavedRoute {
   };
 }
 
-function HistoryPageContent({ initialRoutes, initialTotal }: HistoryPageClientProps) {
+function HistoryPageContent({ initialRoutes, initialTotal, unavailable = false }: HistoryPageClientProps) {
   const t = useTranslations("History");
   const { showToast } = useToast();
 
@@ -150,10 +153,26 @@ function HistoryPageContent({ initialRoutes, initialTotal }: HistoryPageClientPr
     setFilters((prev) => ({ ...prev, ...newFilters }));
   };
 
+  const unavailableBanner = unavailable ? (
+    <div
+      role="status"
+      className="mb-6 flex items-start gap-3 rounded-2xl border border-amber-100 bg-amber-50 p-4"
+    >
+      <Info size={18} className="mt-0.5 shrink-0 text-amber-600" />
+      <div>
+        <p className="text-sm font-bold text-amber-800">{t("unavailableTitle")}</p>
+        <p className="mt-0.5 text-xs text-amber-700">{t("unavailableHint")}</p>
+      </div>
+    </div>
+  ) : null;
+
   if (total === 0 && routes.length === 0 && !isLoading) {
     return (
       <div className="min-h-screen bg-slate-50 p-4 sm:p-8">
         <div className="max-w-7xl mx-auto">
+          <h1 className="text-3xl font-bold text-slate-900 mb-2">{t("title")}</h1>
+          <p className="mb-6 text-slate-600">{t("subtitle")}</p>
+          {unavailableBanner}
           <EmptyState />
         </div>
       </div>
@@ -167,6 +186,7 @@ function HistoryPageContent({ initialRoutes, initialTotal }: HistoryPageClientPr
         <div>
           <h1 className="text-3xl font-bold text-slate-900 mb-2">{t("title")}</h1>
           <p className="text-slate-600">{t("subtitle")}</p>
+          {unavailableBanner}
         </div>
 
         {/* Статистика */}

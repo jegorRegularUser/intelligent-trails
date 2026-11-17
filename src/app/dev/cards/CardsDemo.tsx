@@ -20,6 +20,7 @@ import {
 import { PlaceCard } from '@/components/places/PlaceCard';
 import { PlaceMiniCard } from '@/components/places/PlaceMiniCard';
 import { MINI_FIXTURE_IDS, PLACE_CARD_FIXTURES, type PlaceCardFixture } from './fixtures';
+import { WalkCardsSection } from './WalkCardsSection';
 
 const DEMO_TIME_ZONE = 'Europe/Moscow';
 
@@ -262,6 +263,10 @@ export function CardsDemo() {
           ))}
         </div>
       </section>
+
+      {/* Карточка прогулки: три фейк-плана, слайдер вариантов, полоса бюджета.
+          Оффлайн-приёмка визуала без ORS/Overpass. */}
+      <WalkCardsSection />
     </div>
   );
 }

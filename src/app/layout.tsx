@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Golos_Text, Unbounded } from "next/font/google";
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages } from 'next-intl/server';
 import { Navigation } from '@/components/layout/Navigation';
@@ -12,15 +12,36 @@ import { getDb } from '@/lib/db/mongodb';
 import { ObjectId } from 'mongodb';
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin", "cyrillic"] });
+// Golos Text — интерфейсный гротеск с полной кириллицей; Unbounded —
+// дисплейная пара для крупных цифр тайминга и заголовков лендинга.
+const golos = Golos_Text({
+  subsets: ["latin", "cyrillic"],
+  variable: "--font-golos",
+  display: "swap",
+});
 
-export const metadata: Metadata = {
-  title: "Intelligent Trails",
-  description: "Дипломный проект планировщика маршрутов",
-  icons: {
-    icon: '/logo.png',
-  },
-};
+const unbounded = Unbounded({
+  subsets: ["latin", "cyrillic"],
+  variable: "--font-unbounded",
+  display: "swap",
+});
+
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getLocale();
+  const ru = locale !== "en";
+  return {
+    title: {
+      default: "Intelligent Trails",
+      template: "%s · Intelligent Trails",
+    },
+    description: ru
+      ? "Генератор пешеходных прогулок: скажи, сколько у тебя времени и какое настроение — получи готовую петлю с честным таймингом."
+      : "A walking route generator: tell it how much time you have and the mood — get a ready loop with honest timing.",
+    icons: {
+      icon: '/logo.png',
+    },
+  };
+}
 
 export default async function RootLayout({
   children
@@ -56,8 +77,8 @@ export default async function RootLayout({
   }
 
   return (
-    <html lang={locale}>
-      <body className={inter.className}>
+    <html lang={locale} className={`${golos.variable} ${unbounded.variable}`}>
+      <body className="font-sans antialiased">
         <SessionProvider>
           <NextIntlClientProvider messages={messages}>
             <ToastProvider>

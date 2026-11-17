@@ -7,6 +7,7 @@ import { OpenBadge } from "@/components/places/PlaceCard";
 import {
   Camera,
   Coffee,
+  Footprints,
   Landmark,
   MapPin,
   Repeat2,
@@ -43,6 +44,20 @@ const KIND_I18N: Record<WalkStopKind, string> = {
   waterfront: "stopKindWaterfront",
   market: "stopKindMarket",
   other: "stopKindOther",
+};
+
+/** Каждой категории — свой оттенок круга: таймлайн читается с одного взгляда,
+ *  и разные типы мест перестают сливаться в один зелёный список. */
+const KIND_STYLES: Record<WalkStopKind, string> = {
+  park: "bg-green-100 text-green-700",
+  cafe: "bg-amber-100 text-amber-700",
+  food: "bg-orange-100 text-orange-700",
+  museum: "bg-purple-100 text-purple-700",
+  viewpoint: "bg-sky-100 text-sky-700",
+  shop: "bg-pink-100 text-pink-700",
+  waterfront: "bg-cyan-100 text-cyan-700",
+  market: "bg-lime-100 text-lime-700",
+  other: "bg-slate-100 text-slate-600",
 };
 
 export interface StopRowProps {
@@ -102,7 +117,7 @@ export function StopRow({
       <div
         className={cn(
           "relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-white shadow-sm",
-          isSwapping ? "animate-pulse bg-slate-200 text-slate-400" : "bg-brand-100 text-brand-600"
+          isSwapping ? "animate-pulse bg-slate-200 text-slate-400" : KIND_STYLES[stop.kind]
         )}
       >
         <Icon size={18} />
@@ -133,7 +148,7 @@ export function StopRow({
                 {reasonChips.map((chip, i) => (
                   <span
                     key={`${chip}-${i}`}
-                    className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] leading-4 text-slate-400"
+                    className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] leading-4 text-slate-500"
                   >
                     {chip}
                   </span>
@@ -146,7 +161,7 @@ export function StopRow({
                 onClick={() => onSwapRequest(stop.id)}
                 disabled={isSwapping || swapDisabled}
                 aria-label={t("swapStopAria", { name: stop.name })}
-                className="-ml-2 mt-1 inline-flex h-8 items-center gap-1.5 rounded-full px-2 text-xs font-semibold text-brand-600 transition-colors hover:bg-brand-50 hover:text-brand-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:pointer-events-none disabled:opacity-40"
+                className="-ml-2 mt-1 inline-flex h-8 items-center gap-1.5 rounded-full px-2 text-xs font-semibold text-slate-500 transition-colors hover:bg-brand-50 hover:text-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 disabled:pointer-events-none disabled:opacity-40"
               >
                 <Repeat2 size={14} />
                 {t("swapStop")}
@@ -171,8 +186,9 @@ export interface WalkLegRowProps {
 export function WalkLegRow({ walkMin, label, className }: WalkLegRowProps) {
   const t = useTranslations("WalkUI");
   return (
-    <div className={cn("py-1.5 pl-[52px] text-xs text-slate-400", className)}>
-      {label ?? t("legWalk", { minutes: walkMin })}
+    <div className={cn("flex items-center gap-1.5 py-1.5 pl-[52px] text-xs text-slate-500", className)}>
+      <Footprints size={12} aria-hidden className="shrink-0" />
+      <span>{label ?? t("legWalk", { minutes: walkMin })}</span>
     </div>
   );
 }

@@ -83,14 +83,14 @@ export interface QuickStartPanelProps {
 const chipClassName = (selected: boolean) =>
   cn(
     "inline-flex h-11 items-center gap-1.5 rounded-full border-2 px-4 text-sm font-semibold transition-all duration-200 active:scale-95",
-    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2",
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2",
     selected
-      ? "border-brand-500 bg-brand-500 text-white shadow-sm"
-      : "border-slate-200 bg-white text-slate-600 hover:border-brand-500 hover:text-brand-600"
+      ? "border-brand-600 bg-brand-600 text-white shadow-sm"
+      : "border-slate-200 bg-white text-slate-600 hover:border-brand-600 hover:text-brand-600"
   );
 
 const stepButtonClassName =
-  "flex h-10 w-10 items-center justify-center rounded-full border-2 border-slate-200 bg-white text-slate-600 transition-colors hover:border-brand-500 hover:text-brand-600 disabled:pointer-events-none disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500";
+  "flex h-10 w-10 items-center justify-center rounded-full border-2 border-slate-200 bg-white text-slate-600 transition-colors hover:border-brand-600 hover:text-brand-600 disabled:pointer-events-none disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600";
 
 /**
  * Быстрый старт: два вопроса (время → вайб) и одна кнопка.
@@ -235,7 +235,7 @@ export function QuickStartPanel({
         >
           {isBuilding ? t("buildingCta") : t("startCta")}
         </Button>
-        <p className="text-center text-xs text-slate-400" aria-live="polite">
+        <p className="text-center text-xs text-slate-500" aria-live="polite">
           {!canStart
             ? t("startCtaHint")
             : forecast

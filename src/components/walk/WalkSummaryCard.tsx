@@ -23,6 +23,13 @@ import { StopRow, WalkLegRow } from "./StopRow";
  */
 export type WalkCardPhase = Exclude<WalkPhase, "offline" | "params">;
 
+/** Доля ходьбы в полосе бюджета, 0–100; нулевая прогулка — 0. */
+function budgetSharePct(walkMin: number, totalMin: number): number {
+  if (totalMin <= 0) return 0;
+  const pct = Math.round((walkMin / totalMin) * 100);
+  return Math.min(100, Math.max(0, pct));
+}
+
 export interface WalkSummaryCardProps {
   phase: WalkCardPhase;
   plan: WalkPlan | null;
@@ -36,7 +43,6 @@ export interface WalkSummaryCardProps {
   onRetry?: () => void;
   onEditParams?: () => void;
   onStartWalk?: () => void;
-  onRebuild?: () => void;
   className?: string;
 }
 
@@ -54,7 +60,6 @@ export function WalkSummaryCard({
   onRetry,
   onEditParams,
   onStartWalk,
-  onRebuild,
   className,
 }: WalkSummaryCardProps) {
   const t = useTranslations("WalkUI");
@@ -82,17 +87,34 @@ export function WalkSummaryCard({
             </Badge>
           </div>
 
-          {/* Сводка честного времени + бейдж бюджета */}
+          {/* Сводка честного времени + бейдж бюджета + полоса пропорции:
+              «путь 20 минут, а пишет 60» видно до чтения цифр.
+              Итог — единственная дисплейная цифра экрана (ux-main-screen §5). */}
           <div className="rounded-2xl border border-brand-100 bg-brand-50 p-4">
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <span className="text-3xl font-bold text-slate-800">
-                {plan.totals.totalMin} {t("minutesUnit")}
+              <span className="font-display text-3xl font-bold text-pine-800">
+                {plan.totals.totalMin}
+                <span className="ml-1.5 font-sans text-lg font-bold text-slate-600">{t("minutesUnit")}</span>
               </span>
               <BudgetBadge totalMin={plan.totals.totalMin} budgetMin={plan.budgetMin} />
             </div>
-            <p className="mt-1 text-xs text-slate-500">
-              {t("walkPart", { minutes: plan.totals.walkMin })} ·{" "}
-              {t("stayPart", { minutes: plan.totals.stayMin })}
+            <div className="mt-2.5 flex h-1.5 overflow-hidden rounded-full bg-white/80" aria-hidden>
+              <div
+                className="bg-brand-600"
+                style={{ width: `${budgetSharePct(plan.totals.walkMin, plan.totals.totalMin)}%` }}
+              />
+              <div className="flex-1 bg-amber-400" />
+            </div>
+            <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
+              <span className="inline-flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-brand-600" aria-hidden />
+                {t("walkPart", { minutes: plan.totals.walkMin })}
+              </span>
+              <span aria-hidden>·</span>
+              <span className="inline-flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-amber-400" aria-hidden />
+                {t("stayPart", { minutes: plan.totals.stayMin })}
+              </span>
             </p>
           </div>
 
@@ -154,7 +176,9 @@ export function WalkSummaryCard({
             </div>
           </div>
 
-          {/* Действия: одна первичная кнопка, всегда в зоне большого пальца */}
+          {/* Действия: одна первичная кнопка, всегда в зоне большого пальца.
+              «Пересобрать всё» здесь нет: варианты листает VariantNav над
+              таймлайном, а смена параметров — честная «Изменить параметры». */}
           <div className="flex flex-col gap-2">
             {onStartWalk && (
               <Button
@@ -167,16 +191,16 @@ export function WalkSummaryCard({
                 {t("startWalkCta")}
               </Button>
             )}
-            {onRebuild && (
+            {onEditParams && (
               <Button
                 variant="ghost"
                 size="sm"
                 className="w-full"
                 disabled={interactionsDisabled}
-                onClick={onRebuild}
+                onClick={onEditParams}
                 leftIcon={<RotateCcw size={16} />}
               >
-                {t("rebuildCta")}
+                {t("editParamsCta")}
               </Button>
             )}
           </div>
@@ -283,7 +307,7 @@ function ErrorState({ message, onRetry, onEditParams }: ErrorStateProps) {
   return (
     <div role="alert" className="flex flex-col gap-4 py-2">
       <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-yellow-100 text-yellow-700">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700">
           <AlertTriangle size={20} />
         </div>
         <div>

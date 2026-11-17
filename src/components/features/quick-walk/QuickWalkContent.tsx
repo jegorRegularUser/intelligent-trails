@@ -17,6 +17,7 @@ import {
 } from "@/components/walk/logic";
 import { QuickStartPanel } from "@/components/walk/QuickStartPanel";
 import { OfflineBanner, WalkSummaryCard } from "@/components/walk/WalkSummaryCard";
+import { VariantNav } from "@/components/walk/VariantNav";
 import { AddressInput } from "@/components/ui/AddressInput";
 import { LoginRequiredModal } from "@/components/features/LoginRequiredModal";
 import { useToast } from "@/contexts/ToastContext";
@@ -86,7 +87,7 @@ export function QuickWalkContent({ mode = "quick" }: { mode?: "quick" | "sightse
   const [context, setContext] = useState<WalkContextInfo | null>(null);
   const [swappingIds, setSwappingIds] = useState<string[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [fastMode, setFastMode] = useState(false);
+
   const [lastInput, setLastInput] = useState<{ minutes: number; vibe: QuickVibe; start: [number, number] } | null>(null);
 
   /** Старт: геолокация или адрес (фолбэк, когда геолокацию не дали). */
@@ -136,11 +137,10 @@ export function QuickWalkContent({ mode = "quick" }: { mode?: "quick" | "sightse
           setPlans(result.plans);
           setPlanIndex(0);
           setContext(result.context);
-          setFastMode(result.fastMode);
           setLastInput({ minutes, vibe: vibeId, start });
           mapStore.setWalk(
             planPolyline(result.plans[0], start),
-            "Старт прогулки",
+            t("startPinLabel"),
             pinsFromPlan(result.plans[0], start),
           );
           dispatch({ type: "BUILD_SUCCESS" });
@@ -192,21 +192,26 @@ export function QuickWalkContent({ mode = "quick" }: { mode?: "quick" | "sightse
     void runBuild(lastInput.minutes, lastInput.vibe, addressStart ? { manualStart: addressStart } : undefined);
   }, [addressStart, lastInput, runBuild]);
 
-  const handleRebuild = useCallback(() => {
-    // «Пересобрать»: если у движка есть другие варианты — циклим локально и мгновенно;
-    // иначе начинаем новый сетап
-    if (plans && plans.length > 1) {
-      const next = (planIndex + 1) % plans.length;
-      setPlanIndex(next);
+  /** Слайдер вариантов: листает построенные планы мгновенно, без сети. */
+  const handleSelectVariant = useCallback(
+    (index: number) => {
+      if (!plans || index < 0 || index >= plans.length || index === planIndex) return;
+      setPlanIndex(index);
       if (lastInput) {
         mapStore.setWalk(
-          planPolyline(plans[next], lastInput.start),
-          "Старт прогулки",
-          pinsFromPlan(plans[next], lastInput.start),
+          planPolyline(plans[index], lastInput.start),
+          t("startPinLabel"),
+          pinsFromPlan(plans[index], lastInput.start),
         );
       }
-      return;
-    }
+    },
+    [lastInput, mapStore, planIndex, plans],
+  );
+
+  /** «Изменить параметры»: честный сброс к экрану ввода (новый сетап чистит
+   *  и чёрный список замен). Пересборка ради других вариантов — не здесь:
+   *  их листает слайдер. */
+  const handleResetParams = useCallback(() => {
     dispatch({ type: "RESET" });
     setPlans(null);
     setPlanIndex(0);
@@ -220,7 +225,7 @@ export function QuickWalkContent({ mode = "quick" }: { mode?: "quick" | "sightse
     setIsCustomActive(false);
     setCustomMinutes(null);
     setVibe(null);
-  }, [lastInput, mapStore, planIndex, plans]);
+  }, [mapStore]);
 
   /** Старое поведение «Заменить»: полная пересборка с чёрным списком.
    *  Осталось фолбэком — локальная замена зовёт его из тоста, когда
@@ -249,7 +254,7 @@ export function QuickWalkContent({ mode = "quick" }: { mode?: "quick" | "sightse
             setContext(result.context);
             mapStore.setWalk(
               planPolyline(result.plans[0], start),
-              "Старт прогулки",
+              t("startPinLabel"),
               pinsFromPlan(result.plans[0], start),
             );
             dispatch({ type: "BUILD_SUCCESS" });
@@ -276,7 +281,10 @@ export function QuickWalkContent({ mode = "quick" }: { mode?: "quick" | "sightse
       // вместо пересборки. Текущий план уезжает на сервер как есть — ноги и
       // причины сохранившихся остановок переиспользуются, busy-флаг один и
       // тот же (swappingIds крутит спиннер строки, машина фаз не трогается).
+      // Один свап за раз: параллельные «Заменить» по разным строкам гоняют
+      // два replaceQuickStop поверх одного плана — второй затирает первый.
       if (!plan || !lastInput) return;
+      if (swappingIds.length > 0) return;
       setSwappingIds((prev) => (prev.includes(stopId) ? prev : [...prev, stopId]));
       void (async () => {
         try {
@@ -307,20 +315,23 @@ export function QuickWalkContent({ mode = "quick" }: { mode?: "quick" | "sightse
                 ? { walkMin: l.walkMin, geometry: l.geometry }
                 : { walkMin: l.walkMin },
             ),
-            // Петля живёт на 4 гейтах (бюджет, якоря, ноги, улицы):
-            // флаг есть — база фолбэка движка полная.
-            ...(plan.gatesPass ? { currentGatesPassed: 4 } : {}),
+            // Честная база фолбэка: сколько гейтов реально прошло у плана
+            // (движок знает их состав; у деградированных планов база ниже).
+            ...(plan.gatesPassedCount !== undefined
+              ? { currentGatesPassed: plan.gatesPassedCount }
+              : {}),
           });
           if (result.ok) {
             const next = result.plan;
             // Заменённая уходит в чёрный список, как и в старом флоу:
             // без этого место может вернуться кандидатом при следующей замене.
             excludedRef.current.add(stopId);
-            setPlans([next]);
-            setPlanIndex(0);
+            // Текущий вариант обновляется, соседние остаются листаться:
+            // замена сегмента не должна уничтожать остальные построенные планы.
+            setPlans((prev) => (prev ? prev.map((p, i) => (i === planIndex ? next : p)) : [next]));
             mapStore.setWalk(
               planPolyline(next, lastInput.start),
-              "Старт прогулки",
+              t("startPinLabel"),
               pinsFromPlan(next, lastInput.start),
             );
             // Из ready — но-оп: машина не покидала фазу, карточка просто обновилась
@@ -342,7 +353,7 @@ export function QuickWalkContent({ mode = "quick" }: { mode?: "quick" | "sightse
         }
       })();
     },
-    [lastInput, locale, mapStore, plan, runLegacyRebuild, showToast, t],
+    [lastInput, locale, mapStore, plan, planIndex, runLegacyRebuild, showToast, t],
   );
 
   const handleSave = useCallback(async () => {
@@ -470,11 +481,17 @@ export function QuickWalkContent({ mode = "quick" }: { mode?: "quick" | "sightse
 
       {showCard ? (
         <>
-          {/* Индикатор цикла альтернатив: «Пересобрать» листает планы мгновенно */}
-          {cardPhase === "ready" && alternativesCount > 1 && (
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-              {t("variantOf", { index: planIndex + 1, count: alternativesCount })}
-            </p>
+          {/* Слайдер вариантов: листает построенные планы мгновенно, без сети */}
+          {cardPhase === "ready" && (
+            <VariantNav
+              index={planIndex}
+              count={alternativesCount}
+              label={t("variantOf", { index: planIndex + 1, count: alternativesCount })}
+              prevLabel={t("variantPrev")}
+              nextLabel={t("variantNext")}
+              onSelect={handleSelectVariant}
+              disabled={phase === "offline"}
+            />
           )}
           <WalkSummaryCard
             phase={cardPhase === "ready" || cardPhase === "error" ? cardPhase : "building"}
@@ -484,10 +501,7 @@ export function QuickWalkContent({ mode = "quick" }: { mode?: "quick" | "sightse
             interactionsDisabled={phase === "offline"}
             onSwapRequest={handleSwapRequest}
             onRetry={handleRetry}
-            onEditParams={() => {
-              dispatch({ type: "PARAMS_TOUCHED" });
-            }}
-            onRebuild={handleRebuild}
+            onEditParams={handleResetParams}
             onStartWalk={handleStartWalk}
           />
 
@@ -514,16 +528,13 @@ export function QuickWalkContent({ mode = "quick" }: { mode?: "quick" | "sightse
 
           {/* Геолокация подсказывает, что старт берётся отсюда; fast mode — бейдж тира провайдера */}
           {phase === "building" && (
-            <p className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+            <p className="mt-3 flex items-center gap-1.5 text-xs text-slate-500">
               <Crosshair size={12} />
               {t("buildingHint")}
             </p>
           )}
-          {fastMode && cardPhase === "ready" && (
-            <p className="mt-2 text-xs font-semibold text-brand-600">fast mode</p>
-          )}
           {plan?.gatesPass && cardPhase === "ready" && (
-            <p className="mt-1 text-xs text-slate-400">{t("qualityOk")}</p>
+            <p className="mt-1 text-xs text-slate-500">{t("qualityOk")}</p>
           )}
         </>
       ) : null}

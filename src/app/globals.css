@@ -1,23 +1,42 @@
 @import "tailwindcss";
 
 @theme {
-  /* Твои брендовые цвета */
+  /*
+   * Бренд: одна зелёная семья (docs/ux-main-screen.md, «полевой блокнот»).
+   * brand-500 — линия маршрута на карте и акценты без текста;
+   * brand-600 — интерактивный зелёный: белый текст на нём ≥ 5:1 (WCAG AA).
+   */
   --color-brand-50: #ecfdf5;
   --color-brand-100: #d1fae5;
+  --color-brand-200: #a7f3d0;
+  --color-brand-300: #6ee7b7;
+  --color-brand-400: #34d399;
   --color-brand-500: #10b981;
-  --color-brand-600: #059669;
-  
+  --color-brand-600: #047857;
+  --color-brand-700: #065f46;
+  --color-brand-800: #064e3b;
+
+  /* Глубокая зелень для брендовых тёмных поверхностей (CTA, футер) и цифр */
+  --color-pine-800: #14532d;
+  --color-pine-900: #0e3a2a;
+  --color-pine-950: #0a2b20;
+
   /* Акцентные цвета */
   --color-accent-500: #f59e0b;
-  
+
   /* Цвета поверхностей и текста */
   --color-surface-light: #f8fafc;
   --color-surface-dark: #0f172a;
   --color-surface-muted: #64748b;
 
-  /* Твои кастомные тени */
-  --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-  --shadow-float: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  /* Шрифты: Golos Text — интерфейс, Unbounded — дисплейные моменты
+     (hero, крупные цифры тайминга); обе с кириллицей */
+  --font-sans: var(--font-golos), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-unbounded), var(--font-golos), ui-sans-serif, sans-serif;
+
+  /* Тени тонированы в зелень фона, не чёрные (check: shadows have a hue) */
+  --shadow-card: 0 4px 6px -1px rgba(14, 58, 42, 0.07), 0 2px 4px -1px rgba(14, 58, 42, 0.05);
+  --shadow-float: 0 20px 25px -5px rgba(14, 58, 42, 0.14), 0 10px 10px -5px rgba(14, 58, 42, 0.06);
 }
 
 .custom-scrollbar {
@@ -96,4 +115,12 @@
 
 .animate-dash {
   animation: dash 30s linear infinite;
+}
+
+/* Декоративное движение — только если юзер не просил покой */
+@media (prefers-reduced-motion: reduce) {
+  .animate-blob,
+  .animate-dash {
+    animation: none;
+  }
 }

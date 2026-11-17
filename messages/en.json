@@ -53,7 +53,6 @@
     "swapping": "Finding a swap…",
     "swapFallbackRebuild": "Rebuild the walk",
     "startWalkCta": "Let's go",
-    "rebuildCta": "Rebuild from scratch",
     "errorTitle": "Couldn't build the walk",
     "errorGeneric": "Something went wrong. Please try again.",
     "retryCta": "Try again",
@@ -81,6 +80,9 @@
     "degradedLoopOnly": "No interesting places nearby — here is a walking loop for your time",
     "loopOnlyLeg": "Street loop: {minutes} min of walking",
     "variantOf": "Variant {index} of {count}",
+    "startPinLabel": "Walk start",
+    "variantPrev": "Previous variant",
+    "variantNext": "Next variant",
     "modeQuick": "Quick walk",
     "modeRoute": "Route",
     "modeSightseeing": "New city",
@@ -88,6 +90,8 @@
   },
   "Builder": {
     "title": "Intelligent Route Planner",
+    "unavailableTitle": "History is unavailable",
+    "unavailableHint": "The routes database is not responding right now. The page will recover on its own — try refreshing in a minute.",
     "subtitle": "Build your perfect walking route",
     "startButton": "Build Route"
   },

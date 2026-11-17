@@ -1,3 +1,17 @@
+import type { Metadata } from "next";
+import { getLocale } from "next-intl/server";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getLocale();
+  const ru = locale !== "en";
+  return {
+    title: ru ? "Карта прогулок" : "Walk map",
+    description: ru
+      ? "Прогулка рядом: петля от вашей геолокации с честным таймингом, или маршрут по точкам."
+      : "A walk nearby: a loop from your location with honest timing, or a route through your points.",
+  };
+}
+
 import { RouteSidebarManager } from '@/components/features/RouteSidebarManager';
 import { RouteMapLoader } from '@/components/map/RouteMapLoader';
 import { MapPickerOverlay } from '@/components/map/MapPickerOverlay';

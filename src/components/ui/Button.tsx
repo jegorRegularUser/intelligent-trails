@@ -2,13 +2,15 @@ import { ButtonHTMLAttributes, forwardRef, ReactNode } from "react";
 import { cn } from "@/utils/cn";
 import { Spinner } from "./Spinner";
 
-// 1. Словари стилей (легко расширять в будущем)
+// 1. Словари стилей (легко расширять в будущем).
+// Интерактивный зелёный — brand-600: белый текст ≥ 5:1 (WCAG AA);
+// brand-500 остаётся цветом линии маршрута и акцентов без текста.
 const buttonVariants = {
-  primary: "bg-brand-500 text-white hover:bg-brand-600 shadow-sm border border-transparent",
+  primary: "bg-brand-600 text-white hover:bg-brand-700 shadow-sm border border-transparent",
   secondary: "bg-brand-100 text-brand-700 hover:bg-brand-200 border border-transparent",
-  outline: "bg-transparent text-slate-700 border-2 border-slate-200 hover:border-brand-500 hover:text-brand-600",
+  outline: "bg-transparent text-slate-700 border-2 border-slate-200 hover:border-brand-600 hover:text-brand-600",
   ghost: "bg-transparent text-slate-600 hover:bg-slate-100 border border-transparent",
-  danger: "bg-red-500 text-white hover:bg-red-600 shadow-sm border border-transparent",
+  danger: "bg-red-600 text-white hover:bg-red-700 shadow-sm border border-transparent",
 };
 
 const buttonSizes = {
@@ -56,7 +58,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         className={cn(
           // Базовые стили для всех кнопок
           "relative inline-flex items-center justify-center gap-2 transition-all duration-200",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2",
           "active:scale-[0.98]", // Легкий эффект вдавливания при клике
           "disabled:pointer-events-none disabled:opacity-50", // Стили для неактивного состояния
           
