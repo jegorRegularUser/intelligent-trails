@@ -10,6 +10,7 @@ import { CloudRain, Crosshair, MapPin, Save, ThermometerSun } from "lucide-react
 import {
   DEFAULT_CUSTOM_MINUTES,
   INITIAL_WALK_STATE,
+  SURPRISE_VIBE,
   estimateBuildRange,
   normalizeCustomMinutes,
   walkMachine,
@@ -170,8 +171,10 @@ export function QuickWalkContent({ mode = "quick" }: { mode?: "quick" | "sightse
 
   const handleStart = useCallback(() => {
     // Обзорный режим (вход №2): архетип фиксирован, юзер выбирает город и время.
-    const vibeValue: QuickVibe | null = mode === "sightseeing" ? "sightseeing" : vibe;
-    if (selectedMinutes == null || vibeValue == null) return;
+    // Вайб необязателен (ux-main-screen §6.2): CTA активна от одного времени,
+    // поэтому пустой вайб — это «Удиви меня» (микс без ядра), а не молчаливый но-оп.
+    const vibeValue: QuickVibe = mode === "sightseeing" ? "sightseeing" : (vibe ?? SURPRISE_VIBE);
+    if (selectedMinutes == null) return;
     const minutes = isCustomActive
       ? normalizeCustomMinutes(customMinutes ?? DEFAULT_CUSTOM_MINUTES)
       : selectedMinutes;

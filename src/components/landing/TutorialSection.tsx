@@ -82,7 +82,7 @@ export function TutorialSection() {
     <section id="tutorial" className="py-20 bg-gradient-to-b from-slate-50 to-white relative overflow-hidden">
       {/* SVG путь через цифры: один брендовый зелёный, пунктир как на карте */}
       {pathD && (
-        <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 0 }}>
+        <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 0 }} data-full-bleed>
           <path
             d={pathD}
             stroke="#10b981"

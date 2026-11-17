@@ -177,7 +177,7 @@ export function QuickStartPanel({
               >
                 <Minus size={16} />
               </button>
-              <span className="w-16 text-center text-sm font-bold text-slate-800">
+              <span className="w-16 text-center text-sm font-bold text-slate-800 tabular-nums">
                 {effectiveCustom} {t("minutesUnit")}
               </span>
               <button

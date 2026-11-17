@@ -13,6 +13,7 @@ export function CTASection() {
       {/* Та же пунктирная петля, что и в hero — теперь по тёмной «полярной» бумаге */}
       <svg
         aria-hidden
+        data-full-bleed
         className="pointer-events-none absolute -left-16 -bottom-16 w-[420px] text-brand-500 opacity-30"
         viewBox="0 0 420 360"
         fill="none"

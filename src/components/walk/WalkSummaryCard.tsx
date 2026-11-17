@@ -92,7 +92,7 @@ export function WalkSummaryCard({
               Итог — единственная дисплейная цифра экрана (ux-main-screen §5). */}
           <div className="rounded-2xl border border-brand-100 bg-brand-50 p-4">
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <span className="font-display text-3xl font-bold text-pine-800">
+              <span className="font-display text-3xl font-bold text-pine-800 tabular-nums">
                 {plan.totals.totalMin}
                 <span className="ml-1.5 font-sans text-lg font-bold text-slate-600">{t("minutesUnit")}</span>
               </span>

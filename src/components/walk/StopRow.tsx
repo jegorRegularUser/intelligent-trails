@@ -186,7 +186,7 @@ export interface WalkLegRowProps {
 export function WalkLegRow({ walkMin, label, className }: WalkLegRowProps) {
   const t = useTranslations("WalkUI");
   return (
-    <div className={cn("flex items-center gap-1.5 py-1.5 pl-[52px] text-xs text-slate-500", className)}>
+    <div className={cn("flex items-center gap-1.5 py-1.5 pl-[52px] text-xs text-slate-500 tabular-nums", className)}>
       <Footprints size={12} aria-hidden className="shrink-0" />
       <span>{label ?? t("legWalk", { minutes: walkMin })}</span>
     </div>

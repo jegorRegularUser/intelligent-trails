@@ -18,6 +18,7 @@ export function HeroSection() {
       {/* Мотив продукта: пунктирная петля, «набросанная» по бумаге (как петля на карте при сборке) */}
       <svg
         aria-hidden
+        data-full-bleed
         className="pointer-events-none absolute -right-20 top-14 hidden w-[520px] text-brand-300 lg:block"
         viewBox="0 0 520 420"
         fill="none"
@@ -67,8 +68,8 @@ export function HeroSection() {
             <Image
               src="/hero/walk-panel.png"
               alt={t('visualAlt')}
-              width={1280}
-              height={719}
+              width={1440}
+              height={900}
               priority
               sizes="(max-width: 1024px) 100vw, 560px"
               className="h-auto w-full rounded-2xl object-cover"
