@@ -16,6 +16,11 @@ export interface CloudProviderConfig {
    */
   orsApiKeys?: readonly string[];
   orsBaseUrl: string;
+  /**
+   * OSRM routed-foot (фолбэк роутинга, ADR-004). База без профиля в конце:
+   * профиль /foot входит в путь запроса (/route/v1/foot/…).
+   */
+  osrmBaseUrl: string;
   photonBaseUrl: string;
   nominatimBaseUrl: string;
   overpassMirrors: readonly string[];
@@ -32,6 +37,10 @@ export interface UpstreamTimeouts {
   orsRouteMs: number;
   /** POST /v2/matrix/foot-walking (чанк ≤40 источников + все цели) */
   orsMatrixMs: number;
+  /** GET /route/v1/foot/… — публичный FOSSGIS-инстанс, fair use 15 с (ADR-004) */
+  osrmRouteMs: number;
+  /** GET /table/v1/foot/… (чанки по бюджету URL) — fair use 15 с */
+  osrmMatrixMs: number;
   photonMs: number;
   nominatimMs: number;
   overpassMs: number;
@@ -40,6 +49,8 @@ export interface UpstreamTimeouts {
 export const UPSTREAM_TIMEOUTS: UpstreamTimeouts = {
   orsRouteMs: 12_000,
   orsMatrixMs: 15_000,
+  osrmRouteMs: 15_000,
+  osrmMatrixMs: 15_000,
   photonMs: 6_000,
   nominatimMs: 6_000,
   overpassMs: 12_000,
@@ -64,6 +75,7 @@ export const DEFAULT_USER_AGENT =
 export function resolveCloudConfig(partial: Partial<CloudProviderConfig> = {}): CloudProviderConfig {
   return {
     orsBaseUrl: 'https://api.openrouteservice.org',
+    osrmBaseUrl: 'https://routing.openstreetmap.de/routed-foot',
     photonBaseUrl: 'https://photon.komoot.io',
     nominatimBaseUrl: 'https://nominatim.openstreetmap.org',
     overpassMirrors: OVERPASS_MIRRORS,

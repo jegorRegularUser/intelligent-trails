@@ -32,8 +32,9 @@ export interface RouteSegment {
   durationSeconds: number;
   /** Полилиния [lat,lng]; пустой массив, если источник не дал геометрию. */
   geometry: LatLng[];
-  /** Откуда метрики — для отладки и бейджа fast mode. */
-  source: 'cloud' | 'pack';
+  /** Откуда метрики — для отладки и бейджа fast mode. 'osrm' — фолбэк-роутер
+   *  облачного тира (ADR-004), когда ORS недоступен или ключа нет. */
+  source: 'cloud' | 'pack' | 'osrm';
 }
 
 export interface RouteRequest {
