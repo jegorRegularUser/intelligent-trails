@@ -32,7 +32,8 @@ npm run dev                  # http://localhost:3000
 | `YANDEX_CLIENT_ID` / `YANDEX_CLIENT_SECRET` | OAuth Яндекс |
 | `NEXT_PUBLIC_YANDEX_API_KEY` | JS API Яндекс.Карт (отрисовка карты) |
 | `NEXT_PUBLIC_YANDEX_SUGGEST_API_KEY` | Подсказки адресов (опционально) |
-| `OPENROUTESERVICE_API_KEY` | Пешеходный роутинг и матрица (бесплатный ключ openrouteservice.org) |
+| `OPENROUTESERVICE_API_KEY` | Пешеходный роутинг и матрица (бесплатный ключ openrouteservice.org). **Опционально** — без ключа роутинг идёт через публичный OSRM-фолбэк (ADR-004) |
+| `OSRM_BASE_URL` | Оверрайд базы OSRM-фолбэка (дефолт — публичный FOSSGIS `routing.openstreetmap.de/routed-foot`); сюда подставляется и self-hosted |
 
 ## Как это работает (главный сценарий)
 

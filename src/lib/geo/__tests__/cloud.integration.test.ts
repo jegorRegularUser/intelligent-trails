@@ -1,6 +1,8 @@
 // ЖИВЫЕ интеграционные тесты облачного тира — ходят в реальную сеть.
-// CI их не запускает: npx vitest run --exclude "**/*.integration.test.*"
-// Локально: npx vitest run src/lib/geo/__tests__/cloud.integration.test.ts
+// CI их не запускает: vitest.config.ts исключает **/*.integration.test.*
+// Локально нужен конфиг без этого исключения (CLI --exclude к нему ДОБАВЛЯЕТСЯ,
+// не заменяет): временный vitest-конфиг с exclude: ['**/node_modules/**'] и
+// RUN_GEO_LIVE_TESTS=1 npx vitest run --config <temp> src/lib/geo/__tests__/cloud.integration.test.ts
 //   - ORS-тесты требуют OPENROUTESERVICE_API_KEY в окружении;
 //   - тесты Photon/Overpass гейтятся RUN_GEO_LIVE_TESTS=1 (публичные сервисы,
 //     не хотим бить по ним на каждый прогон).
