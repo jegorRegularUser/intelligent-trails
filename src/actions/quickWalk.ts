@@ -20,6 +20,7 @@ import { enginePlansToUiPlans } from '@/lib/walk/uiAdapter';
 import {
   buildScoreReasonsMap,
   collectCandidates,
+  fetchStreetInterest,
   scoreCandidatePool,
   diversifyByAzimuth,
   DEFAULT_TIMEZONE,
@@ -27,6 +28,7 @@ import {
   MAX_BUDGET,
   MIN_BUDGET,
   SECOND_WAVE_MULTIPLIER,
+  type StreetInterestBundle,
 } from '@/lib/walk/quickPipeline';
 import { haversineMeters } from '@/lib/walk/internal/geo';
 import type { VibeId } from '@/components/walk/logic';
@@ -135,6 +137,7 @@ export async function buildQuickWalk(input: QuickWalkInput): Promise<QuickWalkRe
   const assemble = async (
     pool: GeoPlace[],
     poolSearchFailed: boolean,
+    street: StreetInterestBundle | null,
   ): Promise<{ ok: true; uiPlans: UiWalkPlan[]; enginePlans: EnginePlan[] } | { ok: false; error: string }> => {
     if (pool.length === 0) {
       // Все категории упали — это «поиск недоступен», а не «мало мест».
@@ -168,7 +171,14 @@ export async function buildQuickWalk(input: QuickWalkInput): Promise<QuickWalkRe
         .slice(0, ENGINE_CANDIDATE_CAP);
     }
     const candidates = shortlist.map((entry) => entry.place);
-    const planResult = await createWalkPlan({ ...engineInputBase, candidates }, routingPort);
+    // Улицы с характером (S6): данные есть → фичи + hints едут в движок
+    // (микро-стопы, тайбрейкер альтернатив, снап петли L3); нет → поля
+    // остаются undefined, планы бит-в-бит совпадают с прежними.
+    const engineInput = {
+      ...engineInputBase,
+      ...(street ? { streetFeatures: street.features, streetHints: street.hints } : {}),
+    };
+    const planResult = await createWalkPlan({ ...engineInput, candidates }, routingPort);
 
     if (!planResult.ok) {
       // Лестница деградации (PRODUCT: почти всегда прогулка): строгий движок
@@ -176,7 +186,7 @@ export async function buildQuickWalk(input: QuickWalkInput): Promise<QuickWalkRe
       // мемо-порт; INVALID_INPUT деградацией не лечится — отсекается в оркестраторе.
       // Отказ строгого движка передаётся как есть: лестница не прогоняет его второй раз.
       const fallback = await buildWalkWithFallback(
-        { ...engineInputBase, candidates },
+        { ...engineInput, candidates },
         routingPort,
         { strict: planResult },
       );
@@ -209,7 +219,11 @@ export async function buildQuickWalk(input: QuickWalkInput): Promise<QuickWalkRe
   };
 
   const { places: pool, searchFailed } = await collectCandidates(provider, start, profile, input.budgetMinutes);
-  const first = await assemble(pool, searchFailed);
+  // Улицы с характером (S6/S7): фичи улиц — отдельным «батчем из 1» ПОСЛЕ
+  // последней категории POI (пауза внутри, вне ретрай-волны, упал → null).
+  // Бандл общий для обеих волн поиска: в провайдере TTL-кэш 10 мин.
+  const streetBundle = await fetchStreetInterest(provider, start, input.budgetMinutes, archetype);
+  const first = await assemble(pool, searchFailed, streetBundle);
   let result = first;
 
   // Недобор (R1.d): добор живёт внутри пула движка; если и он не дотянул до
@@ -220,7 +234,7 @@ export async function buildQuickWalk(input: QuickWalkInput): Promise<QuickWalkRe
     const secondPool = await collectCandidates(provider, start, profile, input.budgetMinutes, {
       radiusMultiplier: SECOND_WAVE_MULTIPLIER,
     });
-    const second = await assemble(secondPool.places, secondPool.searchFailed);
+    const second = await assemble(secondPool.places, secondPool.searchFailed, streetBundle);
     if (second.ok && !isUnderfloor(second.enginePlans[0], input.budgetMinutes)) {
       result = second;
     }

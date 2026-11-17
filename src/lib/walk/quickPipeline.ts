@@ -6,9 +6,11 @@
 // Не экспортируется через lib/walk/index.ts: модуль знает про vibes/geo,
 // а публичный API движка остаётся чистым.
 
-import { type GeoPlace, type GeoProvider } from '@/lib/geo';
+import { type GeoPlace, type GeoProvider, type StreetFeature } from '@/lib/geo';
+import type { Archetype } from '@/lib/vibes/archetypes';
 import type { AdjustedProfile } from '@/lib/vibes/combine';
 import { scorePlace, type PlaceScore } from '@/lib/vibes/ranking';
+import { scoreSectors, type StreetHints } from '@/lib/vibes/streetInterest';
 import type { WeatherContext } from '@/lib/weather';
 import { evaluateOpeningHoursDetailed } from '@/lib/places/hours';
 import { PLACE_CATEGORIES } from '@/constants/categories';
@@ -217,6 +219,36 @@ export interface ScoredPoolEntry {
   score: PlaceScore;
   /** Часы на момент скоринга: 'closed' отсеивается, пока живых хватает. */
   hoursState: 'open' | 'closed' | 'unknown';
+}
+
+/** Фичи улиц + интерес-подсказки — сырьё движка волны «Улицы с характером» (S6). */
+export interface StreetInterestBundle {
+  /** Микро-стопы на ногах (S4) и тайбрейкер альтернатив (S5). */
+  features: StreetFeature[];
+  /** Интерес-подсказки секторов розы (S2 → снап петли S3). */
+  hints: StreetHints;
+}
+
+/**
+ * Фичи улиц + интерес-модель (S6): отдельный «батч из 1» ПОСЛЕ последней
+ * категории POI с той же паузой (пик конкурентности Overpass остаётся 3 —
+ * запрос НЕ включён в общий Promise.allSettled, S7), вне ретрай-волны:
+ * упал → null. Провайдер без метода — тоже null: движение деградирует в
+ * чистую геометрическую розу (поля WalkInput остаются undefined).
+ */
+export async function fetchStreetInterest(
+  provider: GeoProvider,
+  start: [number, number],
+  budgetMinutes: number,
+  archetype: Pick<Archetype, 'streetInterest'>,
+): Promise<StreetInterestBundle | null> {
+  const fetchFeatures = provider.fetchStreetFeatures?.bind(provider);
+  if (!fetchFeatures) return null;
+  // Та же пауза, что между POI-батчами: выходим из rate-окна Overpass.
+  await pause(OVERPASS_BATCH_PAUSE_MS);
+  const features = await fetchFeatures(start, searchRadiusMeters(budgetMinutes)).catch(() => null);
+  if (!features || features.length === 0) return null;
+  return { features, hints: scoreSectors(features, start, archetype) };
 }
 
 export interface ScorePoolParams {

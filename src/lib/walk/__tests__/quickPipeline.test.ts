@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import {
   collectCandidates,
   diversifyByAzimuth,
+  fetchStreetInterest,
   mergeScoreReasons,
   scoreCandidatePool,
   searchRadiusMeters,
@@ -14,7 +15,8 @@ import {
 } from '../quickPipeline';
 import { candidateScore, PROXIMITY_WEIGHT } from '../selection';
 import { minimalLoopZoneMeters } from '../createWalkPlan';
-import type { GeoPlace, GeoProvider } from '@/lib/geo';
+import { SURPRISE } from '@/lib/vibes/archetypes';
+import type { GeoPlace, GeoProvider, StreetFeature } from '@/lib/geo';
 import type { AdjustedProfile } from '@/lib/vibes/combine';
 import type { WalkScoreReasons } from '@/components/walk/types';
 
@@ -220,5 +222,65 @@ describe('selection: вес близости (R2)', () => {
     // 0.6·v·B/делитель: для B=60 делитель 3.8 даёт ≈ 710 м.
     expect(minimalLoopZoneMeters(60)).toBeCloseTo(710.5, 0);
     expect(minimalLoopZoneMeters(60)).toBeLessThan(minimalLoopZoneMeters(60, 6));
+  });
+});
+
+describe('quickPipeline: fetchStreetInterest (S6)', () => {
+  const START: [number, number] = [55.75, 37.62];
+
+  const feature = (kind: 'green' | 'water', lat: number, lng: number, name?: string): StreetFeature => ({
+    kind,
+    geometry: [[lat, lng]],
+    ...(name ? { name } : {}),
+    areaMeters: 0,
+  });
+
+  function providerWith(method?: (center: [number, number], radius: number) => Promise<StreetFeature[] | null>): {
+    provider: GeoProvider;
+    calls: { center: [number, number]; radius: number }[];
+  } {
+    const calls: { center: [number, number]; radius: number }[] = [];
+    const provider = {
+      ...(method
+        ? {
+            fetchStreetFeatures: async (center: [number, number], radius: number) => {
+              calls.push({ center, radius });
+              return method(center, radius);
+            },
+          }
+        : {}),
+    } as unknown as GeoProvider;
+    return { provider, calls };
+  }
+
+  it('провайдер без метода → null без паузы и сети', async () => {
+    const { provider, calls } = providerWith();
+    expect(await fetchStreetInterest(provider, START, 60, SURPRISE)).toBeNull();
+    expect(calls).toHaveLength(0);
+  });
+
+  it('фичи есть → бандл с hints (8 секторов, hasData=true), радиус = поиск 40% бюджета', async () => {
+    const { provider, calls } = providerWith(async () => [feature('green', START[0] + 0.004, START[1], 'Парк')]);
+
+    const bundle = await fetchStreetInterest(provider, START, 60, SURPRISE);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].center).toEqual(START);
+    expect(calls[0].radius).toBe(searchRadiusMeters(60));
+    expect(bundle?.features).toHaveLength(1);
+    expect(bundle?.hints.hasData).toBe(true);
+    expect(bundle?.hints.sectors).toHaveLength(8);
+    // Северный парк даёт интерес северному сектору.
+    expect(bundle?.hints.sectors[0].interest).toBe(1);
+  });
+
+  it('пустой ответ, null и отказ провайдера → null (прогулка без интереса, не ошибка)', async () => {
+    expect(await fetchStreetInterest(providerWith(async () => []).provider, START, 60, SURPRISE)).toBeNull();
+    expect(await fetchStreetInterest(providerWith(async () => null).provider, START, 60, SURPRISE)).toBeNull();
+    const failing = providerWith(async () => {
+      throw new Error('overpass down');
+    });
+    expect(await fetchStreetInterest(failing.provider, START, 60, SURPRISE)).toBeNull();
+    expect(failing.calls).toHaveLength(1); // отказ проглатывается: ретрай-волны нет (S6)
   });
 });

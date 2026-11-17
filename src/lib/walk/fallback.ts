@@ -57,6 +57,11 @@ export async function buildWalkWithFallback(
     budgetMinutes: input.budgetMinutes,
     speedKmh: input.walkingSpeedKmh,
     ports,
+    // Улицы с характером (S6): hints → снап розы, фичи → микро-стопы ног
+    // петли. L3 не получает WalkInput — поля передаются явно; нет данных →
+    // undefined, прежняя геометрическая роза бит-в-бит.
+    streetHints: input.streetHints,
+    streetFeatures: input.streetFeatures,
   });
   if (streetLoop.ok) return { ok: true, plans: [streetLoop.plan] };
 
