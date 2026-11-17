@@ -326,8 +326,10 @@
     "hero": {
       "title": "Don't know where to go? The walk finds itself",
       "subtitle": "Tell it how much time you have and what mood you are in — get a ready-made walking route through real streets, with meaningful stops and honest timing.",
+      "badge": "A walk generator on real streets",
       "cta": "Build my walk",
-      "ctaSecondary": "How it works"
+      "ctaSecondary": "How it works",
+      "visualAlt": "The Intelligent Trails main screen: a walk card with honest timing over the map"
     },
     "features": {
       "title": "Why it works",
