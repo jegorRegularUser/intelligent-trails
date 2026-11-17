@@ -33,6 +33,12 @@ export interface PlaceMiniCardProps {
    */
   variant?: 'chip' | 'full';
   className?: string;
+  /**
+   * Классы только мобильной ветки: bottom sheet за фиксированной панелью
+   * снизу не виден (к_quick-шторка закрывает низ карты) — пиновая карточка
+   * якорится к верху карты через mobileClassName.
+   */
+  mobileClassName?: string;
 }
 
 export function PlaceMiniCard({
@@ -44,6 +50,7 @@ export function PlaceMiniCard({
   placement = 'auto',
   variant = 'chip',
   className,
+  mobileClassName,
 }: PlaceMiniCardProps) {
   const { cardRef, style } = useAnchoredPosition({ anchor, containerRef, placement });
   const Icon = card.icon;
@@ -83,8 +90,9 @@ export function PlaceMiniCard({
         )}
       </div>
 
-      {/* Мобильный: bottom sheet с полной карточкой. */}
-      <div className={cn('absolute inset-x-0 bottom-0 z-20 md:hidden', className)}>
+      {/* Мобильный: bottom sheet с полной карточкой; mobileClassName умеет
+          переякорить карточку (например, к верху карты над шторкой). */}
+      <div className={cn('absolute inset-x-0 bottom-0 z-20 md:hidden', mobileClassName ?? className)}>
         <div className="mx-2 mb-2">
           <div className="mx-auto mb-1 h-1 w-10 rounded-full bg-slate-300" aria-hidden />
           <PlaceCard card={card} reason={reason} />

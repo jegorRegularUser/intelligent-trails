@@ -88,7 +88,19 @@
     "modeQuick": "Quick walk",
     "modeRoute": "Route",
     "modeSightseeing": "New city",
-    "startFromAddressOptional": "Where do we start? (optional — otherwise from geolocation)"
+    "startFromAddressOptional": "Where do we start? (optional — otherwise from geolocation)",
+    "howItWorks": "How it works",
+    "geoDenied": "Location access denied — tell us where to start instead",
+    "weatherUnknown": "Weather unknown — good for any walk",
+    "mapUnavailableTitle": "Map unavailable",
+    "mapUnavailableHint": "Your walk is ready — check the timeline, it doesn't depend on the map",
+    "shareCta": "Share",
+    "shareCopied": "Walk link copied",
+    "shareFailed": "Couldn't share — please try again",
+    "routeRestored": "Route restored from the link: stops and timing are intact",
+    "cityInputLabel": "City for the walk",
+    "citySelected": "City: {city}",
+    "cityClear": "Clear city"
   },
   "Builder": {
     "title": "Intelligent Route Planner",
@@ -139,6 +151,7 @@
   "Navigation": {
     "logo": "Intelligent Trails",
     "map": "Map",
+    "about": "About",
     "history": "History",
     "profile": "Profile",
     "signIn": "Sign In",
@@ -325,6 +338,7 @@
     "loadError": "Failed to load history"
   },
   "Landing": {
+    "aboutTitle": "How it works",
     "hero": {
       "title": "Don't know where to go? The walk finds itself",
       "subtitle": "Tell it how much time you have and what mood you are in — get a ready-made walking route through real streets, with meaningful stops and honest timing.",
@@ -450,6 +464,7 @@
     "closed": "Closed",
     "hoursUnknown": "Hours unknown",
     "openUntil": "until {until}",
-    "whyTitle": "Why here"
+    "whyTitle": "Why here",
+    "stayMinutes": "{minutes} min on site"
   }
 }
