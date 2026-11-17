@@ -13,8 +13,8 @@ import type { WeatherContext } from '@/lib/weather';
 import { evaluateOpeningHoursDetailed } from '@/lib/places/hours';
 import { PLACE_CATEGORIES } from '@/constants/categories';
 import type { WalkScoreReasons } from '@/components/walk/types';
-import { DEFAULT_WALKING_SPEED_KMH } from './types';
-import { zoneMetersForBudget, localProjection } from './internal/geo';
+import { DEFAULT_WALKING_SPEED_KMH, SECTOR_COUNT } from './types';
+import { zoneMetersForBudget, azimuthRad, sectorOfAzimuth } from './internal/geo';
 
 /** Границы бюджета главного сценария — едины для сборки и замены. */
 export const MIN_BUDGET = 15;
@@ -39,35 +39,26 @@ export const REPLACE_CANDIDATE_CAP = 12;
  * сохраняет представительство, но не доминирует.
  */
 export const SECTOR_CAP = 6;
-/** Число азимутных секторов вокруг старта (Роза 45°: 8 секторов покрывают круг). */
-const AZIMUTH_SECTOR_COUNT = 8;
 
 /**
  * Азимутная диверсификация шорт-листа (R2): кандидаты уже в скор-порядке;
- * нарезка идёт раунд-робином по 8 секторам азимута (equirect-проекция вокруг
- * старта, internal/geo.localProjection — не конус по сырым градусам), с
- * потолком SECTOR_CAP на сектор. Порядок внутри сектора — скор-порядок входа,
- * результат детерминирован. Чистая функция — вход presume-отфильтрован
+ * нарезка идёт раунд-робином по секторам азимута с потолком SECTOR_CAP на
+ * сектор. Сектора — общая конвенция с интерес-моделью и снапом петли:
+ * SECTOR_COUNT из walk/types + azimuthRad/sectorOfAzimuth из internal/geo
+ * (док «Улицы с характером» S2/S4). Порядок внутри сектора — скор-порядок
+ * входа, результат детерминирован. Чистая функция — вход presume-отфильтрован
  * вызывающей стороной (например, минимальной зоной вариантов).
  */
 export function diversifyByAzimuth<T extends { coordinates: [number, number] }>(
   entries: T[],
   start: [number, number],
   cap: number,
-  sectorCount = AZIMUTH_SECTOR_COUNT,
+  sectorCount = SECTOR_COUNT,
 ): T[] {
   if (entries.length <= cap) return entries.slice();
-  const proj = localProjection(start);
-  const twoPi = Math.PI * 2;
-  const sectorWidth = twoPi / sectorCount;
-  // Сектора: азимут от севера по часовой (восток = 90°), как в розах ветров.
   const bySector: T[][] = Array.from({ length: sectorCount }, () => []);
   for (const entry of entries) {
-    const { x, y } = proj.toMeters(entry.coordinates);
-    // atan2(восток, север) — азимут от севера по часовой; отрицательные
-    // (запад/юг) нормируем в [0, 2π).
-    const azimuth = (Math.atan2(x, y) + twoPi) % twoPi;
-    const sector = Math.min(sectorCount - 1, Math.floor(azimuth / sectorWidth));
+    const sector = sectorOfAzimuth(azimuthRad(start, entry.coordinates), sectorCount);
     if (bySector[sector].length < SECTOR_CAP) bySector[sector].push(entry);
   }
   // Раунд-робин по секторам в порядке 0..N-1: густой сектор не съедает cap.

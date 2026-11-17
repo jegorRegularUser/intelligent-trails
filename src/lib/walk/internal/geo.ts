@@ -42,6 +42,30 @@ export function localProjection(center: WalkLatLng): LocalProjection {
 }
 
 /**
+ * Азимут точки от центра, рад: от севера по часовой стрелке, нормирован в
+ * [0..2π). Конвенция розы (docs/street-interest-wave.md S2, pinned): проекция
+ * даёт x=восток/y=север, роза строит вейпоинт как sin→lat, cos→lng
+ * (streetLoop.buildWaypoints) — поэтому atan2(восток, север), а не atan2(y,x).
+ * Единая формула для диверсификации (R2), интерес-модели (S2) и снапа (S3).
+ */
+export function azimuthRad(center: WalkLatLng, point: WalkLatLng): number {
+  const { x, y } = localProjection(center).toMeters(point);
+  return (Math.atan2(x, y) + 2 * Math.PI) % (2 * Math.PI);
+}
+
+/** Индекс азимутного сектора [0..sectorCount): floor(нормированный азимут / ширина).
+ *  Вход нормируется в [0..2π) — хелпер безопасен для сырых углов любого знака.
+ *  Epsilon-сдвиг — float-страховка границ: азимут 135° при делении на ширину
+ *  45° даёт 2.9999999999999996, и без сдвига точная граница падала бы в
+ *  предыдущий сектор. */
+export function sectorOfAzimuth(azimuth: number, sectorCount: number): number {
+  const twoPi = 2 * Math.PI;
+  const width = twoPi / sectorCount;
+  const normalized = ((azimuth % twoPi) + twoPi) % twoPi;
+  return Math.min(sectorCount - 1, Math.floor((normalized + 1e-9) / width));
+}
+
+/**
  * Радиус зоны в метрах из бюджета времени — консолидация формулы (R6),
  * арифметика прежняя: доля бюджета на ходьбу × скорость / делитель.
  * Делитель движка мотивирован «кольцом через якорь на противоположной
