@@ -99,6 +99,63 @@ export function viaPointFor(
   ];
 }
 
+/**
+ * Площадь замкнутой петли по сырой полилинии, м² (волна «Прогулка», тайбрейкер
+ * сортировки вариантов): СНАЧАЛА выпуклая оболочка (алгоритм Эндрю, монотонная
+ * цепочка) по точкам в equirect-проекции, ПОТОМ shoelace по вершинам оболочки.
+ * Shoelace по сырой полилинии взят напрямую — знаковая алгебраическая площадь:
+ * на «восьмёрке» (самопересечение) она схлопывается в ноль, хотя петля честно
+ * накрывает два квартала; оболочка этому не подвержена. Вырожденные входы
+ * (меньше 3 непараллельных вершин) — 0: out-and-back и пустая геометрия
+ * честно не покрывают ничего, сортировка падает в тайбрейкер totalMinutes.
+ */
+export function loopAreaMeters(points: WalkLatLng[]): number {
+  if (points.length < 3) return 0;
+  const proj = localProjection(points[0]);
+  const xy = points.map((p) => proj.toMeters(p));
+  const hull = convexHull(xy);
+  if (hull.length < 3) return 0;
+  return Math.abs(shoelace(hull));
+}
+
+/** Выпуклая оболочка на плоскости: монотонная цепочка Эндрю, против часовой. */
+function convexHull(points: { x: number; y: number }[]): { x: number; y: number }[] {
+  const sorted = points.slice().sort((a, b) => a.x - b.x || a.y - b.y);
+  const cross = (
+    o: { x: number; y: number },
+    a: { x: number; y: number },
+    b: { x: number; y: number },
+  ): number => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const lower: { x: number; y: number }[] = [];
+  for (const p of sorted) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) {
+      lower.pop();
+    }
+    lower.push(p);
+  }
+  const upper: { x: number; y: number }[] = [];
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    const p = sorted[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) {
+      upper.pop();
+    }
+    upper.push(p);
+  }
+  lower.pop();
+  upper.pop();
+  return [...lower, ...upper];
+}
+
+function shoelace(ring: { x: number; y: number }[]): number {
+  let sum = 0;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i];
+    const b = ring[(i + 1) % ring.length];
+    sum += a.x * b.y - b.x * a.y;
+  }
+  return sum / 2;
+}
+
 function pointToSegmentMetersXY(
   p: { x: number; y: number },
   a: { x: number; y: number },

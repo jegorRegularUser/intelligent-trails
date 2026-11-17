@@ -168,6 +168,45 @@ describe('fillToFloor: добор остановками (R1.b)', () => {
     expect(result.sequence).toEqual([1]);
   });
 
+  it('политика добора: gap-проверка не даёт «двух точек в квартале»', async () => {
+    const { port } = makeCity([]);
+    // A (500,0) стоит в плане; B (600,0) — в 100 м от A (меньше gap 300) —
+    // добор его отсекает; C (0,700) — дальше 300 м от A — добавляется.
+    const points = [makeNode(0, 0), makeNode(500, 0), makeNode(600, 0), makeNode(0, 700)];
+    const times = await gridTimes(points, port);
+    const legs = await realLegs(port, [points[0], points[1], points[0]]);
+
+    const result = await fillToFloor({
+      sequence: [1],
+      legs,
+      budgetMinutes: 60,
+      matrixWalkMinutes: 13.333333333333332,
+      times,
+      points,
+      stayOf: new Map([[1, 0], [2, 0], [3, 0]]),
+      pool: [2, 3],
+      categoryOf: () => 'park',
+      limitOfCategory: () => 3,
+      maxStops: 6,
+      // Та же политика, что в движке: зазор между ДОБАВЛЕННЫМИ остановками
+      // (дельты широт/долгот переводятся в метры, как в gridCity).
+      farEnough: (bi, sequence) =>
+        sequence.every((j) => {
+          const dLatM = Math.abs(points[j][0] - points[bi][0]) * 111194.9;
+          const dLngM = Math.abs(points[j][1] - points[bi][1]) * 111194.9 * Math.cos(points[0][0] * (Math.PI / 180));
+          return Math.hypot(dLatM, dLngM) >= 300;
+        }),
+      isLoop: true,
+      endIndex: 0,
+      ports: port,
+      routeCalls: { count: 0 },
+    });
+
+    expect(result.sequence).toContain(1);
+    expect(result.sequence).not.toContain(2); // gap-нарушитель отсечён
+    expect(result.sequence).toContain(3);
+  });
+
   it('откат добора: реальный total вылетел за 1.1·B — последовательность и ноги как были', async () => {
     const { port } = makeCity([]);
     const points = [makeNode(0, 0), makeNode(500, 0), makeNode(0, 500)];

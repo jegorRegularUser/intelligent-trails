@@ -3,11 +3,11 @@
 // синтетика задокументирована в gridCity.ts и docs/walk-engine.md §14).
 
 import { describe, it, expect } from 'vitest';
-import { createWalkPlan } from '@/lib/walk/createWalkPlan';
+import { compareWalkPlans, createWalkPlan, loopCoverage } from '@/lib/walk/createWalkPlan';
 import { evaluateGates } from '@/lib/walk/gates';
 import { mulberry32 } from '@/lib/walk/internal/rng';
 import { makeCity, makeNode, type CityPlaceDef } from './gridCity';
-import type { WalkInput, WalkPlace, WalkPlanResult } from '@/lib/walk/types';
+import type { WalkInput, WalkLeg, WalkPlace, WalkPlan, WalkPlanResult } from '@/lib/walk/types';
 import type { WalkRoutingPort } from '@/lib/walk/ports';
 
 function expectOk(res: WalkPlanResult): asserts res is Extract<WalkPlanResult, { ok: true }> {
@@ -473,5 +473,80 @@ describe('createWalkPlan: категориальный кап', () => {
     const res = await createWalkPlan(input, port);
     expectOk(res);
     expect(cafeCount(res.plans[0])).toBe(3);
+  });
+});
+
+// --- Покрытие петли и сортировка вариантов (волна «Прогулка», R-тайбрейкер) ---
+
+describe('loopCoverage: площадь петли по сырой полилинии', () => {
+  const leg = (from: WalkPlace['coordinates'], to: WalkPlace['coordinates']): WalkLeg => ({
+    from,
+    to,
+    distanceMeters: 100,
+    durationMinutes: 2,
+    geometry: [from, to],
+  });
+  const planWithGeometry = (geometry: WalkPlace['coordinates'][]): Pick<WalkPlan, 'legs'> => ({
+    legs: geometry.slice(0, -1).map((point, i) => leg(point, geometry[i + 1])),
+  });
+
+  it('«восьмёрка» (самопересечение): выпуклая оболочка не даёт площади схлопнуться', () => {
+    // Знаковая алгебраическая площадь сырой восьмёрки ≈ 0; оболочка честно
+    // накрывает квадрат 200×200 м.
+    const eight = [
+      makeNode(-100, -100),
+      makeNode(100, 100),
+      makeNode(-100, 100),
+      makeNode(100, -100),
+      makeNode(-100, -100),
+    ];
+    expect(loopCoverage(planWithGeometry(eight))).toBeGreaterThan(30000);
+  });
+
+  it('out-and-back и пустая геометрия → 0 (тайбрейкер уходит в totalMinutes)', () => {
+    const line = [makeNode(0, 0), makeNode(500, 0), makeNode(0, 0)];
+    expect(loopCoverage(planWithGeometry(line))).toBe(0);
+    expect(loopCoverage({ legs: [{ from: makeNode(0, 0), to: makeNode(1, 1), distanceMeters: 0, durationMinutes: 0, geometry: [] }] })).toBe(0);
+    expect(loopCoverage({ legs: [] })).toBe(0);
+  });
+
+  it('равный скор: побеждает большее покрытие; нулевое покрытие → totalMinutes', () => {
+    const square = planWithGeometry([
+      makeNode(0, 0),
+      makeNode(300, 0),
+      makeNode(300, 300),
+      makeNode(0, 300),
+      makeNode(0, 0),
+    ]);
+    const sliver = planWithGeometry([
+      makeNode(0, 0),
+      makeNode(300, 0),
+      makeNode(300, 30),
+      makeNode(0, 30),
+      makeNode(0, 0),
+    ]);
+    const base = { stops: [], score: 2, allGatesPass: true, totalMinutes: 60 };
+    const compare = compareWalkPlans(true);
+    // Равный скор — большее покрытие выше.
+    expect(compare({ ...base, legs: sliver.legs }, { ...base, legs: square.legs })).toBeGreaterThan(0);
+    expect(compare({ ...base, legs: square.legs }, { ...base, legs: sliver.legs })).toBeLessThan(0);
+    // Равное покрытие — тайбрейкер totalMinutes (короче выше).
+    expect(
+      compare(
+        { ...base, legs: square.legs, totalMinutes: 60 },
+        { ...base, legs: square.legs, totalMinutes: 55 },
+      ),
+    ).toBeGreaterThan(0);
+    // А→Б: покрытие не включается — при равных прочих порядок ничейный.
+    const compareAb = compareWalkPlans(false);
+    expect(
+      compareAb({ ...base, legs: sliver.legs }, { ...base, legs: square.legs }),
+    ).toBe(0);
+    expect(
+      compareAb(
+        { ...base, legs: square.legs, totalMinutes: 55 },
+        { ...base, legs: sliver.legs, totalMinutes: 60 },
+      ),
+    ).toBeLessThan(0);
   });
 });

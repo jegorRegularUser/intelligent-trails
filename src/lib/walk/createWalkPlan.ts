@@ -29,6 +29,7 @@ import type { WalkMatrixCell, WalkRouteSegment, WalkRoutingPort } from './ports'
 import {
   fractionWithinCorridor,
   haversineMeters,
+  loopAreaMeters,
   polylineLengthMeters,
   splitPolylineByWaypoints,
   splitRouteMetrics,
@@ -200,12 +201,7 @@ export async function createWalkPlan(
     return { ok: false, failure: pickMostInformative(failures) };
   }
 
-  plans.sort(
-    (a, b) =>
-      Number(b.allGatesPass) - Number(a.allGatesPass) ||
-      b.score - a.score ||
-      a.totalMinutes - b.totalMinutes,
-  );
+  plans.sort(compareWalkPlans(input.isLoop));
   // Дедуп по составу якорей: джиттер весов и радиусы зон при кучном пуле
   // дают три КЛОНА одного плана («Вариант 1 из 3» листает одно и то же).
   // Слайдер честен, только когда варианты различаются набором мест.
@@ -225,6 +221,46 @@ function planSignature(plan: WalkPlan): string {
     .map((stop) => stop.place.id)
     .sort()
     .join(',');
+}
+
+/**
+ * Покрытие петли — площадь замкнутой полилинии плана, м² (детерминированный
+ * тайбрейкер сортировки: «прогулка, а не кратчайший путь» — при равном скор
+ * побеждает петля, накрывшая больше города). Ноги склеиваются без дублей
+ * узлов на стыке; пустая геометрия/out-and-back → 0 (тайбрейкер уходит в
+ * totalMinutes). Чистая функция — экспортируется для тестов.
+ */
+export function loopCoverage(plan: Pick<WalkPlan, 'legs'>): number {
+  const points: WalkLatLng[] = [];
+  for (const leg of plan.legs) {
+    for (const point of leg.geometry) {
+      const last = points[points.length - 1];
+      if (!last || Math.abs(last[0] - point[0]) > 1e-9 || Math.abs(last[1] - point[1]) > 1e-9) {
+        points.push(point);
+      }
+    }
+  }
+  return loopAreaMeters(points);
+}
+
+/** Ключи сортировки вариантов — ровно то, что читает компаратор. */
+export type PlanSortKey = Pick<WalkPlan, 'allGatesPass' | 'score' | 'totalMinutes' | 'legs'>;
+
+/**
+ * Тотальный порядок вариантов (§10 волны «Прогулка»): гейты pass → скор →
+ * покрытие петли (только isLoop: у А→Б площади нет) → короче. Равное
+ * покрытие (out-and-back, пустая геометрия) уходит в totalMinutes.
+ * Экспортируется для тестов сортировки.
+ */
+export function compareWalkPlans(
+  isLoop: boolean,
+): (a: PlanSortKey, b: PlanSortKey) => number {
+  const coverageOf = (plan: PlanSortKey): number => (isLoop ? loopCoverage(plan) : 0);
+  return (a, b) =>
+    Number(b.allGatesPass) - Number(a.allGatesPass) ||
+    b.score - a.score ||
+    coverageOf(b) - coverageOf(a) ||
+    a.totalMinutes - b.totalMinutes;
 }
 
 // --- Альтернативные маршруты ноги (docs/walk-loop-quality.md R3.c) ---
