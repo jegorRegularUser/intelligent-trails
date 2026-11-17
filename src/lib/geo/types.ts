@@ -68,6 +68,27 @@ export interface SuggestItem {
   coordinates?: LatLng;
 }
 
+// ---------------------------------------------------------------------------
+// Фичи улиц «Улицы с характером» (docs/street-interest-wave.md S1).
+// Аддитивное расширение контракта (ADR-001 разрешает расширение): опциональный
+// метод GeoProvider — провайдер без метода означает «интерес-модели нет»,
+// движок честно деградирует в чистую геометрическую розу.
+// ---------------------------------------------------------------------------
+
+/** Классы фич улиц (движок-твин — WalkStreetFeatureKind в lib/walk/types). */
+export type StreetFeatureKind = 'green' | 'water' | 'pedestrian' | 'viewpoint' | 'art';
+
+/** Фича улиц: полигоны зелени/воды, линии пешеходных улиц, точечные видовые/арт. */
+export interface StreetFeature {
+  kind: StreetFeatureKind;
+  /** [lat,lng]: 1 точка — точечная фича; 2+ — линия или контур полигона (≤64 точек). */
+  geometry: LatLng[];
+  /** Имя из OSM, если есть; у воды/зелени часто нет — не повод отбрасывать (S1). */
+  name?: string;
+  /** Площадь замкнутого контура, м² (точки/линии — 0) — лог-шкала размера в интерес-модели (S2). */
+  areaMeters: number;
+}
+
 export interface SearchPlacesOptions {
   /** Радиус поиска, м (адаптер сам решает, как деградировать). */
   radiusMeters?: number;
@@ -121,6 +142,16 @@ export interface GeoProvider {
    * (≤40 точек на запрос) и null для недостижимых ячеек — обязательны.
    */
   matrix(sources: LatLng[], targets: LatLng[]): Promise<MatrixCell[]>;
+
+  /**
+   * Фичи улиц района (зелень/вода/пешеходные/видовые/арт) одним Overpass-запросом
+   * с клипом геометрии (docs/street-interest-wave.md S1). Радиус клампится в
+   * [500, 3000] м. Опциональное расширение контракта (S6): реализации возвращают
+   * [] — «апстрим ответил: данных нет» и null — «апстрим лёг / ответ не влез в
+   * капы» (решение о деградации — за движком, полям WalkInput нужны undefined,
+   * не пустые массивы).
+   */
+  fetchStreetFeatures?(center: LatLng, searchRadiusMeters: number): Promise<StreetFeature[] | null>;
 
   /** Поиск мест категории вокруг точки. */
   searchPlaces(center: LatLng, category: PlaceCategory, opts?: SearchPlacesOptions): Promise<GeoPlace[]>;

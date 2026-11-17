@@ -5,12 +5,13 @@
 // и маппит теги из constants/categories.ts.
 
 import { GeoError } from '../types';
-import { GeoPlace, LatLng, SearchPlacesOptions } from '../types';
+import { GeoPlace, LatLng, SearchPlacesOptions, StreetFeature } from '../types';
 import { PLACE_CATEGORIES, CategoryId } from '@/constants/categories';
 import { getDistanceInMeters } from '@/utils/geo';
 import { fetchJson, UpstreamFailureCause } from '../http';
 import { assertValidPoint } from './validate';
 import { roundPoint } from '../cache';
+import { clampStreetRadius, parseStreetFeatures, streetFeaturesQuery } from '../streetFeatures';
 
 /** Дефолтный потолок выдачи, если opts.limit не задан. */
 const DEFAULT_LIMIT = 50;
@@ -234,6 +235,24 @@ export class OverpassPlacesAdapter {
       (a, b) => getDistanceInMeters(center, a.coordinates) - getDistanceInMeters(center, b.coordinates),
     );
     return sorted.slice(0, limit);
+  }
+
+  /**
+   * Фичи улиц для интерес-модели (docs/street-interest-wave.md S1/S6): один
+   * Overpass-запрос 5 классов union'ом с клипом `out geom (s,w,n,e)`, радиус
+   * клампится в [500, 3000] м. Зеркальная логика общая с searchPlaces
+   * (fetchElements: sticky-зеркало + один круг Promise.any) — метод добавлен
+   * в этот же адаптер, чтобы не копировать зеркала (S6). Отказ уходит наверх
+   * как GeoError; решение «данных нет» принимает CloudProvider (отрицательный
+   * кэш) и движок (поля undefined, не пустые массивы). Капы элементов/точек
+   * парсера — частичная деградация или null (S1).
+   */
+  async fetchStreetFeatures(center: LatLng, searchRadius: number): Promise<StreetFeature[] | null> {
+    assertValidPoint(center, 'center');
+    const radius = clampStreetRadius(searchRadius);
+    const query = streetFeaturesQuery(roundPoint(center), radius);
+    const elements = await this.fetchElements(query);
+    return parseStreetFeatures(elements);
   }
 
   /**

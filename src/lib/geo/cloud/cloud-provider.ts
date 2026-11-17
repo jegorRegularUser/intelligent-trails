@@ -3,8 +3,9 @@
 // сервисах. Композиция адаптеров: валидация → кэш → ORS/Photon/Nominatim/
 // Overpass. Движок прогулки не знает, кто под ним; PackProvider встанет сюда же.
 
-import { GeoProvider, GeoPlace, LatLng, MatrixCell, PlaceCategory, ReverseGeocodeResult, RouteRequest, RouteSegment, SearchPlacesOptions, SuggestItem } from '../types';
+import { GeoProvider, GeoPlace, LatLng, MatrixCell, PlaceCategory, ReverseGeocodeResult, RouteRequest, RouteSegment, SearchPlacesOptions, StreetFeature, SuggestItem } from '../types';
 import { pointKey, TtlLruCache } from '../cache';
+import { clampStreetRadius } from '../streetFeatures';
 import { CloudProviderConfig, resolveCloudConfig, resolveTimeouts, UPSTREAM_TIMEOUTS, UpstreamTimeouts } from './config';
 import { assertValidAlternatives, assertValidPoint, assertValidWaypoints } from './validate';
 import { OrsRoutingAdapter } from './ors';
@@ -24,6 +25,22 @@ const REVERSE_TTL_MS = 60 * 60_000;
 /** Пустой ответ reverse кэшим короче: «здесь ничего» устаревает быстрее. */
 const REVERSE_NEGATIVE_TTL_MS = 5 * 60_000;
 const SUGGEST_TTL_MS = 10 * 60_000;
+// --- Фичи улиц «Улицы с характером» (docs/street-interest-wave.md S1/S6) ---
+
+const STREET_FEATURES_TTL_MS = 10 * 60_000;
+/** Отрицательный кэш (S6): при лежке зеркал fetchElements жжёт 1 + Promise.any
+ *  × 8 зеркал × 12 с — без него каждая сборка платила бы до ~24 с. */
+const STREET_FEATURES_NEGATIVE_TTL_MS = 90_000;
+/**
+ * Клиентский таймаут street-features (S1): запрос тяжелее POI (5 классов
+ * union'ом, клип геометрии), поэтому НЕ делит overpassMs (12 000, config.ts)
+ * с поиском мест — у него свой бюджет, согласовый с [timeout:20] в query.
+ * Константа живёт здесь, а не в config.ts: таймауты апстримов волны
+ * «Улицы с характером» изолированы от общего конфига.
+ */
+const STREET_FEATURES_TIMEOUT_MS = 20_000;
+/** Payload фич на порядок жирнее placesCache — потолок записей ниже (S6). */
+const STREET_FEATURES_CACHE_ENTRIES = 50;
 
 export class CloudProvider implements GeoProvider {
   readonly id = 'cloud' as const;
@@ -35,6 +52,9 @@ export class CloudProvider implements GeoProvider {
   private readonly photon: PhotonAdapter;
   private readonly nominatim: NominatimAdapter;
   private readonly overpass: OverpassPlacesAdapter;
+  /** Отдельный инстанс под street-features: тот же класс и зеркала, свой таймаут
+   *  20 с (S1 — запрос не делит бюджет с POI) и свой sticky-зеркало. */
+  private readonly overpassStreet: OverpassPlacesAdapter;
 
   private readonly routeCache = new TtlLruCache<RouteSegment>({ maxEntries: 200, defaultTtlMs: ROUTE_TTL_MS });
   /** Ответы routeAlternatives: массив маршрутов, основной первым (R3.a). */
@@ -42,6 +62,11 @@ export class CloudProvider implements GeoProvider {
   private readonly placesCache = new TtlLruCache<GeoPlace[]>({ maxEntries: 200, defaultTtlMs: PLACES_TTL_MS });
   /** V может быть null — кэш честного «здесь ничего не нашли». */
   private readonly reverseCache = new TtlLruCache<ReverseGeocodeResult | null>({ maxEntries: 300, defaultTtlMs: REVERSE_TTL_MS });
+  /** Фичи улиц (S6): null в значении — отрицательный кэш лежки/капов. */
+  private readonly streetFeaturesCache = new TtlLruCache<StreetFeature[] | null>({
+    maxEntries: STREET_FEATURES_CACHE_ENTRIES,
+    defaultTtlMs: STREET_FEATURES_TTL_MS,
+  });
   private readonly suggestCache = new TtlLruCache<SuggestItem[]>({ maxEntries: 300, defaultTtlMs: SUGGEST_TTL_MS });
 
   constructor(partialConfig: Partial<CloudProviderConfig> = {}) {
@@ -90,6 +115,12 @@ export class CloudProvider implements GeoProvider {
       fetchImpl: this.fetchImpl,
       timeoutMs: this.timeouts.overpassMs,
     });
+    this.overpassStreet = new OverpassPlacesAdapter({
+      mirrors: this.config.overpassMirrors,
+      userAgent: this.config.userAgent,
+      fetchImpl: this.fetchImpl,
+      timeoutMs: STREET_FEATURES_TIMEOUT_MS,
+    });
   }
 
   async route(req: RouteRequest): Promise<RouteSegment> {
@@ -134,6 +165,32 @@ export class CloudProvider implements GeoProvider {
     targets.forEach((point, index) => assertValidPoint(point, `targets[${index}]`));
     // Чанкинг ≤40 источников, glue индексов и кэш чанков — в OrsRoutingAdapter.
     return this.ors.matrix(sources, targets);
+  }
+
+  /**
+   * Фичи улиц (S6): свой TtlLruCache — ключ center(roundPoint)+radius (радиус
+   * клампится ДО ключа: 5000 м и 6000 м — один запрос апстрима, пусть и кэш
+   * делят), TTL 10 мин гасит повтор при замене остановки; отказ и пробитие
+   * капов кэшируются отрицательно на 90 с. Пустой массив — настоящий ответ
+   * апстрима («район без фич»), кэшится на общий TTL: hasData=false у движка.
+   */
+  async fetchStreetFeatures(center: LatLng, searchRadiusMeters: number): Promise<StreetFeature[] | null> {
+    assertValidPoint(center, 'center');
+    const radius = clampStreetRadius(searchRadiusMeters);
+    const cacheKey = `street:${pointKey(center)}:${radius}`;
+    const cached = this.streetFeaturesCache.get(cacheKey);
+    if (cached !== undefined) return cached;
+
+    try {
+      const features = await this.overpassStreet.fetchStreetFeatures(center, radius);
+      this.streetFeaturesCache.set(cacheKey, features);
+      return features;
+    } catch {
+      // Лежка/мусор апстрима — null на короткий TTL, не бросаем: сборка
+      // прогулки обязана продолжиться без интерес-модели (S6, «упал → null»).
+      this.streetFeaturesCache.set(cacheKey, null, STREET_FEATURES_NEGATIVE_TTL_MS);
+      return null;
+    }
   }
 
   async searchPlaces(
