@@ -44,3 +44,9 @@ next-env.d.ts
 /mcps
 *.zip
 
+
+# ORS-ферма: ключи и пароли аккаунтов (секрет, вне git)
+ors-keys.json
+
+# Скриншоты GUI-смоука — артефакт проверки, не код
+/gui-test-screenshots

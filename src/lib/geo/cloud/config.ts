@@ -9,6 +9,12 @@ export interface CloudProviderConfig {
    * способ в тестах отсечь зависимость от окружения.
    */
   orsApiKey?: string;
+  /**
+   * Пул ключей ORS: квоты размазываются round-robin'ом, исчерпанный
+   * помечается до сброса квоты (полночь UTC), трафик уходит на соседний.
+   * Приоритетнее одиночного orsApiKey.
+   */
+  orsApiKeys?: readonly string[];
   orsBaseUrl: string;
   photonBaseUrl: string;
   nominatimBaseUrl: string;

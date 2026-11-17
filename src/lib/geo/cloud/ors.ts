@@ -8,12 +8,16 @@ import { LatLng, MatrixCell, RouteSegment } from '../types';
 import { roundPoint, pointKey, TtlLruCache } from '../cache';
 import { fetchJson, upstreamStatus, UpstreamFailureCause } from '../http';
 import { toLngLat } from './validate';
+import { OrsKeyPool } from './orsKeyPool';
 
 /** Лимит источников в одном матричном запросе (бюджет бесплатного тира). */
 export const MATRIX_SOURCES_PER_REQUEST = 40;
 
 export interface OrsAdapterOptions {
+  /** Одиночный ключ (обратная совместимость). Для пула используйте apiKeys. */
   apiKey?: string;
+  /** Пул ключей: квоты размазываются round-robin'ом, исчерпанные исключаются. */
+  apiKeys?: string[];
   baseUrl: string;
   fetchImpl?: typeof fetch;
   routeTimeoutMs: number;
@@ -50,26 +54,19 @@ function mapOrsError(error: unknown, action: string): unknown {
     return new GeoError('UPSTREAM_UNAVAILABLE', `ORS упал при «${action}»`, error);
   }
   const status = upstreamStatus(error);
+  // cause пробрасываем как есть (UpstreamFailureCause со статусом): mapOrsError
+  // может вызываться дважды на одну ошибку (внутри requestMatrix и в ротации
+  // withKeyRotation) — без прокидывания статус теряется и ротация слепнет.
   if (error.code === 'NOT_FOUND') {
-    return new GeoError('NO_ROUTE', `ORS не построил ${action}: ${error.message}`, error);
+    return new GeoError('NO_ROUTE', `ORS не построил ${action}: ${error.message}`, error.cause);
   }
   if (status === 401 || status === 403) {
-    return new GeoError('NO_ROUTE', `ORS отклонил ключ OPENROUTESERVICE_API_KEY (HTTP ${status})`, error);
+    return new GeoError('NO_ROUTE', `ORS отклонил ключ OPENROUTESERVICE_API_KEY (HTTP ${status})`, error.cause);
   }
   if (status === 429) {
-    return new GeoError('NO_ROUTE', 'Квота OpenRouteService исчерпана — попробуйте позже', error);
+    return new GeoError('NO_ROUTE', 'Квота OpenRouteService исчерпана — попробуйте позже', error.cause);
   }
   return error;
-}
-
-function requireKey(apiKey: string | undefined, what: string): string {
-  if (!apiKey) {
-    throw new GeoError(
-      'NO_ROUTE',
-      `OPENROUTESERVICE_API_KEY не задан — ${what} на облачном тире недоступно`,
-    );
-  }
-  return apiKey;
 }
 
 // ---------------------------------------------------------------------------
@@ -152,10 +149,50 @@ export class OrsRoutingAdapter {
     distances: (number | null)[][];
   }>({ maxEntries: 200, defaultTtlMs: 10 * 60_000 });
 
-  constructor(private readonly options: OrsAdapterOptions) {}
+  /** Пул ключей: одиночный apiKey считается пулом из одного. */
+  private readonly keyPool: OrsKeyPool;
+
+  constructor(private readonly options: OrsAdapterOptions) {
+    const keys = options.apiKeys && options.apiKeys.length > 0
+      ? options.apiKeys
+      : options.apiKey
+        ? [options.apiKey]
+        : [];
+    this.keyPool = new OrsKeyPool(keys);
+  }
+
+  /**
+   * Выполнить запрос ORS с ротацией ключей: 403/429 — квота исчерпана,
+   * ключ помечается до сброса, запрос мгновенно уходит на следующий живой.
+   * Пустой пул — прежняя семантика requireKey (NO_ROUTE «ключ не задан»).
+   */
+  private async withKeyRotation<T>(
+    action: string,
+    run: (apiKey: string) => Promise<T>,
+  ): Promise<T> {
+    if (this.keyPool.size === 0) {
+      throw new GeoError(
+        'NO_ROUTE',
+        `OPENROUTESERVICE_API_KEY не задан — ${action} на облачном тире недоступно`,
+      );
+    }
+    for (let attempt = 0; attempt < this.keyPool.size; attempt++) {
+      const apiKey = this.keyPool.current();
+      try {
+        return await run(apiKey);
+      } catch (error) {
+        const status = upstreamStatus(error);
+        if (status === 403 || status === 429) {
+          const next = this.keyPool.markExhausted(apiKey);
+          if (next) continue; // квота этого ключа кончилась — пробуем соседний
+        }
+        throw mapOrsError(error, action);
+      }
+    }
+    throw new GeoError('UPSTREAM_UNAVAILABLE', `ORS: все ключи ушли в отказ при «${action}»`);
+  }
 
   async route(waypoints: LatLng[]): Promise<RouteSegment> {
-    const apiKey = requireKey(this.options.apiKey, 'роутинг');
     const url = `${this.options.baseUrl}/v2/directions/foot-walking/geojson`;
     const body = {
       // Округление до 5 знаков (~1.1 м) — согласовано с ключами кэша выше по стеку.
@@ -164,9 +201,8 @@ export class OrsRoutingAdapter {
       instructions: false,
     };
 
-    let data: OrsGeoJsonResponse;
-    try {
-      data = await fetchJson<OrsGeoJsonResponse>({
+    const data = await this.withKeyRotation('роутинг', (apiKey) =>
+      fetchJson<OrsGeoJsonResponse>({
         url,
         timeoutMs: this.options.routeTimeoutMs,
         fetchImpl: this.options.fetchImpl,
@@ -175,10 +211,7 @@ export class OrsRoutingAdapter {
           headers: { Authorization: apiKey, 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         },
-      });
-    } catch (error) {
-      throw mapOrsError(error, 'маршрут');
-    }
+      }));
     return parseGeojsonRoute(data);
   }
 
@@ -189,7 +222,6 @@ export class OrsRoutingAdapter {
    * глобальных и локальных индексов уже ловили — тесты фиксируют склейку).
    */
   async matrix(sources: LatLng[], targets: LatLng[]): Promise<MatrixCell[]> {
-    const apiKey = requireKey(this.options.apiKey, 'матрица расстояний');
     if (sources.length === 0 || targets.length === 0) return [];
 
     const roundedTargets = targets.map(roundPoint);
@@ -205,7 +237,11 @@ export class OrsRoutingAdapter {
 
       const cacheKey = `matrix:${[...chunk, ...roundedTargets].map(pointKey).join('|')}`;
       const cached = this.matrixCache.get(cacheKey);
-      const rows = cached ?? (await this.requestMatrix(apiKey, locations, sourceCount, targetCount));
+      // Каждый чанк — свой запрос с ротацией: исчерпание квоты может случиться
+      // посреди матрицы, трафик доедет на соседнем ключе.
+      const rows = cached
+        ?? (await this.withKeyRotation('матрица расстояний', (apiKey) =>
+          this.requestMatrix(apiKey, locations, sourceCount, targetCount)));
       if (!cached) this.matrixCache.set(cacheKey, rows);
 
       for (let localRow = 0; localRow < sourceCount; localRow++) {

@@ -46,9 +46,19 @@ export class CloudProvider implements GeoProvider {
       this.config.orsApiKey !== undefined
         ? this.config.orsApiKey || undefined
         : process.env.OPENROUTESERVICE_API_KEY || undefined;
+    // Пул: env OPENROUTESERVICE_API_KEYS (через запятую) + ключи из конфига.
+    // Одиночный ключ — частный случай пула из одного.
+    const orsApiKeys = [
+      ...(this.config.orsApiKeys ?? []),
+      ...(orsApiKey ? [orsApiKey] : []),
+      ...(process.env.OPENROUTESERVICE_API_KEYS ?? '')
+        .split(',')
+        .map((key) => key.trim())
+        .filter(Boolean),
+    ];
 
     this.ors = new OrsRoutingAdapter({
-      apiKey: orsApiKey,
+      apiKeys: orsApiKeys,
       baseUrl: this.config.orsBaseUrl,
       fetchImpl: this.fetchImpl,
       routeTimeoutMs: this.timeouts.orsRouteMs,

@@ -5,9 +5,17 @@
 // ports.route() это отдельный HTTP-запрос к роутеру. Ключи направленные
 // (A→B ≠ B→A): пешая сеть почти симметрична, но гарантий нет — лучше
 // пересчитать, чем показать чужую геометрию. Кэш живёт в пределах одного
-// вызова движка; сквозной кэш между вызовами даёт синглтон-провайдер.
+// вызова движка; сквозной кэш между вызовами даёт синглтон-провайдер,
+// а переживает перезапуск — дисковый слой (portDiskCache): вчерашние
+// прогулки по тому же району не жгут суточную квоту ORS заново.
 import type { WalkMatrixCell, WalkRouteSegment, WalkRoutingPort } from './ports';
 import type { WalkLatLng } from './types';
+import {
+  readMatrixCache,
+  readRouteCache,
+  writeMatrixCache,
+  writeRouteCache,
+} from './portDiskCache';
 
 /** Ёмкости кэшей: один план — это ≤3 матрицы и ≤42 ног, с запасом. */
 const ROUTE_CACHE_MAX = 128;
@@ -35,11 +43,19 @@ export function memoizeRoutingPort(port: WalkRoutingPort): WalkRoutingPort {
       const key = req.waypoints.map(pointKey).join('->');
       const hit = routes.get(key);
       if (hit) return hit;
-      // Отказ не кэшируем: retry легитимен (матрица уже различает null-ячейки).
-      const pending = port.route(req).catch((e) => {
-        routes.delete(key);
-        throw e;
-      });
+      // Дисковый слой до сети: вчерашние зоны города не жгут квоту ORS.
+      const pending = readRouteCache(req.waypoints)
+        .then((disk) => {
+          if (disk) return disk;
+          return port.route(req).then((segment) => {
+            writeRouteCache(req.waypoints, segment);
+            return segment;
+          });
+        })
+        .catch((e) => {
+          routes.delete(key);
+          throw e;
+        });
       putFifo(routes, ROUTE_CACHE_MAX, key, pending);
       return pending;
     },
@@ -47,10 +63,20 @@ export function memoizeRoutingPort(port: WalkRoutingPort): WalkRoutingPort {
       const key = `${sources.map(pointKey).join(';')}#${targets.map(pointKey).join(';')}`;
       const hit = matrices.get(key);
       if (hit) return hit;
-      const pending = port.matrix(sources, targets).catch((e) => {
-        matrices.delete(key);
-        throw e;
-      });
+      const pending = readMatrixCache(sources, targets)
+        .then((disk) => {
+          if (disk) return disk;
+          return port
+            .matrix(sources, targets)
+            .then((cells) => {
+              writeMatrixCache(sources, targets, cells);
+              return cells;
+            });
+        })
+        .catch((e) => {
+          matrices.delete(key);
+          throw e;
+        });
       putFifo(matrices, MATRIX_CACHE_MAX, key, pending);
       return pending;
     },
