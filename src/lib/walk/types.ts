@@ -155,3 +155,20 @@ export const MIN_WALK_SHARE = 0.35;
  * на 90° — снап притянул бы вейпоинт в чужой сектор молча.
  */
 export const SECTOR_COUNT = 8;
+
+/** Классы фич улиц — структурный двойник StreetFeatureKind (lib/geo/types). */
+export type WalkStreetFeatureKind = 'green' | 'water' | 'pedestrian' | 'viewpoint' | 'art';
+
+/**
+ * База веса фичи по классу (docs/street-interest-wave.md S2) — единый источник
+ * для scoreSectors (вклад в интерес сектора) и тайбрейкера альтернатив ног
+ * (топ-K фич по весу, S5/C11). Двойники в vibes/geo запрещены: числа меняются
+ * вместе с доком, в одном месте.
+ */
+export const STREET_FEATURE_KIND_WEIGHTS: Record<WalkStreetFeatureKind, number> = {
+  water: 1.2,
+  green: 1.0,
+  pedestrian: 0.9,
+  viewpoint: 1.5,
+  art: 0.7,
+};

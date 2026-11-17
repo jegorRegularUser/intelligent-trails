@@ -21,6 +21,8 @@ export function haversineMeters(a: WalkLatLng, b: WalkLatLng): number {
 export interface LocalProjection {
   /** [lat, lng] → метры {x — восток, y — север} относительно центра. */
   toMeters(p: WalkLatLng): { x: number; y: number };
+  /** Обратное к toMeters — метры {x, y} → [lat, lng]. */
+  fromMeters(m: { x: number; y: number }): WalkLatLng;
 }
 
 /** Длина полилинии по прямой между последовательными точками, м. */
@@ -38,6 +40,7 @@ export function localProjection(center: WalkLatLng): LocalProjection {
   const ky = EARTH_RADIUS_M * rad;
   return {
     toMeters: (p: WalkLatLng) => ({ x: (p[1] - center[1]) * kx, y: (p[0] - center[0]) * ky }),
+    fromMeters: (m: { x: number; y: number }) => [center[0] + m.y / ky, center[1] + m.x / kx],
   };
 }
 
@@ -185,14 +188,26 @@ function pointToSegmentMetersXY(
   a: { x: number; y: number },
   b: { x: number; y: number },
 ): number {
+  return closestOnSegmentXY(p, a, b).distanceMeters;
+}
+
+function closestOnSegmentXY(
+  p: { x: number; y: number },
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+): { x: number; y: number; distanceMeters: number } {
   const abx = b.x - a.x;
   const aby = b.y - a.y;
   const apx = p.x - a.x;
   const apy = p.y - a.y;
   const lenSq = abx * abx + aby * aby;
-  if (lenSq === 0) return Math.hypot(apx, apy);
+  if (lenSq === 0) return { x: a.x, y: a.y, distanceMeters: Math.hypot(apx, apy) };
   const t = Math.max(0, Math.min(1, (apx * abx + apy * aby) / lenSq));
-  return Math.hypot(apx - t * abx, apy - t * aby);
+  return {
+    x: a.x + t * abx,
+    y: a.y + t * aby,
+    distanceMeters: Math.hypot(apx - t * abx, apy - t * aby),
+  };
 }
 
 /** Расстояние от точки до отрезка a→b в метрах (проекция вокруг центра отрезка). */
@@ -203,6 +218,42 @@ export function pointToSegmentMeters(
   proj: LocalProjection,
 ): number {
   return pointToSegmentMetersXY(proj.toMeters(p), proj.toMeters(a), proj.toMeters(b));
+}
+
+export interface ClosestOnPolyline {
+  /** Проекция p на ближайший сегмент полилинии. */
+  point: WalkLatLng;
+  distanceMeters: number;
+  /** Индекс сегмента a→b, на который легла проекция (−1 у пустой полилинии). */
+  segmentIndex: number;
+}
+
+/**
+ * Ближайшая точка полилинии к p, в метрах и координатах: проекция на
+ * ближайший сегмент (полилиния в проекции вокруг своей первой вершины).
+ * Потребители (S2 attractionPoint, S4 микро-стопы): вершины OSM-контуров
+ * неравномерны — проекция на СЕГМЕНТ честнее ближайшей вершины. Пустая
+ * полилиния → дистанция Infinity (звонящий обязан фильтровать); одна вершина
+ * → сама вершина.
+ */
+export function closestPointOnPolyline(p: WalkLatLng, polyline: WalkLatLng[]): ClosestOnPolyline {
+  if (polyline.length === 0) {
+    return { point: p, distanceMeters: Number.POSITIVE_INFINITY, segmentIndex: -1 };
+  }
+  if (polyline.length === 1) {
+    return { point: polyline[0], distanceMeters: haversineMeters(p, polyline[0]), segmentIndex: 0 };
+  }
+  const proj = localProjection(polyline[0]);
+  const target = proj.toMeters(p);
+  let best: ClosestOnPolyline | null = null;
+  for (let i = 0; i < polyline.length - 1; i++) {
+    const hit = closestOnSegmentXY(target, proj.toMeters(polyline[i]), proj.toMeters(polyline[i + 1]));
+    if (best === null || hit.distanceMeters < best.distanceMeters) {
+      best = { point: proj.fromMeters(hit), distanceMeters: hit.distanceMeters, segmentIndex: i };
+    }
+    if (hit.distanceMeters === 0) break; // ближе не бывает — ранний выход
+  }
+  return best!;
 }
 
 /**

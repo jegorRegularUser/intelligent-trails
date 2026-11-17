@@ -3,7 +3,7 @@
 // Все числа продублированы в docs/vibes.md §3 — код и документ меняются вместе.
 
 import type { CategoryId } from '@/constants/categories';
-import type { GeoPlace } from '@/lib/geo/types';
+import type { GeoPlace, StreetFeatureKind } from '@/lib/geo/types';
 
 export type ArchetypeId = 'green' | 'coffee' | 'evening' | 'rainy' | 'surprise' | 'sightseeing';
 
@@ -24,6 +24,11 @@ export interface Archetype {
   categoryLimits?: Partial<Record<CategoryId, number>>;
   /** Насколько архетип «светится» в данный час (0..23), 0..1. Кусочно-линейная. */
   hourAffinity: (hour: number) => number;
+  /**
+   * Множители интерес-модели улиц по классам фич (docs/street-interest-wave.md
+   * S2, docs/vibes.md §3.7). Отсутствие записи или поля — множитель 1.
+   */
+  streetInterest?: Partial<Record<StreetFeatureKind, number>>;
   descriptionRu: string;
   descriptionEn: string;
 }
@@ -138,6 +143,8 @@ export const GREEN: Archetype = {
     bar: 25, cinema: 120, shopping: 12, viewpoint: 15,
   }),
   hourAffinity: piecewiseAffinity(GREEN_AFFINITY),
+  // Зелёная: зелень — ядро среды, вода — набережные рядом (S2, vibes §3.7).
+  streetInterest: { green: 1.6, water: 1.3 },
 };
 
 export const COFFEE: Archetype = {
@@ -159,6 +166,8 @@ export const COFFEE: Archetype = {
     bar: 30, cinema: 120, shopping: 12, viewpoint: 10,
   }),
   hourAffinity: piecewiseAffinity(COFFEE_AFFINITY),
+  // Кофейная: характер среды — уютные пешеходные улочки (S2).
+  streetInterest: { pedestrian: 1.4 },
 };
 
 export const EVENING: Archetype = {
@@ -178,6 +187,8 @@ export const EVENING: Archetype = {
     bar: 40, cinema: 120, shopping: 10, viewpoint: 15,
   }),
   hourAffinity: piecewiseAffinity(EVENING_AFFINITY),
+  // Вечерняя: lit-теги улиц вне волны — пока лёгкий буст пешеходных улиц (S2).
+  streetInterest: { pedestrian: 1.1 },
 };
 
 export const RAINY: Archetype = {
@@ -199,6 +210,8 @@ export const RAINY: Archetype = {
     bar: 30, cinema: 120, shopping: 40, viewpoint: 5,
   }),
   hourAffinity: piecewiseAffinity(RAINY_AFFINITY),
+  // Дождливая: улица не ядро — вся среда обесценена (S2).
+  streetInterest: { green: 0.3, water: 0.3, pedestrian: 0.3, viewpoint: 0.3, art: 0.3 },
 };
 
 export const SURPRISE: Archetype = {
@@ -218,6 +231,7 @@ export const SURPRISE: Archetype = {
     bar: 30, cinema: 120, shopping: 20, viewpoint: 10,
   }),
   hourAffinity: piecewiseAffinity(SURPRISE_AFFINITY),
+  // Удиви меня: без множителя — среда без переоценки (S2).
 };
 
 /**
@@ -242,6 +256,8 @@ export const SIGHTSEEING: Archetype = {
     bar: 25, cinema: 120, shopping: 15, viewpoint: 10,
   }),
   hourAffinity: piecewiseAffinity(SIGHTSEEING_AFFINITY),
+  // Обзорная: видовые точки и пешеходные улицы — то, зачем едут в новый район (S2).
+  streetInterest: { viewpoint: 1.6, pedestrian: 1.2 },
 };
 
 /** Реестр архетипов в порядке UI («зелёная / кофейная / вечерняя / дождь / удиви меня»). */
