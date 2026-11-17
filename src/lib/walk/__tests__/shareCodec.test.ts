@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
+import { compressToEncodedURIComponent, decompressFromEncodedURIComponent } from 'lz-string';
 import { decodeRouteFromUrl } from '@/utils/routeCodec';
-import { quickWalkToEncodedRoute, quickWalkToYandexMapsUrl, sampleLoopGeometry } from '../shareCodec';
+import {
+  decodeQuickWalkShare,
+  quickWalkShareUrl,
+  quickWalkToEncodedRoute,
+  quickWalkToYandexMapsUrl,
+  sampleLoopGeometry,
+  SHARE_URL_MAX_CHARS,
+} from '../shareCodec';
 import type { WalkPlan as UiWalkPlan } from '@/components/walk/types';
 
 function makeUiPlan(type: 'loop' | 'point_to_point' = 'loop'): UiWalkPlan {
@@ -167,5 +175,117 @@ describe('shareCodec: ссылка «Идти» для чистой петли (
     // Короче лимита — возвращается копия целиком.
     const short = line.slice(0, 5);
     expect(sampleLoopGeometry(short, 10)).toHaveLength(5);
+  });
+});
+
+describe('shareCodec: шеринг ?w= v3 (docs/ux-human-wave.md M4)', () => {
+  function makeLeg(min: number, ring: [number, number][]): UiWalkPlan['legs'][number] {
+    return { walkMin: min, ...(ring ? { geometry: ring } : {}) };
+  }
+
+  const RING: [number, number][] = Array.from({ length: 24 }, (_, i) => {
+    const angle = (i / 24) * Math.PI * 2;
+    return [START[0] + Math.sin(angle) * 0.004, START[1] + Math.cos(angle) * 0.004];
+  });
+
+  function makeSharePlan(type: 'loop' | 'point_to_point' = 'loop'): UiWalkPlan {
+    const base = makeUiPlan(type);
+    return {
+      ...base,
+      legs: type === 'loop'
+        ? [makeLeg(10, RING.slice(0, 10)), makeLeg(12, RING.slice(10, 20)), makeLeg(8, RING.slice(20))]
+        : [makeLeg(10, RING.slice(0, 12)), makeLeg(12, RING.slice(12))],
+    };
+  }
+
+  it('round-trip петли: тип, бюджет, остановки и геометрия ≤40 точек на лег', () => {
+    const url = quickWalkShareUrl(makeSharePlan(), START, 0);
+    expect(url.startsWith('/?w=')).toBe(true);
+    const raw = url.slice('/?w='.length);
+    const decoded = decodeQuickWalkShare(raw);
+    expect(decoded).toBeTruthy();
+    expect(decoded!.plan.type).toBe('loop');
+    expect(decoded!.plan.budgetMin).toBe(60);
+    expect(decoded!.plan.stops.map((s) => s.name)).toEqual(['Парк Горького', 'Кофейня X']);
+    expect(decoded!.geoDropped).toBe(false);
+    for (const leg of decoded!.plan.legs) {
+      expect((leg.geometry ?? []).length).toBeLessThanOrEqual(40);
+    }
+    // Координаты в пределах округления 1e5 (~1.1 м).
+    expect(Math.abs(decoded!.plan.stops[0].coordinates![0] - 55.731)).toBeLessThan(1e-4);
+  });
+
+  it('round-trip A→B: тип point_to_point, финиш несёт конечную остановку', () => {
+    const plan = makeSharePlan('point_to_point');
+    const decoded = decodeQuickWalkShare(quickWalkShareUrl(plan, START, 1).slice('/?w='.length));
+    expect(decoded!.plan.type).toBe('point_to_point');
+    expect(decoded!.plan.stops).toHaveLength(2);
+    // variantIndex едет в payload для восстановления слайдера
+    const payload = JSON.parse(
+      (decompressFromEncodedURIComponent(quickWalkShareUrl(plan, START, 1).slice('/?w='.length)) as string),
+    );
+    expect(payload.v).toBe(3);
+    expect(payload.variantIndex).toBe(1);
+  });
+
+  it('пустые причины и absence полей деградируют честно, не падая', () => {
+    const plan = makeUiPlan();
+    plan.stops = plan.stops.map((s) => ({ ...s, reason: '', coordinates: s.coordinates }));
+    const decoded = decodeQuickWalkShare(quickWalkShareUrl(plan, START).slice('/?w='.length));
+    expect(decoded!.plan.stops[0].reason).toBe('');
+  });
+
+  it('utf-8 и спецсимволы переживают lz-string', () => {
+    const plan = makeUiPlan();
+    plan.stops[0].name = 'Кафе «У Петровича» & Co ~50% 100%#привет';
+    const decoded = decodeQuickWalkShare(quickWalkShareUrl(plan, START).slice('/?w='.length));
+    expect(decoded!.plan.stops[0].name).toBe('Кафе «У Петровича» & Co ~50% 100%#привет');
+  });
+
+  it('переполнение URL: геометрия отбрасывается, stops остаются, decode помечает geoDropped', () => {
+    const plan = makeSharePlan();
+    // Раздуваем имена/причины — упаковка перестаёт влезать в SHARE_URL_MAX_CHARS.
+    plan.stops = plan.stops.map((s, i) => ({
+      ...s,
+      name: `${s.name} ${'Очень длинное название места, которое повторяется и повторяется. '.repeat(60)}${i}`,
+      reason: `${s.reason} ${'Обстоятельная причина захода именно сюда, а не в другое место. '.repeat(60)}`,
+    }));
+    const url = quickWalkShareUrl(plan, START);
+    const decoded = decodeQuickWalkShare(url.slice('/?w='.length));
+    expect(decoded).toBeTruthy();
+    expect(decoded!.geoDropped).toBe(true);
+    // Остановки и время живы — «маршрут восстановлен» честен.
+    expect(decoded!.plan.stops).toHaveLength(2);
+    expect(decoded!.plan.legs.every((l) => !l.geometry)).toBe(true);
+    // Скоринг имён/причин в lz-string плох, поэтому slim-URL тоже может выйти
+    // за SHARE_URL_MAX_CHARS: кодек отбрасывает геометрию и возвращает как есть.
+    expect(url.length).toBeGreaterThan(SHARE_URL_MAX_CHARS);
+  });
+
+  it('сжатая геометрия влезает в предел: обычная 60-мин петля умещается', () => {
+    const url = quickWalkShareUrl(makeSharePlan(), START);
+    expect(url.length).toBeLessThanOrEqual(SHARE_URL_MAX_CHARS);
+  });
+
+  it('мусор и чужая версия — null, не падение', () => {
+    expect(decodeQuickWalkShare('garbage-not-lz')).toBeNull();
+    const payload = JSON.stringify({ v: 2, type: 'loop' });
+    expect(decodeQuickWalkShare(compressToEncodedURIComponent(payload))).toBeNull();
+    expect(decodeQuickWalkShare('')).toBeNull();
+  });
+
+  it('ресэмпл ≤40 точек на лег соблюдается кодеком', () => {
+    const dense: [number, number][] = Array.from({ length: 400 }, (_, i) => [
+      START[0] + i * 1e-4,
+      START[1] + Math.sin(i / 20) * 1e-3,
+    ]);
+    const plan = makeUiPlan();
+    plan.legs = [makeLeg(20, dense)];
+    const decoded = decodeQuickWalkShare(quickWalkShareUrl(plan, START).slice('/?w='.length));
+    expect(decoded!.plan.legs[0].geometry!.length).toBeLessThanOrEqual(40);
+    // Края лега сохранены.
+    const geometry = decoded!.plan.legs[0].geometry!;
+    expect(geometry[0][0]).toBeCloseTo(dense[0][0], 4);
+    expect(geometry[geometry.length - 1][0]).toBeCloseTo(dense[dense.length - 1][0], 4);
   });
 });

@@ -4,16 +4,24 @@
 // но без плавающей оболочки: рендерится ВНУТРИ единой панели «План прогулки»
 // (RoutePanel) рядом со свитчером режимов. Геолокация/адрес → server action →
 // движок → карточка + петля на карте.
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+//
+// Волна human design (docs/ux-human-wave.md):
+//   M1 — building-петля: setBuilding до await сборки, радиус из shared-формулы;
+//   F1 — диф-апдейт карты: листание вариантов и замена остановки идут с
+//        {fit:false}, камера не дёргается (полный рефит — только новая прогулка);
+//   M4 — шаринг ?w= v3 + гидрация чужой прогулки без сети (HYDRATE);
+//   M6 — честные состояния: geoDenied, погода неизвестна, пикер города.
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
-import { CloudRain, Crosshair, MapPin, Save, ThermometerSun } from "lucide-react";
+import { CloudRain, Crosshair, MapPin, Save, Share2, ThermometerSun, X } from "lucide-react";
 import {
   DEFAULT_CUSTOM_MINUTES,
-  INITIAL_WALK_STATE,
   SURPRISE_VIBE,
   estimateBuildRange,
   normalizeCustomMinutes,
-  walkMachine,
+  type WalkMachineState,
+  type WalkEvent,
   type VibeId,
 } from "@/components/walk/logic";
 import { QuickStartPanel } from "@/components/walk/QuickStartPanel";
@@ -32,7 +40,12 @@ import {
 import { replaceQuickStop } from "@/actions/quickWalkReplace";
 import { saveQuickWalkToHistory } from "@/actions/quickWalkSave";
 import { planPolyline } from "@/lib/walk/uiAdapter";
-import { quickWalkToYandexMapsUrl } from "@/lib/walk/shareCodec";
+import {
+  decodeQuickWalkShare,
+  quickWalkShareUrl,
+  quickWalkToYandexMapsUrl,
+} from "@/lib/walk/shareCodec";
+import { searchRadiusMetersForBudget } from "@/lib/walk/shared/geometry";
 
 interface GeolocationPositionLike {
   coords: { latitude: number; longitude: number };
@@ -60,7 +73,7 @@ function browserTimezone(): string | undefined {
   }
 }
 
-/** Остановки плана → пины карты: reason и часы едут в бейдж карточки пина. */
+/** Остановки плана → пины карты: reason, стоянка и часы едут в карточку пина. */
 function pinsFromPlan(plan: WalkPlan, fallbackStart: [number, number]) {
   return plan.stops.map((s) => ({
     id: s.id,
@@ -68,16 +81,27 @@ function pinsFromPlan(plan: WalkPlan, fallbackStart: [number, number]) {
     kind: s.kind,
     coords: s.coordinates ?? fallbackStart,
     reason: s.reason,
+    stayMin: s.stayMin,
     openingHours: s.openingHours,
   }));
 }
 
-export function QuickWalkContent({ mode = "quick" }: { mode?: "quick" | "sightseeing" }) {
+export interface QuickWalkContentProps {
+  mode?: "quick" | "sightseeing";
+  /** Машина фаз живёт в QuickWalkPanel (M3): shell знает высоту шторки. */
+  machine: WalkMachineState;
+  dispatch: (event: WalkEvent) => void;
+}
+
+export function QuickWalkContent({
+  mode = "quick",
+  machine,
+  dispatch,
+}: QuickWalkContentProps) {
   const t = useTranslations("WalkUI");
   const locale = useLocale();
   const { showToast } = useToast();
   const mapStore = useQuickWalkMapStore();
-  const [machine, dispatch] = useReducer(walkMachine, INITIAL_WALK_STATE);
   const [selectedMinutes, setSelectedMinutes] = useState<number | null>(null);
   const [isCustomActive, setIsCustomActive] = useState(false);
   const [customMinutes, setCustomMinutes] = useState<number | null>(null);
@@ -94,6 +118,15 @@ export function QuickWalkContent({ mode = "quick" }: { mode?: "quick" | "sightse
   /** Старт: геолокация или адрес (фолбэк, когда геолокацию не дали). */
   const [addressStart, setAddressStart] = useState<[number, number] | null>(null);
   const [needsAddress, setNeedsAddress] = useState(false);
+  /** M6: отказ геолокации — не «поломка», а просьба сказать, откуда пойдём. */
+  const [geoDenied, setGeoDenied] = useState(false);
+  const addressInputRef = useRef<HTMLDivElement | null>(null);
+  const focusAddressInput = useCallback(() => {
+    addressInputRef.current?.querySelector("input")?.focus();
+  }, []);
+
+  /** M6 «Новый город»: пикер города через suggest — город задаёт старт-центр. */
+  const [cityStart, setCityStart] = useState<{ coords: [number, number]; name: string } | null>(null);
 
   const [isSaving, setIsSaving] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -114,18 +147,38 @@ export function QuickWalkContent({ mode = "quick" }: { mode?: "quick" | "sightse
       window.removeEventListener("offline", goOffline);
       window.removeEventListener("online", goOnline);
     };
-  }, []);
+  }, [dispatch]);
 
-  const touchParams = useCallback(() => dispatch({ type: "PARAMS_TOUCHED" }), []);
+  const touchParams = useCallback(() => dispatch({ type: "PARAMS_TOUCHED" }), [dispatch]);
 
   const runBuild = useCallback(
     async (minutes: number, vibeId: QuickVibe, opts?: { manualStart?: [number, number] }) => {
       dispatch({ type: "START_BUILD" });
       setErrorMessage(null);
+      setGeoDenied(false);
       // Запоминаем параметры сразу: Retry после отказа геолокации должен работать
       setLastInput((prev) => ({ minutes, vibe: vibeId, start: opts?.manualStart ?? prev?.start ?? [0, 0] }));
+      let start: [number, number];
       try {
-        const start = opts?.manualStart ?? (await getCurrentStart());
+        start = opts?.manualStart ?? (await getCurrentStart());
+      } catch (error) {
+        // Честный фолбэк (M6): отказ геолокации ≠ общая поломка — просим адрес.
+        // Машину выводим из building через BUILD_FAILED (PARAMS_TOUCHED из
+        // building — но-оп, экран залип бы в спиннере); блок ввода адреса
+        // рендерим в фазе error рядом с кнопкой Retry.
+        const denied = error instanceof Error && error.message === "geolocation-denied";
+        setGeoDenied(denied);
+        setNeedsAddress(true);
+        dispatch({ type: "BUILD_FAILED" });
+        if (denied) focusAddressInput();
+        return;
+      }
+      // Building-петля (M1/S1): ставим ЗОНЫ ДО await сборки — старт уже решён
+      // (геолокация/адрес), радиус считает клиентская shared-формула, та же
+      // арифметика, что у серверного поиска POI. Снимает setWalk (успех) и
+      // finally (отказ/ошибка).
+      mapStore.setBuilding({ start, radiusMeters: searchRadiusMetersForBudget(minutes) });
+      try {
         const result = await buildQuickWalk({
           start,
           budgetMinutes: minutes,
@@ -149,24 +202,14 @@ export function QuickWalkContent({ mode = "quick" }: { mode?: "quick" | "sightse
           setErrorMessage(result.error);
           dispatch({ type: "BUILD_FAILED" });
         }
-      } catch (error) {
-        const denied =
-          error instanceof Error &&
-          (error.message === "geolocation-denied" || error.message === "geolocation-unavailable");
-        if (denied) {
-          // Честный фолбэк: пусть человек скажет, откуда пойдёт.
-          // Машину выводим из building через BUILD_FAILED (PARAMS_TOUCHED из
-          // building — но-оп, экран залип бы в спиннере); блок ввода адреса
-          // рендерим в фазе error рядом с кнопкой Retry.
-          setNeedsAddress(true);
-          dispatch({ type: "BUILD_FAILED" });
-          return;
-        }
+      } catch {
         setErrorMessage(t("errorGeneric"));
         dispatch({ type: "BUILD_FAILED" });
+      } finally {
+        mapStore.setBuilding(null);
       }
     },
-    [locale, mapStore, t],
+    [dispatch, focusAddressInput, locale, mapStore, t],
   );
 
   const handleStart = useCallback(() => {
@@ -179,36 +222,69 @@ export function QuickWalkContent({ mode = "quick" }: { mode?: "quick" | "sightse
       ? normalizeCustomMinutes(customMinutes ?? DEFAULT_CUSTOM_MINUTES)
       : selectedMinutes;
     excludedRef.current = new Set();
+    const manualStart = mode === "sightseeing" ? cityStart?.coords : addressStart;
     // lastInput (включая фактический старт) запишет runBuild при успехе
-    void runBuild(minutes, vibeValue, addressStart ? { manualStart: addressStart } : undefined);
-  }, [addressStart, customMinutes, isCustomActive, mode, runBuild, selectedMinutes, vibe]);
+    void runBuild(minutes, vibeValue, manualStart ? { manualStart } : undefined);
+  }, [addressStart, cityStart, customMinutes, isCustomActive, mode, runBuild, selectedMinutes, vibe]);
 
   const handleRetry = useCallback(() => {
     if (!lastInput) return;
-    const hasStart = addressStart != null || (lastInput.start[0] !== 0 || lastInput.start[1] !== 0);
+    const manualStart = mode === "sightseeing" ? cityStart?.coords : addressStart;
+    const hasStart = manualStart != null || (lastInput.start[0] !== 0 || lastInput.start[1] !== 0);
     if (!hasStart) {
       // Старт ещё не решён (отказ геолокации без адреса) — открываем фолбэк
       setNeedsAddress(true);
+      focusAddressInput();
       return;
     }
     dispatch({ type: "RETRY" });
-    void runBuild(lastInput.minutes, lastInput.vibe, addressStart ? { manualStart: addressStart } : undefined);
-  }, [addressStart, lastInput, runBuild]);
+    void runBuild(lastInput.minutes, lastInput.vibe, manualStart ? { manualStart } : undefined);
+  }, [addressStart, cityStart, dispatch, focusAddressInput, lastInput, mode, runBuild]);
 
-  /** Слайдер вариантов: листает построенные планы мгновенно, без сети. */
+  // --- Гидрация ?w= (M4/B4): чужая прогулка открывается без сети. ---
+  const searchParams = useSearchParams();
+  const hydratedRef = useRef(false);
+  useEffect(() => {
+    if (hydratedRef.current) return;
+    const shared = searchParams.get("w");
+    if (!shared) return;
+    hydratedRef.current = true;
+    const decoded = decodeQuickWalkShare(shared);
+    if (!decoded) return;
+    const { plan: sharedPlan, geoDropped } = decoded;
+    const sharedStart = sharedPlan.legs[0]?.geometry?.[0] ?? sharedPlan.stops[0]?.coordinates ?? null;
+    setPlans([sharedPlan]);
+    setPlanIndex(0);
+    setContext(null); // контекст погоды из ссылки не живёт — бейдж weatherUnknown
+    setLastInput(null); // rebuild/замены недоступны без параметров сборки
+    if (sharedStart) {
+      mapStore.setWalk(
+        planPolyline(sharedPlan, sharedStart),
+        t("startPinLabel"),
+        pinsFromPlan(sharedPlan, sharedStart),
+      );
+    }
+    dispatch({ type: "HYDRATE" });
+    if (geoDropped) showToast(t("routeRestored"), "info");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  /** Слайдер вариантов: листает построенные планы мгновенно, без сети.
+   *  Старт — из стора карты (F1): гидрация ?w= заполняет его без lastInput. */
   const handleSelectVariant = useCallback(
     (index: number) => {
       if (!plans || index < 0 || index >= plans.length || index === planIndex) return;
       setPlanIndex(index);
-      if (lastInput) {
-        mapStore.setWalk(
-          planPolyline(plans[index], lastInput.start),
-          t("startPinLabel"),
-          pinsFromPlan(plans[index], lastInput.start),
-        );
-      }
+      const start = mapStore.start ?? lastInput?.start;
+      if (!start) return;
+      mapStore.setWalk(
+        planPolyline(plans[index], start),
+        t("startPinLabel"),
+        pinsFromPlan(plans[index], start),
+        { fit: false },
+      );
     },
-    [lastInput, mapStore, planIndex, plans],
+    [lastInput, mapStore, planIndex, plans, t],
   );
 
   /** «Изменить параметры»: честный сброс к экрану ввода (новый сетап чистит
@@ -228,7 +304,7 @@ export function QuickWalkContent({ mode = "quick" }: { mode?: "quick" | "sightse
     setIsCustomActive(false);
     setCustomMinutes(null);
     setVibe(null);
-  }, [mapStore]);
+  }, [dispatch, mapStore]);
 
   /** Старое поведение «Заменить»: полная пересборка с чёрным списком.
    *  Осталось фолбэком — локальная замена зовёт его из тоста, когда
@@ -275,7 +351,7 @@ export function QuickWalkContent({ mode = "quick" }: { mode?: "quick" | "sightse
         }
       })();
     },
-    [lastInput, locale, mapStore, showToast, t],
+    [dispatch, lastInput, locale, mapStore, showToast, t],
   );
 
   const handleSwapRequest = useCallback(
@@ -332,10 +408,12 @@ export function QuickWalkContent({ mode = "quick" }: { mode?: "quick" | "sightse
             // Текущий вариант обновляется, соседние остаются листаться:
             // замена сегмента не должна уничтожать остальные построенные планы.
             setPlans((prev) => (prev ? prev.map((p, i) => (i === planIndex ? next : p)) : [next]));
+            // Диф-апдейт карты (F1): та же прогулка после замены — камера не дёргается.
             mapStore.setWalk(
               planPolyline(next, lastInput.start),
               t("startPinLabel"),
               pinsFromPlan(next, lastInput.start),
+              { fit: false },
             );
             // Из ready — но-оп: машина не покидала фазу, карточка просто обновилась
             dispatch({ type: "BUILD_SUCCESS" });
@@ -356,12 +434,12 @@ export function QuickWalkContent({ mode = "quick" }: { mode?: "quick" | "sightse
         }
       })();
     },
-    [lastInput, locale, mapStore, plan, planIndex, runLegacyRebuild, showToast, t],
+    [dispatch, lastInput, locale, mapStore, plan, planIndex, runLegacyRebuild, showToast, t],
   );
 
   const handleSave = useCallback(async () => {
     if (!plan) return;
-    const saveStart = lastInput?.start ?? mapStore.geometry[0] ?? plan.stops[0]?.coordinates;
+    const saveStart = mapStore.start ?? lastInput?.start ?? plan.stops[0]?.coordinates;
     if (!saveStart) return;
     setIsSaving(true);
     try {
@@ -381,16 +459,38 @@ export function QuickWalkContent({ mode = "quick" }: { mode?: "quick" | "sightse
     } finally {
       setIsSaving(false);
     }
-  }, [lastInput, mapStore.geometry, plan, showToast, t]);
+  }, [lastInput, mapStore.start, plan, showToast, t]);
 
   const handleStartWalk = useCallback(() => {
     if (!plan) return;
-    // Старт для внешней навигации: geometry[0] стора карты — всегда актуален
-    const start = mapStore.geometry[0];
+    // Старт для внешней навигации: start стора карты — всегда актуален
+    const start = mapStore.start ?? mapStore.geometry[0];
     if (!start) return;
     const url = quickWalkToYandexMapsUrl(plan, start);
     window.open(url, "_blank", "noopener");
-  }, [mapStore.geometry, plan]);
+  }, [mapStore.geometry, mapStore.start, plan]);
+
+  /** M4: кнопка «Поделиться» — Web Share API → clipboard → тост. Без логина. */
+  const handleShare = useCallback(async () => {
+    if (!plan) return;
+    const start = mapStore.start ?? mapStore.geometry[0] ?? plan.stops[0]?.coordinates;
+    if (!start) return;
+    const path = quickWalkShareUrl(plan, start, planIndex);
+    const url = `${window.location.origin}${path}`;
+    try {
+      if (typeof navigator.share === "function") {
+        await navigator.share({ title: t("walkName", { minutes: plan.budgetMin }), url });
+        // Успешный системный шеринг тоста не требует — результат виден в ОС.
+        return;
+      }
+      await navigator.clipboard.writeText(url);
+      showToast(t("shareCopied"), "success");
+    } catch (error) {
+      // Отказ от системного шаринга — не ошибка, тост не пугает.
+      if ((error as { name?: string })?.name === "AbortError") return;
+      showToast(t("shareFailed"), "error");
+    }
+  }, [mapStore.geometry, mapStore.start, plan, planIndex, showToast, t]);
 
   const phase = machine.phase;
   const cardPhase = phase === "offline" ? (machine.resumePhase ?? "idle") : phase;
@@ -402,7 +502,14 @@ export function QuickWalkContent({ mode = "quick" }: { mode?: "quick" | "sightse
   );
 
   const weatherBadge = useMemo(() => {
-    if (!context || cardPhase !== "ready") return null;
+    if (cardPhase !== "ready") return null;
+    // M6, принцип 5 (честная деградация): погода неизвестна — нейтральный факт
+    // вместо ложного «Погода располагает к прогулке». Контекста нет вовсе
+    // (гидрация ?w=) или сервис погоды не приехал (tempC null, сигналов нет).
+    const weatherUnknown =
+      !context ||
+      (context.tempC === null && !context.isRaining && !context.isDark && context.adjustments.length === 0);
+    if (weatherUnknown) return { icon: null, text: t("weatherUnknown") };
     if (context.adjustments.includes("rain-indoor")) return { icon: CloudRain, text: t("weatherRain") };
     if (context.adjustments.includes("heat-shade")) return { icon: ThermometerSun, text: t("weatherHeat") };
     if (context.adjustments.includes("dark-evening")) return null; // вечер — не предупреждение, а тон
@@ -447,38 +554,70 @@ export function QuickWalkContent({ mode = "quick" }: { mode?: "quick" | "sightse
             subtitleKey={mode === "sightseeing" ? "sightseeingSubtitle" : "screenSubtitle"}
           />
 
-          {/* Тот же AddressInput, что и в эксперт-маршруте: необязательный старт.
-              Геолокация по умолчанию; поле — чтобы стартовать не отсюда */}
-          <div className="mt-4">
-            <AddressInput
-              placeholder={needsAddress ? t("startFromAddress") : t("startFromAddressOptional")}
-              onSelect={(coords) => {
-                setAddressStart(coords);
-                setNeedsAddress(false);
-              }}
-            />
-            {addressStart ? (
-              <p className="mt-2 flex items-center gap-1 text-xs font-semibold text-brand-600">
-                <MapPin size={12} />
-                {addressStart[0].toFixed(4)}, {addressStart[1].toFixed(4)}
-              </p>
-            ) : needsAddress ? (
-              <p className="mt-2 text-xs text-slate-500">{t("addressHint")}</p>
-            ) : null}
-          </div>
+          {/* M6 «Новый город»: пикер города через suggest — город задаёт
+              старт-центр обзорной петли. */}
+          {mode === "sightseeing" ? (
+            <div className="mt-4" ref={addressInputRef}>
+              <AddressInput
+                placeholder={t("cityInputLabel")}
+                onSelect={(coords, text) => setCityStart({ coords, name: text })}
+              />
+              {cityStart ? (
+                <p className="mt-2 flex items-center gap-2 text-xs font-semibold text-brand-600">
+                  <MapPin size={12} />
+                  <span className="min-w-0 flex-1 truncate">{t("citySelected", { city: cityStart.name })}</span>
+                  <button
+                    type="button"
+                    onClick={() => setCityStart(null)}
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+                    aria-label={t("cityClear")}
+                  >
+                    <X size={13} />
+                  </button>
+                </p>
+              ) : (
+                <p className="mt-2 text-xs text-slate-500">{t("addressHint")}</p>
+              )}
+            </div>
+          ) : (
+            /* Тот же AddressInput, что и в эксперт-маршруте: необязательный старт.
+                Геолокация по умолчанию; поле — чтобы стартовать не отсюда */
+            <div className="mt-4" ref={addressInputRef}>
+              <AddressInput
+                placeholder={needsAddress ? t("startFromAddress") : t("startFromAddressOptional")}
+                onSelect={(coords) => {
+                  setAddressStart(coords);
+                  setNeedsAddress(false);
+                  setGeoDenied(false);
+                }}
+              />
+              {addressStart ? (
+                <p className="mt-2 flex items-center gap-1 text-xs font-semibold text-brand-600">
+                  <MapPin size={12} />
+                  {addressStart[0].toFixed(4)}, {addressStart[1].toFixed(4)}
+                </p>
+              ) : geoDenied ? (
+                <p className="mt-2 text-xs text-amber-700">{t("geoDenied")}</p>
+              ) : needsAddress ? (
+                <p className="mt-2 text-xs text-slate-500">{t("addressHint")}</p>
+              ) : null}
+            </div>
+          )}
         </>
       ) : null}
 
       {/* После неудачной сборки адрес тоже нужен — показываем в фазе error */}
-      {needsAddress && cardPhase === "error" && (
-        <div className="mt-4">
+      {needsAddress && cardPhase === "error" && mode !== "sightseeing" && (
+        <div className="mt-4" ref={addressInputRef}>
           <AddressInput
             placeholder={t("startFromAddress")}
             onSelect={(coords) => {
               setAddressStart(coords);
               setNeedsAddress(false);
+              setGeoDenied(false);
             }}
           />
+          {geoDenied && <p className="mt-2 text-xs text-amber-700">{t("geoDenied")}</p>}
         </div>
       )}
 
@@ -502,13 +641,13 @@ export function QuickWalkContent({ mode = "quick" }: { mode?: "quick" | "sightse
             errorMessage={errorMessage}
             swappingStopIds={swappingIds}
             interactionsDisabled={phase === "offline"}
-            onSwapRequest={handleSwapRequest}
+            onSwapRequest={lastInput ? handleSwapRequest : undefined}
             onRetry={handleRetry}
             onEditParams={handleResetParams}
             onStartWalk={handleStartWalk}
           />
 
-          {/* Погодный контекст: почему движок выбрал такие места */}
+          {/* Погодный контекст: почему движок выбрал такие места (M6: unknown — факт) */}
           {weatherBadge && cardPhase === "ready" && (
             <p className="mt-3 flex items-center gap-1.5 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
               {weatherBadge.icon && <weatherBadge.icon size={13} className="text-brand-600" />}
@@ -516,17 +655,29 @@ export function QuickWalkContent({ mode = "quick" }: { mode?: "quick" | "sightse
             </p>
           )}
 
-          {/* Сохранение: под карточкой, не мешает таймлайну */}
+          {/* Сохранение и шеринг: под карточкой, не мешают таймлайну.
+              Шеринг без логина (принцип 4: ссылка = маршрут). */}
           {cardPhase === "ready" && plan && (
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={isSaving || phase === "offline"}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 py-3 text-sm font-semibold text-slate-700 transition-colors hover:border-brand-500 hover:text-brand-600 disabled:opacity-50"
-            >
-              <Save size={16} />
-              {isSaving ? t("saving") : t("saveCta")}
-            </button>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={isSaving || phase === "offline"}
+                className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 py-3 text-sm font-semibold text-slate-700 transition-colors hover:border-brand-500 hover:text-brand-600 disabled:opacity-50"
+              >
+                <Save size={16} />
+                {isSaving ? t("saving") : t("saveCta")}
+              </button>
+              <button
+                type="button"
+                onClick={handleShare}
+                disabled={phase === "offline"}
+                className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 py-3 text-sm font-semibold text-slate-700 transition-colors hover:border-brand-500 hover:text-brand-600 disabled:opacity-50"
+              >
+                <Share2 size={16} />
+                {t("shareCta")}
+              </button>
+            </div>
           )}
 
           {/* Геолокация подсказывает, что старт берётся отсюда; fast mode — бейдж тира провайдера */}
