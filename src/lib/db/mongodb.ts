@@ -7,7 +7,10 @@ import { MongoClient, Db } from 'mongodb';
 
 const options = {
   maxPoolSize: 10,
-  minPoolSize: 2,
+  // 0 = соединения по требованию: с minPoolSize>=2 драйвер в фоне держит
+  // коннекты и при лежащей БД бесконечно переподключается, сыпля
+  // unhandledRejection мимо всех наших catch (живой смоук 2026-11-18).
+  minPoolSize: 0,
   serverSelectionTimeoutMS: 30000, // 30 секунд таймаут
   socketTimeoutMS: 45000,
   connectTimeoutMS: 30000,
@@ -22,6 +25,12 @@ function connect(): Promise<MongoClient> {
     return Promise.reject(new Error('MONGODB_URI не найден в .env.local'));
   }
   const client = new MongoClient(uri, options);
+  // Драйвер эмитит ошибки топологии в фоне (мониторинг/heartbeats) снаружи
+  // наших промисов — без слушателя это unhandledRejection при каждой попытке.
+  // Деградация остаётся честной: потребители ловят отказ от getDb().
+  client.on('error', (error) => {
+    console.warn('MongoDB topology error (background):', error.message);
+  });
   return client
     .connect()
     .then((connected) => {
