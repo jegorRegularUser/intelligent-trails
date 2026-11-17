@@ -19,7 +19,7 @@ export function RouteSidebarManager({ sketch = false }: { sketch?: boolean } = {
     setMapPoints, setStartPoint, setWaypoints,
     setEndPoint, setStartTransport, setStartPointName, setEndPointName,
     setEndPointType, setEndPointCategory,
-    isRouteBuilt, setIsRouteBuilt, walkMode
+    isRouteBuilt, setIsRouteBuilt, walkMode, setWalkMode
   } = useRouteStore();
 
   const [isInitializing, setIsInitializing] = useState(false);
@@ -105,12 +105,17 @@ export function RouteSidebarManager({ sketch = false }: { sketch?: boolean } = {
 
       setWaypoints(decodedData.waypoints);
       setMapPoints(finalMapPoints);
+      // Блокер B2 (docs/ux-human-wave.md): при гидрации ?r= стор остаётся
+      // walkMode='quick' — выставляем 'route' там же, где заполняется mapPoints,
+      // иначе лоадер отдаст maplibre-канву и эксперт останется без линии.
+      // Инвариант: на ?r= карта — всегда Яндекс.
+      setWalkMode('route');
       setIsRouteBuilt(true);
       setIsInitializing(false);
     }
 
     processUrlRoute();
-  }, [routeParam, isRouteBuilt, setEndPoint, setEndPointCategory, setEndPointName, setEndPointType, setMapPoints, setStartPoint, setStartPointName, setStartTransport, setWaypoints, setIsRouteBuilt]);
+  }, [routeParam, isRouteBuilt, setEndPoint, setEndPointCategory, setEndPointName, setEndPointType, setMapPoints, setStartPoint, setStartPointName, setStartTransport, setWaypoints, setIsRouteBuilt, setWalkMode]);
 
   if (isInitializing) {
     return (
