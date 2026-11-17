@@ -578,8 +578,8 @@ Footprints слева от текста CTA)*
 | Тесты чистой логики и консистентности fixtures | `src/components/walk/__tests__/logic.test.ts` |
 | i18n | `messages/ru.json`, `messages/en.json` → namespace `WalkUI.*` (+ `Places` для бейджей часов) |
 | Hand-drawn эксперимент (по умолчанию выключен) | `src/components/ui/SketchCard.tsx` |
-| Единая панель: shell + свитчер трёх режимов | `src/components/ui/RoutePanel.tsx`, `src/components/features/walk-mode/WalkModeSwitcher.tsx` |
-| Контент «Прогуляться сейчас» / «Новый город» | `src/components/features/quick-walk/QuickWalkContent.tsx` (режим — проп `mode`), обёртка `QuickWalkPanel.tsx` |
+| Единая панель: shell + свитчер двух режимов | `src/components/ui/RoutePanel.tsx`, `src/components/features/walk-mode/WalkModeSwitcher.tsx` |
+| Контент «Прогуляться сейчас» | `src/components/features/quick-walk/QuickWalkContent.tsx`, обёртка `QuickWalkPanel.tsx` |
 | Серверная склейка | `src/lib/walk/quickPipeline.ts`, экшены `src/actions/quickWalk.ts` / `quickWalkReplace.ts` / `quickWalkSave.ts` |
 | Карта: петля + пины с карточками и часами | главный сценарий — `src/components/map/maplibre/MapCanvas.tsx` (читает `src/store/useQuickWalkMapStore.ts`, тайлы OpenFreeMap, ADR-003); expert — `RouteMap.tsx` (Яндекс) |
 
@@ -589,9 +589,11 @@ Footprints слева от текста CTA)*
 Компоненты управляемые (controlled): машина фаз и выбор живут в
 `QuickWalkContent` (reducer `walkMachine`), серверная склейка — в
 `quickPipeline`, движок остаётся чистым. Интеграция со стором и движком
-выполнена: три режима в свитчере — «Прогуляться» (quick), «Новый город»
-(sightseeing: тот же контент, архетип `sightseeing` вместо выбора вайба,
-docs/vibes.md §3.5.1) и эксперт-маршрут.
+выполнена: два режима в свитчере — «Прогуляться» (quick) и эксперт-маршрут
+(route). Ревизия 2026-11-18: вкладка «Новый город» убрана — её маршрут не
+отличался от быстрой прогулки; чужой район решается полем адреса старта
+(PRODUCT.md, «Два сценария входа»); архетип sightseeing остался в vibes
+как запасной (docs/vibes.md §3.5.1).
 
 ## 11. Открытые вопросы
 
