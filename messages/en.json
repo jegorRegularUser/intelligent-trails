@@ -78,6 +78,8 @@
     "qualityOk": "All quality gates passed",
     "degradedPartial": "Not many anchors nearby — the walk has fewer stops than usual",
     "degradedLoopOnly": "No interesting places nearby — here is a walking loop for your time",
+    "gateNoteUnderfloor": "The walk came out shorter than planned: not enough places nearby",
+    "gateNoteWalkShare": "More sitting than walking",
     "loopOnlyLeg": "Street loop: {minutes} min of walking",
     "variantOf": "Variant {index} of {count}",
     "startPinLabel": "Walk start",

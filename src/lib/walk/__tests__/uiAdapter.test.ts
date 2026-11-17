@@ -1,10 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { DEGRADED_NOTES, enginePlanToUiPlan, uiKindForCategory } from '../uiAdapter';
+import { DEGRADED_NOTES, GATE_NOTES, enginePlanToUiPlan, uiKindForCategory } from '../uiAdapter';
 import { quickWalkToYandexMapsUrl } from '../shareCodec';
 import type { WalkLatLng } from '../types';
-import type { WalkLeg, WalkPlan as EnginePlan, WalkStop } from '../types';
+import type { GateReport, WalkLeg, WalkPlan as EnginePlan, WalkStop } from '../types';
 
 function makeEnginePlan(overrides: Partial<EnginePlan> = {}): EnginePlan {
   const stop = (id: number, name: string, category: string, stay: number): WalkStop => ({
@@ -136,6 +136,33 @@ describe('uiAdapter: деградационные планы', () => {
     expect(ru.degradedLoopOnly).toBe(DEGRADED_NOTES['loop-only'].ru);
     expect(en.degradedPartial).toBe(DEGRADED_NOTES.partial.en);
     expect(en.degradedLoopOnly).toBe(DEGRADED_NOTES['loop-only'].en);
+  });
+});
+
+describe('uiAdapter: gatesSummary (честность в UI, R5)', () => {
+  it('отчёты гейтов едут в карточку как есть: имя, pass, detail', () => {
+    const gates: GateReport[] = [
+      { gate: 'budget', pass: false, detail: '49 мин против бюджета 60 (−18%)' },
+      { gate: 'anchors', pass: true, detail: '3 якоря, причины заданы' },
+      { gate: 'long_legs', pass: true, detail: 'максимальная нога 18 мин' },
+    ];
+    const ui = enginePlanToUiPlan(makeEnginePlan({ gates, allGatesPass: false }), 60);
+    expect(ui.gatesSummary).toEqual([
+      { name: 'budget', pass: false, detail: '49 мин против бюджета 60 (−18%)' },
+      { name: 'anchors', pass: true, detail: '3 якоря, причины заданы' },
+      { name: 'long_legs', pass: true, detail: 'максимальная нога 18 мин' },
+    ]);
+  });
+
+  it('заметки проваленных гейтов — человеческим языком, синхронно со словарями ru/en', () => {
+    const walkUi = (lang: string): Record<string, string> =>
+      JSON.parse(readFileSync(join(process.cwd(), 'messages', `${lang}.json`), 'utf-8')).WalkUI;
+    const ru = walkUi('ru');
+    const en = walkUi('en');
+    expect(ru.gateNoteUnderfloor).toBe(GATE_NOTES.budget?.ru);
+    expect(ru.gateNoteWalkShare).toBe(GATE_NOTES.walk_share?.ru);
+    expect(en.gateNoteUnderfloor).toBe(GATE_NOTES.budget?.en);
+    expect(en.gateNoteWalkShare).toBe(GATE_NOTES.walk_share?.en);
   });
 });
 

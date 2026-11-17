@@ -9,7 +9,7 @@
 import { getCloudProvider } from '@/lib/geo/instance';
 import { memoizeRoutingPort } from '@/lib/walk/memoPort';
 import { replaceStopInPlan, type ReplaceablePlan } from '@/lib/walk/replaceStop';
-import { DEFAULT_WALKING_SPEED_KMH } from '@/lib/walk/types';
+import { DEFAULT_WALKING_SPEED_KMH, type WalkGateName, type GateReport } from '@/lib/walk/types';
 import {
   buildScoreReasonsMap,
   collectCandidates,
@@ -61,7 +61,13 @@ export interface QuickWalkReplaceInput {
   excludeStopIds?: string[];
   /** Ноги текущего плана (walkMin + geometry) для реиспользования геометрии. */
   currentLegs: { walkMin: number; geometry?: [number, number][] }[];
-  /** Пройдено гейтов у текущего плана (петля = 4, если gatesPass). */
+  /**
+   * Отчёты гейтов текущего плана (R5, из UiWalkPlan.gatesSummary): база
+   * фолбэка замены считается из них, а не из хардкода «петля = 4».
+   * Приоритетнее числа currentGatesPassed; мусор молча отбрасывается.
+   */
+  currentGatesSummary?: { name: string; pass: boolean; detail?: string }[];
+  /** Пройдено гейтов у текущего плана — фолбэк, если отчётов нет. */
   currentGatesPassed?: number;
 }
 
@@ -107,10 +113,39 @@ function isScoreReasons(value: unknown): value is WalkScoreReasons {
   return Array.isArray(v.ru) && Array.isArray(v.en);
 }
 
+/** Имена гейтов, которые движок знает; чужие — мусор, молча отбрасываем. */
+const KNOWN_GATES: ReadonlySet<string> = new Set([
+  'budget',
+  'anchors',
+  'long_legs',
+  'walk_share',
+  'loop_no_repeat_street',
+]);
+
+function gatesSummaryToReports(
+  summary: { name: string; pass: boolean; detail?: string }[] | undefined,
+): GateReport[] | undefined {
+  if (!Array.isArray(summary)) return undefined;
+  const reports: GateReport[] = [];
+  for (const item of summary) {
+    if (!item || typeof item !== 'object') continue;
+    if (typeof item.name !== 'string' || !KNOWN_GATES.has(item.name)) continue;
+    if (typeof item.pass !== 'boolean') continue;
+    reports.push({
+      gate: item.name as WalkGateName,
+      pass: item.pass,
+      detail: typeof item.detail === 'string' ? item.detail : '',
+    });
+  }
+  return reports.length > 0 ? reports : undefined;
+}
+
 /**
  * Текущий план в терминах движка. Ноги реиспользуются только при полной
  * длине петли (stops+1) — иначе движок честно перестроит все; дистанция
  * переиспользованных ног — оценка по скорости, UI её не показывает.
+ * Отчёты гейтов едут из gatesSummary (R5): база фолбэка замены — из фактов,
+ * а не из хардкода «петля = 4».
  */
 function buildEnginePlan(input: QuickWalkReplaceInput): ReplaceablePlan {
   const stops = input.currentStops.map((stop) => ({
@@ -138,8 +173,13 @@ function buildEnginePlan(input: QuickWalkReplaceInput): ReplaceablePlan {
           geometry: leg.geometry ?? [],
         }))
       : undefined;
+  const gates = gatesSummaryToReports(input.currentGatesSummary);
 
-  return { stops, ...(legs ? { legs } : {}) };
+  return {
+    stops,
+    ...(legs ? { legs } : {}),
+    ...(gates ? { gates } : {}),
+  };
 }
 
 export async function replaceQuickStop(input: QuickWalkReplaceInput): Promise<QuickWalkReplaceResult> {
