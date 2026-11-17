@@ -11,11 +11,25 @@
 // [базовый, +30°, +60°, +90°, K=3], берём ПЕРВЫЙ прошедший loopStreetGate,
 // иначе — с минимальным перекрытием (лучший из худших лучше случайного).
 // Детерминизм §13: сид фиксированный, та же точка → та же петля бит-в-бит.
+//
+// Умная роза (docs/street-interest-wave.md S3): при переданных StreetHints
+// вейпоинты, попавшие в сектор с interest ≥ порога, притягиваются к
+// attraction-точке сектора — снап живёт ВНУТРИ buildWaypoints (tune
+// перестраивает вейпоинты через него же, иначе снап стёрся бы первым же
+// ×1.3/×0.85). Отказ route со снапнутыми точками → один ретрай варианта
+// с геометрическими вейпоинтами. План с ≥2 снапнутыми секторами несёт
+// streetInterest: true вместо метки loop-only.
 
-import type { WalkFailure, WalkLatLng, WalkLeg, WalkPlan } from './types';
-import { DEFAULT_WALKING_SPEED_KMH } from './types';
+import type { WalkFailure, WalkLatLng, WalkLeg, WalkPlan, WalkStreetHints } from './types';
+import { DEFAULT_WALKING_SPEED_KMH, SECTOR_COUNT } from './types';
 import type { WalkRouteSegment, WalkRoutingPort } from './ports';
-import { splitPolylineByWaypoints, splitRouteMetrics } from './internal/geo';
+import {
+  azimuthRad,
+  haversineMeters,
+  sectorOfAzimuth,
+  splitPolylineByWaypoints,
+  splitRouteMetrics,
+} from './internal/geo';
 import { errMessage, validateWalkCore } from './internal/geo-utils';
 import { mulberry32 } from './internal/rng';
 import { evaluateGates, maxStreetOverlap, SAME_STREET_OVERLAP_THRESHOLD } from './gates';
@@ -45,13 +59,19 @@ const VARIANTS: { corners: number; rotationDeg: number }[] = [
   { corners: 4, rotationDeg: 3 * ROTATE_STEP_DEG },
   { corners: 3, rotationDeg: 0 },
 ];
-/** Общий жёсткий кап route-вызовов (5 вариантов × попытка + коррекции). */
+/** Общий жёсткий кап route-вызовов (5 вариантов × попытка + коррекции + ретраи
+ *  снапа — у капа есть запас на «один ретрай на вариант», S3). */
 const MAX_ROUTE_CALLS = 20;
 /** Сид джиттера по умолчанию: фиксированный — детерминизм §13. */
 const DEFAULT_SEED = 1;
 
-const DEG = Math.PI / 180;
-const EARTH_M_PER_DEG = 6371008.8 * (Math.PI / 180);
+// --- Снап к attraction-точкам (docs/street-interest-wave.md S3) --------------
+
+/** Сектор с interest ниже порога розу не тянет: слабый сигнал ≠ направление. */
+export const INTEREST_SNAP_THRESHOLD = 0.35;
+/** Отклонение снапнутого вейпоинта от геометрического — не больше доли радиуса
+ *  (выше — петля перестала быть петлёй вокруг старта: точка остаётся геометрической). */
+export const SNAP_MAX_RADIUS_SHARE = 0.3;
 
 export interface StreetLoopInput {
   start: WalkLatLng;
@@ -59,8 +79,89 @@ export interface StreetLoopInput {
   speedKmh?: number;
   /** Сид джиттера; по умолчанию фиксированный — та же точка даёт ту же петлю. */
   seed?: number;
+  /**
+   * Интерес-подсказки секторов (S2 → S3): hasData=true включает снап вейпоинтов
+   * к attraction-точкам. Нет подсказок или hasData=false — прежняя
+   * геометрическая роза бит-в-бит (поля undefined, не пустые массивы).
+   */
+  streetHints?: WalkStreetHints;
   ports: WalkRoutingPort;
 }
+
+/** Результат построения вейпоинтов варианта: точки + кто из них снапнут (S3). */
+export interface SnappedWaypoints {
+  points: WalkLatLng[];
+  /** Индексы точек, притянутых к attraction-точкам. */
+  snappedIndices: number[];
+}
+
+/** Угловое расстояние между азимутами [0..π). */
+function angularSeparationRad(a: number, b: number): number {
+  const d = Math.abs(a - b) % (2 * Math.PI);
+  return Math.min(d, 2 * Math.PI - d);
+}
+
+/**
+ * Снап геометрических вейпоинтов к attraction-точкам секторов — чистая
+ * функция, вызывается ВНУТРИ buildWaypoints на каждом вызове (B3: углы
+ * секторов от радиуса не зависят, снап стабилен между tune-шагами). Вейпоинт
+ * снапится, если его сектор (по КОНВЕНЦИОННОМУ азимуту точки, не по угловому
+ * параметру розы — см. pinned-тест) имеет interest ≥ порога, а отклонение
+ * влезает в 30% радиуса. Радиус-джиттер на снапнутой точке не живёт — она
+ * заменяется целиком.
+ */
+export function snapWaypointsToHints(
+  start: WalkLatLng,
+  radiusMeters: number,
+  geometric: WalkLatLng[],
+  hints: WalkStreetHints,
+): SnappedWaypoints {
+  const points = geometric.slice();
+  const snappedIndices: number[] = [];
+  if (!hints.hasData) return { points, snappedIndices };
+
+  const interestOf = (index: number): number => {
+    const sector = sectorOfAzimuth(azimuthRad(start, geometric[index]), SECTOR_COUNT);
+    return hints.sectors[sector]?.interest ?? 0;
+  };
+
+  for (let i = 0; i < points.length; i++) {
+    const sector = sectorOfAzimuth(azimuthRad(start, geometric[i]), SECTOR_COUNT);
+    const hint = hints.sectors[sector];
+    if (!hint?.point || hint.interest < INTEREST_SNAP_THRESHOLD) continue;
+    if (haversineMeters(geometric[i], hint.point) > radiusMeters * SNAP_MAX_RADIUS_SHARE) continue;
+    points[i] = hint.point;
+    snappedIndices.push(i);
+  }
+
+  if (snappedIndices.length > 1) {
+    // Дедуп attraction-точек (B3): один крупный парк в соседних секторах даёт
+    // два вейпоинта в одной точке → loop_no_repeat_street закономерно падает.
+    // Энфорс минимального углового разноса снапнутых ≥ MIN_ANGLE_GAP_DEG, как
+    // в buildShapeAngles: слабейший по интересу откатывается к геометрии.
+    const order = snappedIndices
+      .slice()
+      .sort((a, b) => interestOf(b) - interestOf(a) || a - b);
+    const accepted: number[] = [];
+    const demoted: number[] = [];
+    for (const index of order) {
+      const angle = azimuthRad(start, points[index]);
+      const conflicted = accepted.some(
+        (angleAccepted) => angularSeparationRad(angleAccepted, angle) < MIN_ANGLE_GAP_DEG * DEG,
+      );
+      if (conflicted) demoted.push(index);
+      else accepted.push(angle);
+    }
+    for (const index of demoted) points[index] = geometric[index];
+    snappedIndices.length = 0;
+    snappedIndices.push(...order.filter((index) => !demoted.includes(index)).sort((a, b) => a - b));
+  }
+
+  return { points, snappedIndices };
+}
+
+const DEG = Math.PI / 180;
+const EARTH_M_PER_DEG = 6371008.8 * (Math.PI / 180);
 
 export type StreetLoopResult =
   | { ok: true; plan: WalkPlan }
@@ -95,17 +196,23 @@ export function buildShapeAngles(corners: number, angleJitterRad: number[]): num
   return raw.map((item) => item.angle);
 }
 
-/** Вейпоинты варианта: повёрнутая роза углов, радиусы с ±10% джиттером. */
+/**
+ * Вейпоинты варианта: повёрнутая роза углов, радиусы с ±10% джиттером; при
+ * переданных подсказках — снап к attraction-точкам ВНУТРИ (S3/B3: tune
+ * перестраивает вейпоинты только через эту функцию, поэтому снап не стирается
+ * коррекциями радиуса). Параметр снапа undefined → прежняя геометрическая роза.
+ */
 function buildWaypoints(
   start: WalkLatLng,
   radiusMeters: number,
   angles: number[],
   baseAngleRad: number,
   radiusJitter: number[],
-): WalkLatLng[] {
+  snapHints?: WalkStreetHints,
+): SnappedWaypoints {
   const latPerM = 1 / EARTH_M_PER_DEG;
   const lngPerM = 1 / (EARTH_M_PER_DEG * Math.cos(start[0] * DEG));
-  return angles.map((angle, i) => {
+  const geometric: WalkLatLng[] = angles.map((angle, i) => {
     const a = baseAngleRad + angle;
     const r = radiusMeters * radiusJitter[i];
     return [
@@ -113,6 +220,8 @@ function buildWaypoints(
       start[1] + Math.cos(a) * r * lngPerM,
     ];
   });
+  if (!snapHints) return { points: geometric, snappedIndices: [] };
+  return snapWaypointsToHints(start, radiusMeters, geometric, snapHints);
 }
 
 export async function buildStreetLoop(input: StreetLoopInput): Promise<StreetLoopResult> {
@@ -150,15 +259,38 @@ export async function buildStreetLoop(input: StreetLoopInput): Promise<StreetLoo
     const shape = shapeJitter.get(variant.corners)!;
     const baseAngle = variant.rotationDeg * DEG;
     let radius = loopRadiusMeters(desiredLength, variant.corners);
+    // Снап включён, пока подсказки живы; отказ route со снапнутыми точками
+    // переводит вариант на геометрические вейпоинты (ретрай, B3).
+    let useSnap = input.streetHints !== undefined;
+    const buildFor = (r: number): SnappedWaypoints =>
+      buildWaypoints(input.start, r, shape.angles, baseAngle, shape.radiusJitter, useSnap ? input.streetHints : undefined);
 
-    let waypoints = buildWaypoints(input.start, radius, shape.angles, baseAngle, shape.radiusJitter);
+    let built = buildFor(radius);
     routeCalls += 1;
     let segment: WalkRouteSegment;
     try {
-      segment = await input.ports.route({ waypoints: [input.start, ...waypoints, input.start] });
+      segment = await input.ports.route({ waypoints: [input.start, ...built.points, input.start] });
     } catch (e) {
-      lastError = errMessage(e);
-      continue; // NO_ROUTE — следующий вариант розы
+      if (!useSnap) {
+        lastError = errMessage(e);
+        continue; // NO_ROUTE — следующий вариант розы
+      }
+      // Ретрай на отказ route с снапнутыми точками (B3): один повтор того же
+      // варианта с геометрическими вейпоинтами. Все варианты снапнуты и все
+      // отказали — честная деградация ниже (NO_ROUTE), не ошибка экрана.
+      useSnap = false;
+      built = buildFor(radius);
+      if (routeCalls >= MAX_ROUTE_CALLS) {
+        lastError = errMessage(e);
+        continue;
+      }
+      routeCalls += 1;
+      try {
+        segment = await input.ports.route({ waypoints: [input.start, ...built.points, input.start] });
+      } catch (retryError) {
+        lastError = errMessage(retryError);
+        continue;
+      }
     }
     if (!validMetrics(segment)) {
       lastError = 'порт вернул некорректные метрики петли';
@@ -184,14 +316,35 @@ export async function buildStreetLoop(input: StreetLoopInput): Promise<StreetLoo
         break; // обе стороны исчерпаны — берём как есть
       }
       if (routeCalls >= MAX_ROUTE_CALLS) break;
-      waypoints = buildWaypoints(input.start, radius, shape.angles, baseAngle, shape.radiusJitter);
+      const rebuilt = buildFor(radius);
       routeCalls += 1;
       try {
-        segment = await input.ports.route({ waypoints: [input.start, ...waypoints, input.start] });
+        segment = await input.ports.route({ waypoints: [input.start, ...rebuilt.points, input.start] });
+        built = rebuilt;
       } catch (e) {
-        lastError = errMessage(e);
-        broken = true;
-        break;
+        if (useSnap) {
+          // Tune-отказ со снапнутыми точками — тот же ретрай на геометрию (B3).
+          useSnap = false;
+          const geometric = buildFor(radius);
+          if (routeCalls >= MAX_ROUTE_CALLS) {
+            lastError = errMessage(e);
+            broken = true;
+            break;
+          }
+          routeCalls += 1;
+          try {
+            segment = await input.ports.route({ waypoints: [input.start, ...geometric.points, input.start] });
+            built = geometric;
+          } catch (retryError) {
+            lastError = errMessage(retryError);
+            broken = true;
+            break;
+          }
+        } else {
+          lastError = errMessage(e);
+          broken = true;
+          break;
+        }
       }
       if (!validMetrics(segment)) {
         lastError = 'порт вернул некорректные метрики петли';
@@ -201,7 +354,7 @@ export async function buildStreetLoop(input: StreetLoopInput): Promise<StreetLoo
     }
     if (broken) continue;
 
-    const plan = assemblePlan(input.start, segment, waypoints, budget);
+    const plan = assemblePlan(input.start, segment, built.points, budget, built.snappedIndices.length);
     const overlap = maxStreetOverlap(plan.legs.map((leg) => leg.geometry));
     if (overlap <= SAME_STREET_OVERLAP_THRESHOLD) {
       // Первый вариант с чистой петлёй закрывает задачу — порядок вариантов
@@ -232,12 +385,19 @@ export async function buildStreetLoop(input: StreetLoopInput): Promise<StreetLoo
 
 // --- Сборка плана и утилиты ---
 
-/** План без якорей: ноги разрезаны по вейпоинтам ради консистентного рендера. */
+/**
+ * План без якорей: ноги разрезаны по вейпоинтам ради консистентного рендера.
+ * snappedCount ≥ 2 (S3) — петля осмысленно притянута к среде: план помечается
+ * streetInterest вместо метки loop-only (закрытый union уровней не расширяется);
+ * заметку для карточки берёт uiAdapter. Один снап или ни одного — деградация
+ * как раньше: геометрическая роза без сигнала среды.
+ */
 function assemblePlan(
   start: WalkLatLng,
   segment: WalkRouteSegment,
   waypoints: WalkLatLng[],
   budgetMinutes: number,
+  snappedCount: number,
 ): WalkPlan {
   const path: WalkLatLng[] = [start, ...waypoints, start];
   const segments = splitPolylineByWaypoints(segment.geometry ?? [], waypoints);
@@ -271,7 +431,10 @@ function assemblePlan(
     score: 0,
     gates,
     allGatesPass: gates.every((g) => g.pass),
-    degraded: { level: 'loop-only' },
+    // ≥2 снапнутых сектора — петля осмысленно притянута к среде (S3), это не
+    // «чистая геометрия без сигнала»: другая формулировка карточки, не новый
+    // уровень деградации.
+    ...(snappedCount >= 2 ? { streetInterest: true as const } : { degraded: { level: 'loop-only' as const } }),
   };
 }
 

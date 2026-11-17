@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { DEGRADED_NOTES, GATE_NOTES, enginePlanToUiPlan, uiKindForCategory } from '../uiAdapter';
+import { DEGRADED_NOTES, GATE_NOTES, STREET_INTEREST_NOTE, enginePlanToUiPlan, uiKindForCategory } from '../uiAdapter';
 import { quickWalkToYandexMapsUrl } from '../shareCodec';
 import type { WalkLatLng } from '../types';
 import type { GateReport, WalkLeg, WalkPlan as EnginePlan, WalkStop } from '../types';
@@ -136,6 +136,31 @@ describe('uiAdapter: деградационные планы', () => {
     expect(ru.degradedLoopOnly).toBe(DEGRADED_NOTES['loop-only'].ru);
     expect(en.degradedPartial).toBe(DEGRADED_NOTES.partial.en);
     expect(en.degradedLoopOnly).toBe(DEGRADED_NOTES['loop-only'].en);
+  });
+
+  it('streetInterest-план несёт флаг и заметку вместо бейджа деградации (S3)', () => {
+    const ui = enginePlanToUiPlan({ ...makeEnginePlan(), streetInterest: true }, 60);
+    expect(ui.streetInterest).toBe(true);
+    expect(ui.degraded).toBeUndefined();
+    expect(ui.degradedNote).toBeUndefined();
+    expect(ui.streetInterestNote).toBe(STREET_INTEREST_NOTE);
+    expect(ui.streetInterestNote?.ru).toBe('Петля по характерным улицам района');
+
+    // Заметка не появляется у плана без флага (старые планы деградируют честно).
+    const plain = enginePlanToUiPlan(makeEnginePlan(), 60);
+    expect(plain.streetInterest).toBeUndefined();
+    expect(plain.streetInterestNote).toBeUndefined();
+  });
+
+  it('заметка streetInterest синхронна ru/en в коде — новых ключей messages волна не заводит', () => {
+    // Волна human design ведёт messages; здесь фиксируем параллельность строк
+    // и отсутствие ключей в словарях (волна 3 их добавит, тест тогда сузят).
+    expect(STREET_INTEREST_NOTE.ru.length).toBeGreaterThan(0);
+    expect(STREET_INTEREST_NOTE.en.length).toBeGreaterThan(0);
+    const walkUi = (lang: string): Record<string, string> =>
+      JSON.parse(readFileSync(join(process.cwd(), 'messages', `${lang}.json`), 'utf-8')).WalkUI;
+    expect(walkUi('ru').streetInterestNote).toBeUndefined();
+    expect(walkUi('en').streetInterestNote).toBeUndefined();
   });
 });
 

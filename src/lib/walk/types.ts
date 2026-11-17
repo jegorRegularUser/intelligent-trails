@@ -94,6 +94,12 @@ export interface WalkPlan {
   allGatesPass: boolean;
   /** Задан только у деградационных планов; строгий движок поле не ставит. */
   degraded?: { level: WalkDegradedLevel };
+  /**
+   * Уличная петля, притянутая к характерным секторам (S3): ≥2 вейпоинта снапа
+   * к attraction-точкам. Заменяет метку loop-only (закрытый union
+   * WalkDegradedLevel не расширяется) — заметка для карточки в uiAdapter.
+   */
+  streetInterest?: true;
 }
 
 export type WalkFailureCode =
@@ -172,3 +178,31 @@ export const STREET_FEATURE_KIND_WEIGHTS: Record<WalkStreetFeatureKind, number> 
   viewpoint: 1.5,
   art: 0.7,
 };
+
+// --- Улицы с характером: структурные двойники (S6; types.ts не импортирует lib/geo) ---
+
+/** Фича улиц — двойник StreetFeature (lib/geo/types): конверсия на границе в quickPipeline. */
+export interface WalkStreetFeature {
+  kind: WalkStreetFeatureKind;
+  /** [lat,lng]: одна точка — точечная фича, 2+ — линия/контур (≤64 точек). */
+  geometry: WalkLatLng[];
+  /** Имя из OSM, если есть — сырьё для microNotes (S4). */
+  name?: string;
+}
+
+/** Подсказка интереса одного сектора розы — двойник StreetSectorHint (vibes). */
+export interface WalkSectorHint {
+  /** Середина сектора в градусах (22.5, 67.5, …) — информационное поле. */
+  azimuthDeg: number;
+  /** 0..1 — вклад сектора, нормированный на максимум по розе (S2). */
+  interest: number;
+  /** Ближайшая к старту точка контура лучшей фичи сектора; фич нет — null. */
+  point: WalkLatLng | null;
+}
+
+/** Интерес-подсказки розы — двойник StreetHints (vibes/streetInterest). */
+export interface WalkStreetHints {
+  /** Длина SECTOR_COUNT, индекс = сектор розы (не азимут точки). */
+  sectors: WalkSectorHint[];
+  hasData: boolean;
+}

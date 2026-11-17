@@ -20,6 +20,11 @@ declare module '@/components/walk/types' {
   interface WalkPlan {
     /** Плоский массив отчётов гейтов движка (не гейт-флаг): что именно упало. */
     gatesSummary?: { name: WalkGateName; pass: boolean; detail?: string }[];
+    /** Уличная петля, притянутая к характерным секторам (S3 волны «Улицы с
+     *  характером»); карточка берёт формулировку из streetInterestNote. */
+    streetInterest?: boolean;
+    /** Человекочитаемая заметка streetInterest параллельными ru/en (как degradedNote). */
+    streetInterestNote?: { ru: string; en: string };
   }
 }
 
@@ -76,6 +81,18 @@ export const DEGRADED_NOTES: Record<WalkDegradedLevel, { ru: string; en: string 
     ru: 'Интересных мест рядом не нашлось — вот пешеходная петля на всё твоё время',
     en: 'No interesting places nearby — here is a walking loop for your time',
   },
+};
+
+/**
+ * Заметка плана с уличным интересом (S3): петля, притянутая к характерным
+ * секторам, — не деградация, а другая формулировка («Петля по характерным
+ * улицам района»). Тексты ru/en в коде, как у DEGRADED_NOTES — новых ключей
+ * в messages волна не заводит (их ведёт волна human design), sync-тест
+ * uiAdapter проверяет параллельность строк.
+ */
+export const STREET_INTEREST_NOTE: { ru: string; en: string } = {
+  ru: 'Петля по характерным улицам района',
+  en: 'A loop through the neighborhood\'s character streets',
 };
 
 /** Категория реестра (constants/categories.ts) → kind карточки UI. */
@@ -175,6 +192,11 @@ export function enginePlanToUiPlan(
     // показывает бейдж, сохранённые планы остаются самодостаточными.
     ...(engine.degraded
       ? { degraded: engine.degraded, degradedNote: DEGRADED_NOTES[engine.degraded.level] }
+      : {}),
+    // Уличный интерес (S3): флаг + параллельная заметка вместо бейджа
+    // деградации — у петли по характерным улицам своя формулировка.
+    ...(engine.streetInterest
+      ? { streetInterest: true, streetInterestNote: STREET_INTEREST_NOTE }
       : {}),
   };
 }
