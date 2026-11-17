@@ -232,11 +232,47 @@ describe('uiAdapter: reasonStandalone (M5 волны human design)', () => {
     expect(human.stops[0].reasonStandalone).toBe(true);
 
     const en = enginePlanToUiPlan(
-      { ...makeEnginePlan(), stops: [{ ...makeEnginePlan().stops[0], reasonEn: 'The best cafe nearby, rated 4.8' }] },
+      { ...makeEnginePlan(), stops: [{ ...makeEnginePlan().stops[0], reasonEn: 'A top pick nearby, rated 4.8' }] },
       60,
       'en',
     );
     expect(en.stops[0].reasonStandalone).toBe(true);
+  });
+
+  it('формулы reasons.ts самодостаточны: категория в строку не вписана', () => {
+    const best = enginePlanToUiPlan(
+      { ...makeEnginePlan(), stops: [{ ...makeEnginePlan().stops[0], reason: 'Лучший выбор рядом, рейтинг 4.8' }] },
+      60,
+    );
+    expect(best.stops[0].reasonStandalone).toBe(true);
+
+    const detour = enginePlanToUiPlan(
+      { ...makeEnginePlan(), stops: [{ ...makeEnginePlan().stops[0], reason: 'Стоит небольшого крюка (~150 м)' }] },
+      60,
+    );
+    expect(detour.stops[0].reasonStandalone).toBe(true);
+  });
+
+  it('легаси-причина с категорией в строке — не standalone (рендер с префиксом)', () => {
+    // Старые формулы вписывали категорию: «Кофейня · Лучший «кафе» поблизости».
+    const legacyRu = enginePlanToUiPlan(
+      { ...makeEnginePlan(), stops: [{ ...makeEnginePlan().stops[0], reason: 'Лучший «кафе» поблизости, рейтинг 4.8' }] },
+      60,
+    );
+    expect(legacyRu.stops[0].reasonStandalone).toBeUndefined();
+
+    const legacyRuAnother = enginePlanToUiPlan(
+      { ...makeEnginePlan(), stops: [{ ...makeEnginePlan().stops[0], reason: 'Ещё один хороший «парк» рядом' }] },
+      60,
+    );
+    expect(legacyRuAnother.stops[0].reasonStandalone).toBeUndefined();
+
+    const legacyEn = enginePlanToUiPlan(
+      { ...makeEnginePlan(), stops: [{ ...makeEnginePlan().stops[0], reasonEn: 'The best cafe around, rated 4.8' }] },
+      60,
+      'en',
+    );
+    expect(legacyEn.stops[0].reasonStandalone).toBeUndefined();
   });
 });
 

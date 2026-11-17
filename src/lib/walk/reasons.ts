@@ -2,6 +2,13 @@
 // Причины якорей — по-русски, только из фактов выбора (docs/walk-engine.md §9).
 // Все строки детерминированы: одинаковое состояние кандидатов даёт одинаковую
 // причину. Гейт anchors требует непустой причины у каждого якоря.
+//
+// M5 (docs/ux-human-wave.md «Человеческий язык причин»): причина не повторяет
+// категорию — «Кофейня · Лучший «кафе» поблизости» читалось тавтологией, а
+// «лучший скор категории „X“ в радиусе» — языком скоринга. Новые формулы
+// самодостаточны («Лучший выбор рядом», «Прямо по пути (~200 м)»): uiAdapter
+// выводит из этого reasonStandalone, и карточка рендерит причину без префикса
+// категории. Легаси-строки старых планов распознаются маркерами (uiAdapter).
 
 import type { WalkPlace } from './types';
 
@@ -9,6 +16,11 @@ export type ZoneWord = 'коридоре' | 'радиусе';
 
 export interface ReasonFacts {
   place: WalkPlace;
+  /**
+   * Легаси-поле времён «языка скоринга»: коридор/радиус в формулу больше не
+   * попадают (у петли и A→B причина одна и та же). Поле оставлено: три места
+   * сборки (createWalkPlan, loopThrough, replaceStop) продолжают передавать.
+   */
   zoneWord: ZoneWord;
   /** Кандидат возглавляет свою категорию в шорт-листе. */
   isBestOfCategory: boolean;
@@ -20,66 +32,37 @@ export interface ReasonFacts {
 /** Рейтинг, достойный упоминания. */
 const NOTABLE_RATING = 4.5;
 
-/** Русские названия категорий для причин: реестр categories тянет lucide-react,
- *  движок UI-зависимостей не имеет — держим лёгкий словарь имён. */
-const CATEGORY_RU: Record<string, string> = {
-  cafe: 'кафе',
-  restaurant: 'ресторан',
-  park: 'парк',
-  museum: 'музей',
-  cinema: 'кинотеатр',
-  bar: 'бар',
-  shopping: 'магазин',
-  viewpoint: 'смотровая площадка',
-  attraction: 'достопримечательность',
-  waterfront: 'набережная',
-  market: 'рынок',
-};
-function categoryRu(category: string): string {
-  return CATEGORY_RU[category] ?? category;
+/**
+ * Голова причины — позиционный факт выбора без имени категории: лучший в
+ * шорт-листе → «Лучший выбор рядом»; самый близкий к пути → «Прямо по пути
+ * (~N м)»; остальное — крюк от линии назван честно, в метрах.
+ */
+function reasonHeadRu(facts: ReasonFacts): string {
+  if (facts.isBestOfCategory) return 'Лучший выбор рядом';
+  const meters = Math.round(facts.proximityMeters);
+  return facts.isClosest
+    ? `Прямо по пути (~${meters} м)`
+    : `Стоит небольшого крюка (~${meters} м)`;
+}
+
+/** EN-твин reasonHeadRu: категории реестра в строку не вписываются. */
+function reasonHeadEn(facts: ReasonFacts): string {
+  if (facts.isBestOfCategory) return 'A top pick nearby';
+  const meters = Math.round(facts.proximityMeters);
+  return facts.isClosest
+    ? `Right on the way (~${meters} m)`
+    : `Worth a short detour (~${meters} m)`;
 }
 
 export function buildAnchorReason(facts: ReasonFacts): string {
-  const parts: string[] = [];
-  if (facts.isBestOfCategory) {
-    parts.push(`Лучший «${categoryRu(facts.place.category)}» поблизости`);
-  }
-  if ((facts.place.rating ?? 0) >= NOTABLE_RATING) {
-    parts.push(`рейтинг ${facts.place.rating!.toFixed(1)}`);
-  }
-  if (parts.length === 0) {
-    if (facts.isClosest) {
-      const meters = Math.round(facts.proximityMeters);
-      parts.push(`Прямо по пути (~${meters} м)`);
-    } else {
-      parts.push(`Ещё один хороший «${categoryRu(facts.place.category)}» рядом`);
-    }
-  }
-  return parts.join(', ');
+  const head = reasonHeadRu(facts);
+  const rating = facts.place.rating ?? 0;
+  return rating >= NOTABLE_RATING ? `${head}, рейтинг ${rating.toFixed(1)}` : head;
 }
 
-/** EN-твин зоны: коридоре → corridor, радиусе → radius. */
-export type ZoneWordEn = 'corridor' | 'radius';
-export function zoneWordEn(zone: ZoneWord): ZoneWordEn {
-  return zone === 'радиусе' ? 'radius' : 'corridor';
-}
-
-/** Английская версия buildAnchorReason. Категории — английские ключи реестра. */
+/** Английская версия buildAnchorReason — параллельная ветка, тот же факт. */
 export function buildAnchorReasonEn(facts: ReasonFacts): string {
-  const parts: string[] = [];
-  if (facts.isBestOfCategory) {
-    parts.push(`The best ${facts.place.category} around`);
-  }
-  if ((facts.place.rating ?? 0) >= NOTABLE_RATING) {
-    parts.push(`rated ${facts.place.rating!.toFixed(1)}`);
-  }
-  if (parts.length === 0) {
-    if (facts.isClosest) {
-      const meters = Math.round(facts.proximityMeters);
-      parts.push(`Right on the way (~${meters} m)`);
-    } else {
-      parts.push(`Another good ${facts.place.category} nearby`);
-    }
-  }
-  return parts.join(', ');
+  const head = reasonHeadEn(facts);
+  const rating = facts.place.rating ?? 0;
+  return rating >= NOTABLE_RATING ? `${head}, rated ${rating.toFixed(1)}` : head;
 }

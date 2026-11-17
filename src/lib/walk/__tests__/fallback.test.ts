@@ -12,6 +12,7 @@ import { buildWalkWithFallback } from '../fallback';
 import { buildTriangleApex, triangleSideFor } from '../loopThrough';
 import { buildShapeAngles, loopRadiusMeters } from '../streetLoop';
 import { haversineMeters } from '../internal/geo';
+import { isReasonStandalone } from '../uiAdapter';
 import { makeCity, makeNode, type CityPlaceDef } from './gridCity';
 import type { WalkRoutingPort } from '../ports';
 import type { WalkInput, WalkLatLng } from '../types';
@@ -181,6 +182,44 @@ describe('buildWalkWithFallback: лестница деградации', () => {
     const a = await buildWalkWithFallback(setup([], { budgetMinutes: 60 }).input, makeCity([]).port);
     const b = await buildWalkWithFallback(setup([], { budgetMinutes: 60 }).input, makeCity([]).port);
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+  });
+});
+
+describe('buildWalkWithFallback: причины якорей — человеческий язык (M5)', () => {
+  const CATEGORY_WORDS = [
+    // названия категорий реестра, RU и EN-ключ
+    'кафе', 'ресторан', 'парк', 'музей', 'кинотеатр', 'бар', 'магазин',
+    'смотровая площадка', 'достопримечательность', 'набережная', 'рынок',
+    'cafe', 'restaurant', 'park', 'museum', 'cinema', 'bar', 'shopping',
+    'viewpoint', 'attraction', 'waterfront', 'market',
+  ];
+
+  it('ни одна причина на планах фикстур не содержит «скора» и «в радиусе»; standalone не повторяет категорию', async () => {
+    const { city, input } = setup(STRICT_DEFS, { budgetMinutes: 75 });
+    const res = await buildWalkWithFallback(input, city.port);
+    if (!res.ok) throw new Error(`ожидались планы, получен отказ ${res.failure.code}: ${res.failure.detail}`);
+    expect(res.plans.length).toBeGreaterThan(0);
+
+    for (const plan of res.plans) {
+      for (const stop of plan.stops) {
+        const ru = stop.reason.toLowerCase();
+        const en = (stop.reasonEn ?? '').toLowerCase();
+        // Табу на язык скоринга (docs/ux-human-wave.md M5).
+        expect(stop.reason.length).toBeGreaterThan(0);
+        expect(ru).not.toContain('скор');
+        expect(ru).not.toContain('в радиусе');
+        expect(ru).not.toContain('лучший скор');
+        expect(en).not.toContain('score');
+        expect(en).not.toContain('radius');
+        // Все формулы reasons.ts самодостаточны: standalone-причина не
+        // начинается и вообще не содержит голого имени категории.
+        expect(isReasonStandalone(stop.reason)).toBe(true);
+        for (const word of CATEGORY_WORDS) {
+          expect(ru.startsWith(word)).toBe(false);
+          expect(ru.includes(word)).toBe(false);
+        }
+      }
+    }
   });
 });
 
