@@ -19,15 +19,21 @@ import {
   BUDGET_TOLERANCE,
   DEFAULT_CATEGORY_LIMIT,
   DEFAULT_WALKING_SPEED_KMH,
+  FLOOR_SHARE,
   LEG_ALT_MIN_MINUTES,
   MAX_CANDIDATES,
   MAX_LEG_MINUTES,
+  SAFETY_MARGIN_SHARE,
 } from './types';
 import type { WalkMatrixCell, WalkRouteSegment, WalkRoutingPort } from './ports';
 import {
   fractionWithinCorridor,
   haversineMeters,
   polylineLengthMeters,
+  splitPolylineByWaypoints,
+  splitRouteMetrics,
+  viaOffsetForExtraMeters,
+  viaPointFor,
   zoneMetersForBudget,
 } from './internal/geo';
 import { isFiniteLatLng, errMessage, validateWalkCore } from './internal/geo-utils';
@@ -35,7 +41,7 @@ import { resolveStayMinutes } from './internal/stay';
 import { mulberry32 } from './internal/rng';
 import { selectCandidates, type SelectionResult } from './selection';
 import { solveWalkOrder, ringCost } from './ordering';
-import { evaluateGates, SAME_STREET_CORRIDOR_M } from './gates';
+import { evaluateGates, SAME_STREET_CORRIDOR_M, SAME_STREET_OVERLAP_THRESHOLD } from './gates';
 import { buildAnchorReason, buildAnchorReasonEn } from './reasons';
 
 // --- Параметры вариантов альтернатив (docs/walk-engine.md §11) ---
@@ -300,6 +306,309 @@ function validMetrics(segment: WalkRouteSegment): boolean {
   );
 }
 
+// --- Коридор бюджета (docs/walk-loop-quality.md R1) ---
+
+const FLOOR_EPS = 1e-9;
+/** Максимум via-удлинённых ног на план (R1.c): иначе одна короткая петля
+ *  раздувается в серию крючков без остановок. */
+const MAX_VIA_LEGS = 2;
+/** Tune-кап на ногу (R1.c, как в streetLoop): 3 route-вызова на попытку. */
+const VIA_TUNE_ATTEMPTS = 3;
+/** Коррекция офсета: недолёт растёт, перелёт сжимается (коэффициенты streetLoop). */
+const VIA_GROW_FACTOR = 1.3;
+const VIA_SHRINK_FACTOR = 0.85;
+
+/**
+ * Чистый предикат недобора (R1.d): план короче пола коридора 0.9·B. Граница
+ * (ровно пол) и перебор — не недобор. Экшен зовёт его после сборки, чтобы
+ * решить, эскалировать ли пул кандидатов второй волной (≤1 эскалация).
+ */
+export function isUnderfloor(
+  plan: Pick<WalkPlan, 'totalMinutes'>,
+  budgetMinutes: number,
+): boolean {
+  return plan.totalMinutes < budgetMinutes * FLOOR_SHARE - FLOOR_EPS;
+}
+
+export interface FillToFloorParams {
+  /** Порядок остановок (индексы матрицы) и ноги реальных метрик. */
+  sequence: number[];
+  legs: WalkLeg[];
+  budgetMinutes: number;
+  /** Матричная ходьба текущего кольца — база оценок добора (R1.b). */
+  matrixWalkMinutes: number;
+  /** Матрица минут; индекс 0 — старт, endIndex — финиш А→Б. */
+  times: number[][];
+  points: WalkLatLng[];
+  /** stay кандидата по индексу матрицы. */
+  stayOf: Map<number, number>;
+  /** Кандидаты добора в скор-порядке (индексы матрицы), не выбранные ранее. */
+  pool: number[];
+  categoryOf: (bi: number) => string;
+  limitOfCategory: (category: string) => number;
+  /** Та же политика, что у жадного набора: maxStopsForBudget (R1.b). */
+  maxStops: number;
+  farEnough: (bi: number, sequence: number[]) => boolean;
+  isLoop: boolean;
+  endIndex: number;
+  ports: WalkRoutingPort;
+  /** Счётчик вызовов порта — общий на сборку (R3.c). */
+  routeCalls: { count: number };
+}
+
+export interface FillToFloorResult {
+  sequence: number[];
+  legs: WalkLeg[];
+  matrixWalkMinutes: number;
+}
+
+/**
+ * Добор до пола коридора 0.9·B (R1): сначала остановками из пула (та же
+ * политика, что у жадного набора: maxStops, кап категории, gap; оценка по
+ * матрице с запасом SAFETY_MARGIN, вставка заменяет одну ногу двумя), затем
+ * via-удлинением длиннейших ног. Реальный total после каждого добора
+ * проверяется на потолок 1.1·B — вылетел, откат последнего добора и стоп
+ * (инвариант §12 walk-engine.md). Не дотянули — план возвращается как есть:
+ * недобор честно видит гейт budget, фиктивных минут нет. L2/L3 деградации
+ * эта функция не касается.
+ */
+export async function fillToFloor(params: FillToFloorParams): Promise<FillToFloorResult> {
+  const { budgetMinutes, times, points, stayOf, ports, routeCalls } = params;
+  const floor = budgetMinutes * FLOOR_SHARE;
+  const ceiling = budgetMinutes * (1 + BUDGET_TOLERANCE);
+  const estimateCap = ceiling - budgetMinutes * SAFETY_MARGIN_SHARE;
+
+  const sequence = params.sequence.slice();
+  const legs = params.legs.slice();
+  let matrixWalk = params.matrixWalkMinutes;
+
+  const staysOf = (seq: number[]): number =>
+    seq.reduce((sum, bi) => sum + (stayOf.get(bi) ?? 0), 0);
+  const walkOf = (ls: WalkLeg[]): number =>
+    ls.reduce((sum, leg) => sum + leg.durationMinutes, 0);
+  const totalOf = (seq: number[], ls: WalkLeg[]): number => walkOf(ls) + staysOf(seq);
+  const tail = params.isLoop ? 0 : params.endIndex;
+
+  // --- R1.b: добор остановками ---
+  const chosen = new Set(sequence);
+  const counts = new Map<string, number>();
+  for (const bi of sequence) {
+    const category = params.categoryOf(bi);
+    counts.set(category, (counts.get(category) ?? 0) + 1);
+  }
+  const skipped = new Set<number>();
+  for (const bi of params.pool) {
+    if (totalOf(sequence, legs) >= floor - FLOOR_EPS) break; // пол достигнут
+    if (chosen.has(bi) || skipped.has(bi)) continue;
+    if (sequence.length >= params.maxStops) break;
+    const category = params.categoryOf(bi);
+    if ((counts.get(category) ?? 0) >= params.limitOfCategory(category)) continue;
+    if (!params.farEnough(bi, sequence)) continue;
+    const stay = stayOf.get(bi) ?? 0;
+    // Лучшее плечо вставки по матрице: кандидат создаёт ДВЕ ноги из одной
+    // (R1.b), оценка — через матрицу этих двух плеч.
+    let bestPos = -1;
+    let bestDelta = Infinity;
+    for (let pos = 0; pos <= sequence.length; pos++) {
+      const prev = pos === 0 ? 0 : sequence[pos - 1];
+      const next = pos === sequence.length ? tail : sequence[pos];
+      if (
+        !Number.isFinite(times[prev][bi]) ||
+        !Number.isFinite(times[bi][next]) ||
+        !Number.isFinite(times[prev][next])
+      ) {
+        continue;
+      }
+      const delta = times[prev][bi] + times[bi][next] - times[prev][next];
+      if (delta < bestDelta) {
+        bestDelta = delta;
+        bestPos = pos;
+      }
+    }
+    if (bestPos < 0) {
+      skipped.add(bi);
+      continue;
+    }
+    const estimate = matrixWalk + bestDelta + staysOf(sequence) + stay;
+    if (estimate > estimateCap + FLOOR_EPS) {
+      skipped.add(bi);
+      continue;
+    }
+
+    // Пересборка двух плеч реальным роутингом и честный бюджет.
+    const prevPoint = points[bestPos === 0 ? 0 : sequence[bestPos - 1]];
+    const nextPoint = points[bestPos === sequence.length ? tail : sequence[bestPos]];
+    const midPoint = points[bi];
+    routeCalls.count += 1;
+    const rebuiltA = await routeLeg(ports, prevPoint, midPoint);
+    routeCalls.count += 1;
+    const rebuiltB = await routeLeg(ports, midPoint, nextPoint);
+    if (!rebuiltA || !rebuiltB) {
+      // Маршрутный отказ — кандидат пропускается, добор продолжается.
+      skipped.add(bi);
+      continue;
+    }
+    const trialSequence = sequence.slice();
+    trialSequence.splice(bestPos, 0, bi);
+    const trialLegs = legs.slice();
+    trialLegs.splice(bestPos, 1, rebuiltA, rebuiltB);
+    if (totalOf(trialSequence, trialLegs) > ceiling + FLOOR_EPS) {
+      // Реальный total вылетел за 1.1·B — откат последнего добора и стоп:
+      // матрица здесь врёт сильнее запаса, потолок — инвариант §12.
+      break;
+    }
+    sequence.splice(bestPos, 0, bi);
+    legs.splice(bestPos, 1, rebuiltA, rebuiltB);
+    matrixWalk += bestDelta;
+    chosen.add(bi);
+    counts.set(category, (counts.get(category) ?? 0) + 1);
+  }
+
+  // --- R1.c: via-удлинение ноги ---
+  const viaTried = new Set<WalkLeg>();
+  let viaLegs = 0;
+  while (totalOf(sequence, legs) < floor - FLOOR_EPS && viaLegs < MAX_VIA_LEGS) {
+    // Кандидат — длиннейшая нога ≤ MAX_LEG_MINUTES − 2 мин: удлинённая нога
+    // не должна пострадать от гейта long_legs (gates.ts).
+    let pick = -1;
+    let pickMinutes = -1;
+    for (let i = 0; i < legs.length; i++) {
+      if (viaTried.has(legs[i])) continue;
+      if (legs[i].durationMinutes > MAX_LEG_MINUTES - 2 + FLOOR_EPS) continue;
+      // Вырожденная нога (нули метрик) не удлиняется: крючка из точки не бывает.
+      if (legs[i].durationMinutes <= 0 || legs[i].distanceMeters <= 0) continue;
+      if (legs[i].durationMinutes > pickMinutes) {
+        pick = i;
+        pickMinutes = legs[i].durationMinutes;
+      }
+    }
+    if (pick < 0) break;
+    const leg = legs[pick];
+    viaTried.add(leg);
+
+    const missingMinutes = floor - totalOf(sequence, legs);
+    const walkMinutes = walkOf(legs);
+    const walkMeters = legs.reduce((sum, l) => sum + l.distanceMeters, 0);
+    const planSpeed = walkMinutes > 0 ? walkMeters / walkMinutes : 0;
+    if (!(planSpeed > 0)) break;
+    // Целевое удлинение Δ — недостающие минуты × фактическая скорость плана:
+    // реальные ноги несут кривизну улиц и профиль роутера (R1.c).
+    let offset = viaOffsetForExtraMeters(leg.distanceMeters, missingMinutes * planSpeed);
+    const side = viaSideFor(leg.from, leg.to);
+    let accepted = false;
+    let lastFitting: { subA: WalkLeg; subB: WalkLeg } | null = null;
+
+    for (let attempt = 0; attempt < VIA_TUNE_ATTEMPTS && !accepted; attempt++) {
+      const via = viaPointFor(leg.from, leg.to, offset, side);
+      routeCalls.count += 1;
+      let segment: WalkRouteSegment | null = null;
+      try {
+        const fetched = await ports.route({ waypoints: [leg.from, via, leg.to] });
+        if (validMetrics(fetched)) segment = fetched;
+      } catch {
+        segment = null;
+      }
+      if (!segment || (segment.geometry ?? []).length < 2) {
+        break; // NO_ROUTE или вырожденная геометрия — исходная нога сохраняется, следующая нога
+      }
+      const viaMinutes = segment.durationSeconds / 60;
+      const pieces = splitPolylineByWaypoints(segment.geometry ?? [], [via]);
+      const metrics = splitRouteMetrics(pieces, segment.distanceMeters, segment.durationSeconds);
+      const subA: WalkLeg = {
+        from: leg.from,
+        to: via,
+        distanceMeters: metrics[0].distanceMeters,
+        durationMinutes: metrics[0].durationMinutes,
+        geometry: pieces[0],
+      };
+      const subB: WalkLeg = {
+        from: via,
+        to: leg.to,
+        distanceMeters: metrics[1].distanceMeters,
+        durationMinutes: metrics[1].durationMinutes,
+        geometry: pieces[1],
+      };
+      const newTotal = totalOf(sequence, legs) - leg.durationMinutes + viaMinutes;
+      // Гейт loop_no_repeat_street обязан пройти: via может замкнуть
+      // «туда-обратно» — проверяем пару плеч и оба плеча против остальных
+      // ног (плечи одной ногой — иначе перекрытие размывается по кускам).
+      const others = legs.filter((_, i) => i !== pick).map((l) => l.geometry);
+      const legsOk =
+        subA.durationMinutes <= MAX_LEG_MINUTES + FLOOR_EPS &&
+        subB.durationMinutes <= MAX_LEG_MINUTES + FLOOR_EPS;
+      if (!viaStreetClean(subA.geometry, subB.geometry, others) || !legsOk) break;
+      if (newTotal > ceiling + FLOOR_EPS) {
+        offset *= VIA_SHRINK_FACTOR;
+        continue;
+      }
+      if (newTotal < floor - FLOOR_EPS) {
+        // Влезает в потолок, пола не дотянул — запасной кандидат на случай,
+        // если grow-попытки исчерпаются.
+        lastFitting = { subA, subB };
+        offset *= VIA_GROW_FACTOR;
+        continue;
+      }
+      legs.splice(pick, 1, subA, subB);
+      viaLegs += 1;
+      accepted = true;
+    }
+    if (!accepted && lastFitting) {
+      // Tune-попытки исчерпаны: берём последний результат в потолке — пол
+      // может остаться недотянутым, гейт budget покажет недобор честно.
+      legs.splice(pick, 1, lastFitting.subA, lastFitting.subB);
+      viaLegs += 1;
+    }
+  }
+
+  return { sequence, legs, matrixWalkMinutes: matrixWalk };
+}
+
+/** Одна нога обычным route: отказ порта/мусорные метрики → null (не бросает). */
+async function routeLeg(
+  ports: WalkRoutingPort,
+  from: WalkLatLng,
+  to: WalkLatLng,
+): Promise<WalkLeg | null> {
+  let segment: WalkRouteSegment;
+  try {
+    segment = await ports.route({ waypoints: [from, to] });
+  } catch {
+    return null;
+  }
+  if (!validMetrics(segment)) return null;
+  return {
+    from,
+    to,
+    distanceMeters: segment.distanceMeters,
+    durationMinutes: segment.durationSeconds / 60,
+    geometry: segment.geometry ?? [],
+  };
+}
+
+/** Гейт улиц для via-кандидата: пара плеч + оба плеча (как одна нога) против остальных. */
+function viaStreetClean(
+  subA: WalkLatLng[],
+  subB: WalkLatLng[],
+  others: WalkLatLng[][],
+): boolean {
+  if (maxOverlapOnAccepted(subA, [subB]) > SAME_STREET_OVERLAP_THRESHOLD) return false;
+  const combined =
+    subB.length > 0 && subA.length > 0
+      ? [...subA, ...subB.slice(1)]
+      : [...subA, ...subB];
+  return maxOverlapOnAccepted(combined, others) <= SAME_STREET_OVERLAP_THRESHOLD;
+}
+
+/** Сторона перпендикуляра via — детерминированно от координат ноги (§13). */
+function viaSideFor(a: WalkLatLng, b: WalkLatLng): 1 | -1 {
+  const seed =
+    (Math.abs(Math.round(a[0] * 1e7)) ^
+      Math.abs(Math.round(a[1] * 1e7)) ^
+      Math.abs(Math.round(b[0] * 1e7)) ^
+      Math.abs(Math.round(b[1] * 1e7))) >>> 0;
+  return mulberry32(seed)() < 0.5 ? 1 : -1;
+}
+
 // --- Отказы до порта ---
 
 function cheapTimeFailure(
@@ -528,7 +837,7 @@ async function buildPlanForVariant(
     //    альтернативы (R3.c): берётся маршрут с минимумом пересечения с уже
     //    принятыми ногами; при равном — длиннейший, влезающий в потолок.
     const legPath = isLoop ? [0, ...sequence, 0] : [0, ...sequence, endIndex];
-    const legs: WalkLeg[] = [];
+    let legs: WalkLeg[] = [];
     const totalStayEstimate = sequence.reduce((sum, bi) => sum + stayOf.get(bi)!, 0);
     for (let i = 0; i < legPath.length - 1; i++) {
       const from = points[legPath[i]];
@@ -597,8 +906,32 @@ async function buildPlanForVariant(
       });
     }
 
+    // 6b. Коридор бюджета (R1): пол 0.9·B → добор остановками из пула →
+    //     via-удлинение ног. Потолок 1.1·B — инвариант: добор с откатом.
+    const chosenSet = new Set(sequence);
+    const filled = await fillToFloor({
+      sequence,
+      legs,
+      budgetMinutes: budget,
+      matrixWalkMinutes: finalOrder.walkMinutes,
+      times,
+      points,
+      stayOf,
+      pool: scored.filter(({ bi }) => !chosenSet.has(bi)).map(({ bi }) => bi),
+      categoryOf: (bi) => baseSelection.picked[bi - 1].place.category,
+      limitOfCategory,
+      maxStops,
+      farEnough,
+      isLoop,
+      endIndex,
+      ports,
+      routeCalls: ctx.routeCalls,
+    });
+    const finalSequence = filled.sequence;
+    legs = filled.legs;
+
     // 7. Итоги и скор (§10).
-    const stops: WalkStop[] = sequence.map((bi) => ({
+    const stops: WalkStop[] = finalSequence.map((bi) => ({
       place: baseSelection.picked[bi - 1].place,
       stayMinutes: stayOf.get(bi)!,
       reason: '',

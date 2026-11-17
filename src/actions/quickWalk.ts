@@ -10,7 +10,7 @@ import { fetchWeatherContext } from '@/lib/weather';
 import { getArchetype } from '@/lib/vibes/archetypes';
 import { combineContext, seasonalStayMinutes } from '@/lib/vibes/combine';
 import { userLocalHour, userLocalMonth } from '@/lib/vibes/localHour';
-import { createWalkPlan, buildWalkWithFallback } from '@/lib/walk';
+import { createWalkPlan, buildWalkWithFallback, isUnderfloor } from '@/lib/walk';
 import { enginePlansToUiPlans } from '@/lib/walk/uiAdapter';
 import {
   buildScoreReasonsMap,
@@ -20,9 +20,12 @@ import {
   ENGINE_CANDIDATE_CAP,
   MAX_BUDGET,
   MIN_BUDGET,
+  SECOND_WAVE_MULTIPLIER,
 } from '@/lib/walk/quickPipeline';
 import type { VibeId } from '@/components/walk/logic';
 import type { WalkPlan as UiWalkPlan } from '@/components/walk/types';
+import type { WalkPlan as EnginePlan } from '@/lib/walk/types';
+import type { GeoPlace } from '@/lib/geo';
 
 /**
  * Вайб приходит с главного экрана в словаре UI (logic.ts VIBE_IDS);
@@ -96,26 +99,11 @@ export async function buildQuickWalk(input: QuickWalkInput): Promise<QuickWalkRe
     adjustments: profile.adjustments,
   };
 
-  const { places: pool, searchFailed } = await collectCandidates(provider, start, profile, input.budgetMinutes);
-  if (pool.length === 0) {
-    // Все категории упали — это «поиск недоступен», а не «мало мест».
-    return {
-      ok: false,
-      error: searchFailed
-        ? 'Сервис поиска мест недоступен — попробуйте ещё раз через минуту'
-        : 'Рядом не нашлось интересных мест — попробуйте увеличить бюджет или сменить вайб',
-    };
-  }
-
   const excluded = new Set(input.excludeStopIds ?? []);
-  const scored = scoreCandidatePool({ pool, profile, weather, hour, timezone: timeZone, now, excludeIds: excluded });
-  if (scored.length === 0) {
-    return { ok: false, error: 'Все найденные места вы исключили — попробуйте пересобрать прогулку' };
-  }
-  const shortlist = scored.slice(0, ENGINE_CANDIDATE_CAP);
 
   // Порт маршрутизации: структурная совместимость GeoProvider ↔ WalkRoutingPort.
-  // Мемо-слой гасит дубли route-запросов между вариантами и зеркалом кольца.
+  // Мемо-слой гасит дубли route-запросов между вариантами и зеркалом кольца;
+  // общий на обе волны — второй заход по тому же району почти бесплатен.
   const routingPort = memoizeRoutingPort(provider);
   // Стоянки — из архетипа с сезонной поправкой (холод: улица короче); без них
   // таблица живёт на дефолтах (парк 25 вместо 30).
@@ -124,68 +112,100 @@ export async function buildQuickWalk(input: QuickWalkInput): Promise<QuickWalkRe
     month,
     weather ? weather.tempC : null,
   ) as Record<string, number>;
-  const planResult = await createWalkPlan(
-    {
-      start,
-      budgetMinutes: input.budgetMinutes,
-      categoryWeights: profile.categoryWeights,
-      categoryStayMinutes,
-      // Категориальные потолки архетипа (зелёная: один магазин) — движок
-      // берёт их как есть, погодный контекст лимиты не меняет.
-      ...(archetype.categoryLimits
-        ? { categoryLimits: archetype.categoryLimits as Record<string, number> }
-        : {}),
-      candidates: shortlist.map((entry) => entry.place),
-      isLoop: true,
-    },
-    routingPort,
-  );
+  const engineInputBase = {
+    start,
+    budgetMinutes: input.budgetMinutes,
+    categoryWeights: profile.categoryWeights,
+    categoryStayMinutes,
+    // Категориальные потолки архетипа (зелёная: один магазин) — движок
+    // берёт их как есть, погодный контекст лимиты не меняет.
+    ...(archetype.categoryLimits
+      ? { categoryLimits: archetype.categoryLimits as Record<string, number> }
+      : {}),
+    isLoop: true,
+  };
 
-  if (!planResult.ok) {
-    // Лестница деградации (PRODUCT: почти всегда прогулка): строгий движок
-    // честен, но спальный район не должен ронять главный сценарий. Тот же
-    // мемо-порт; INVALID_INPUT деградацией не лечится — отсекается в оркестраторе.
-    // Отказ строгого движка передаётся как есть: лестница не прогоняет его второй раз.
-    const fallback = await buildWalkWithFallback(
-      {
-        start,
-        budgetMinutes: input.budgetMinutes,
-        categoryWeights: profile.categoryWeights,
-        categoryStayMinutes,
-        ...(archetype.categoryLimits
-          ? { categoryLimits: archetype.categoryLimits as Record<string, number> }
-          : {}),
-        candidates: shortlist.map((entry) => entry.place),
-        isLoop: true,
-      },
-      routingPort,
-      { strict: planResult },
-    );
-    if (!fallback.ok) {
-      // Упала и уличная петля — роутер недоступен; INVALID_INPUT — наши параметры.
+  const assemble = async (
+    pool: GeoPlace[],
+    poolSearchFailed: boolean,
+  ): Promise<{ ok: true; uiPlans: UiWalkPlan[]; enginePlans: EnginePlan[] } | { ok: false; error: string }> => {
+    if (pool.length === 0) {
+      // Все категории упали — это «поиск недоступен», а не «мало мест».
       return {
         ok: false,
-        error:
-          fallback.failure.code === 'INVALID_INPUT'
-            ? 'Некорректные параметры прогулки'
-            : 'Даже простая петля не построилась — роутер недоступен, попробуй ещё раз через минуту',
+        error: poolSearchFailed
+          ? 'Сервис поиска мест недоступен — попробуйте ещё раз через минуту'
+          : 'Рядом не нашлось интересных мест — попробуйте увеличить бюджет или сменить вайб',
       };
     }
+    const scored = scoreCandidatePool({ pool, profile, weather, hour, timezone: timeZone, now, excludeIds: excluded });
+    if (scored.length === 0) {
+      return { ok: false, error: 'Все найденные места вы исключили — попробуйте пересобрать прогулку' };
+    }
+    const shortlist = scored.slice(0, ENGINE_CANDIDATE_CAP);
+    const candidates = shortlist.map((entry) => entry.place);
+    const planResult = await createWalkPlan({ ...engineInputBase, candidates }, routingPort);
+
+    if (!planResult.ok) {
+      // Лестница деградации (PRODUCT: почти всегда прогулка): строгий движок
+      // честен, но спальный район не должен ронять главный сценарий. Тот же
+      // мемо-порт; INVALID_INPUT деградацией не лечится — отсекается в оркестраторе.
+      // Отказ строгого движка передаётся как есть: лестница не прогоняет его второй раз.
+      const fallback = await buildWalkWithFallback(
+        { ...engineInputBase, candidates },
+        routingPort,
+        { strict: planResult },
+      );
+      if (!fallback.ok) {
+        // Упала и уличная петля — роутер недоступен; INVALID_INPUT — наши параметры.
+        return {
+          ok: false,
+          error:
+            fallback.failure.code === 'INVALID_INPUT'
+              ? 'Некорректные параметры прогулки'
+              : 'Даже простая петля не построилась — роутер недоступен, попробуй ещё раз через минуту',
+        };
+      }
+      const locale = input.locale ?? 'ru';
+      return {
+        ok: true,
+        uiPlans: enginePlansToUiPlans(fallback.plans, input.budgetMinutes, locale, buildScoreReasonsMap(shortlist)),
+        enginePlans: fallback.plans,
+      };
+    }
+
     const locale = input.locale ?? 'ru';
     return {
       ok: true,
-      plans: enginePlansToUiPlans(fallback.plans, input.budgetMinutes, locale, buildScoreReasonsMap(shortlist)),
-      fastMode: await provider.isFastArea(start),
-      context,
+      // Скоринговые причины едут в карточку вместе с планом: якорная строка
+      // из движка остаётся главной, PlaceScore — вторичные чипы.
+      uiPlans: enginePlansToUiPlans(planResult.plans, input.budgetMinutes, locale, buildScoreReasonsMap(shortlist)),
+      enginePlans: planResult.plans,
     };
+  };
+
+  const { places: pool, searchFailed } = await collectCandidates(provider, start, profile, input.budgetMinutes);
+  const first = await assemble(pool, searchFailed);
+  let result = first;
+
+  // Недобор (R1.d): добор живёт внутри пула движка; если и он не дотянул до
+  // пола коридора — единственная эскалация на уровне экшена: вторая волна
+  // поиска с расширенным радиусом и пересборка. Вторая волна не дотянула
+  // или отказала — возвращаем первую как есть: фиктивных минут не бывает.
+  if (first.ok && isUnderfloor(first.enginePlans[0], input.budgetMinutes)) {
+    const secondPool = await collectCandidates(provider, start, profile, input.budgetMinutes, {
+      radiusMultiplier: SECOND_WAVE_MULTIPLIER,
+    });
+    const second = await assemble(secondPool.places, secondPool.searchFailed);
+    if (second.ok && !isUnderfloor(second.enginePlans[0], input.budgetMinutes)) {
+      result = second;
+    }
   }
 
-  const locale = input.locale ?? 'ru';
+  if (!result.ok) return { ok: false, error: result.error };
   return {
     ok: true,
-    // Скоринговые причины едут в карточку вместе с планом: якорная строка
-    // из движка остаётся главной, PlaceScore — вторичные чипы.
-    plans: enginePlansToUiPlans(planResult.plans, input.budgetMinutes, locale, buildScoreReasonsMap(shortlist)),
+    plans: result.uiPlans,
     fastMode: await provider.isFastArea(start),
     context,
   };

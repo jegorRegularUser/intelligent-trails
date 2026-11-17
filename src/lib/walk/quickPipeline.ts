@@ -53,8 +53,8 @@ export interface CandidatePool {
   searchFailed: boolean;
 }
 
-/** Мало мест в первой волне — второй заход с расширенным радиусом. */
-const SECOND_WAVE_MULTIPLIER = 1.75;
+/** Мало мест в первой волне или недобор плана — второй заход с расширенным радиусом. */
+export const SECOND_WAVE_MULTIPLIER = 1.75;
 /** Порог эскалации: меньше этого числа кандидатов — ищем шире. */
 const MIN_POOL_SIZE = 3;
 /** Категорий в одном батче: 9 параллельных Overpass-запросов ловят rate-окно
@@ -66,6 +66,14 @@ const OVERPASS_RETRY_PAUSE_MS = 900;
 
 function pause(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export interface CollectCandidatesOptions {
+  /**
+   * Множитель радиуса второй волны (R1.d): недобор плана экшен гасит
+   * эскалацией пула — collectCandidates зовётся ещё раз с ×SECOND_WAVE_MULTIPLIER.
+   */
+  radiusMultiplier?: number;
 }
 
 /**
@@ -80,8 +88,11 @@ export async function collectCandidates(
   start: [number, number],
   profile: AdjustedProfile,
   budgetMinutes: number,
+  options: CollectCandidatesOptions = {},
 ): Promise<CandidatePool> {
-  const radius = searchRadiusMeters(budgetMinutes);
+  const radius = Math.round(
+    searchRadiusMeters(budgetMinutes) * (options.radiusMultiplier ?? 1),
+  );
   const categories = (Object.entries(profile.categoryWeights) as [string, number][])
     .filter(([, w]) => w > 0)
     .map(([c]) => c)

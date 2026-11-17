@@ -58,6 +58,47 @@ export function zoneMetersForBudget(
   return (mPerMin * walkShare * budgetMinutes) / divisor;
 }
 
+/**
+ * Перпендикулярный офсет via-точки, дающий прибавку extraMeters к длине ноги
+ * с исходной длиной legMeters (docs/walk-loop-quality.md R1.c). Модель —
+ * равнобедренный треугольник: путь через апекс на серединном перпендикуляре
+ * 2·√((D/2)² + h²), решая 2·√(...) − D = extra → h = √(extra·(2D + extra))/2
+ * (при extra ≪ D это ≈ √(extra·D/2)). Наивный «сместить на extra» даёт
+ * прибавку ≈ 2·extra²/D — промах в разы. Реальный роутинг поправит остаток —
+ * tune-цикл добора подгоняет по факту.
+ */
+export function viaOffsetForExtraMeters(legMeters: number, extraMeters: number): number {
+  if (!(legMeters > 0) || !(extraMeters > 0)) return 0;
+  return Math.sqrt(extraMeters * (2 * legMeters + extraMeters)) / 2;
+}
+
+/**
+ * Via-точка удлинения ноги: на перпендикуляре к a→b, поднятом из середины,
+ * на дистанции offsetMeters в сторону side. Серединный перпендикуляр —
+ * |via−a| = |via−b|: плечи треугольника симметричны. Чистая функция —
+ * тестируется отдельно (R1).
+ */
+export function viaPointFor(
+  a: WalkLatLng,
+  b: WalkLatLng,
+  offsetMeters: number,
+  side: 1 | -1,
+): WalkLatLng {
+  const rad = Math.PI / 180;
+  const latPerM = 1 / (EARTH_RADIUS_M * rad);
+  const lngPerM = 1 / (EARTH_RADIUS_M * rad * Math.cos(a[0] * rad));
+  const dxM = (b[1] - a[1]) / lngPerM; // восток
+  const dyM = (b[0] - a[0]) / latPerM; // север
+  const length = Math.hypot(dxM, dyM) || 1;
+  // Перпендикуляр к (dx, dy) — (-dy, dx).
+  const offEast = (-dyM / length) * offsetMeters * side;
+  const offNorth = (dxM / length) * offsetMeters * side;
+  return [
+    (a[0] + b[0]) / 2 + offNorth * latPerM,
+    (a[1] + b[1]) / 2 + offEast * lngPerM,
+  ];
+}
+
 function pointToSegmentMetersXY(
   p: { x: number; y: number },
   a: { x: number; y: number },
@@ -153,7 +194,10 @@ export function splitPolylineByWaypoints(
   polyline: WalkLatLng[],
   waypoints: WalkLatLng[],
 ): WalkLatLng[][] {
-  if (polyline.length === 0) return waypoints.map(() => []);
+  // Контракт: сегментов всегда waypoints.length + 1 — пустая полилиния
+  // (вырожденный маршрут) не исключение, иначе раскладка метрик по ногам
+  // у потребителя падает на пропущенном сегменте.
+  if (polyline.length === 0) return waypoints.map(() => []).concat([[]]);
   const segments: WalkLatLng[][] = [];
   let startIdx = 0;
   for (const wp of waypoints) {
