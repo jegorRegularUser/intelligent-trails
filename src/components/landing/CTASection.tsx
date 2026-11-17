@@ -2,44 +2,56 @@
 
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { ArrowRight, Sparkles } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 
 export function CTASection() {
   const t = useTranslations('Landing.cta');
 
   return (
-    <section className="py-20 bg-gradient-to-br from-brand-500 via-brand-600 to-blue-600 relative overflow-hidden">
-      {/* Декоративные элементы */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-10 left-20 w-64 h-64 bg-white rounded-full mix-blend-overlay filter blur-3xl opacity-20 animate-blob"></div>
-        <div className="absolute bottom-10 right-20 w-64 h-64 bg-blue-300 rounded-full mix-blend-overlay filter blur-3xl opacity-20 animate-blob animation-delay-2000"></div>
-      </div>
+    <section className="py-20 lg:py-24 bg-pine-900 relative overflow-hidden">
+      {/* Та же пунктирная петля, что и в hero — теперь по тёмной «полярной» бумаге */}
+      <svg
+        aria-hidden
+        className="pointer-events-none absolute -left-16 -bottom-16 w-[420px] text-brand-500 opacity-30"
+        viewBox="0 0 420 360"
+        fill="none"
+      >
+        <path
+          d="M60 260 C 110 150, 220 100, 290 150 S 380 280, 300 310 S 130 330, 60 260 Z"
+          stroke="currentColor"
+          strokeWidth="3"
+          strokeDasharray="10 12"
+          strokeLinecap="round"
+          className="animate-dash"
+        />
+        <circle cx="60" cy="260" r="6" fill="currentColor" />
+      </svg>
 
       <div className="max-w-4xl mx-auto px-6 text-center relative z-10">
-        <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-sm text-white rounded-full text-sm font-medium mb-6">
-          <Sparkles size={16} />
-          <span>{t('badge')}</span>
-        </div>
+        <p className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-white/25 text-sm font-medium text-white/90">
+          {t('badge')}
+        </p>
 
-        <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">
+        <h2 className="mt-6 font-display text-3xl md:text-4xl tracking-tight text-white">
           {t('title')}
         </h2>
 
-        <p className="text-xl text-white/90 mb-10 max-w-2xl mx-auto">
+        <p className="mt-5 text-lg text-white/80 max-w-2xl mx-auto">
           {t('subtitle')}
         </p>
 
-        <Link href={`/map`}>
-          <Button
-            variant="outline"
-            size="lg"
-            className="bg-white text-brand-600 hover:bg-slate-50 border-0 text-lg px-8 py-4 shadow-xl"
-          >
-            {t('button')}
-            <ArrowRight size={20} className="ml-2" />
-          </Button>
-        </Link>
+        <div className="mt-10">
+          <Link href={`/map`}>
+            <Button
+              size="lg"
+              className="bg-white text-brand-700 hover:bg-brand-50 border-0 px-8 shadow-lg"
+              rightIcon={<ArrowRight size={20} />}
+            >
+              {t('button')}
+            </Button>
+          </Link>
+        </div>
       </div>
     </section>
   );

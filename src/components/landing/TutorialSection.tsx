@@ -80,22 +80,15 @@ export function TutorialSection() {
 
   return (
     <section id="tutorial" className="py-20 bg-gradient-to-b from-slate-50 to-white relative overflow-hidden">
-      {/* SVG путь через цифры */}
+      {/* SVG путь через цифры: один брендовый зелёный, пунктир как на карте */}
       {pathD && (
         <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 0 }}>
-          <defs>
-            <linearGradient id="pathGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="#10b981" stopOpacity="0.7" />
-              <stop offset="33%" stopColor="#3b82f6" stopOpacity="0.7" />
-              <stop offset="66%" stopColor="#8b5cf6" stopOpacity="0.7" />
-              <stop offset="100%" stopColor="#ec4899" stopOpacity="0.7" />
-            </linearGradient>
-          </defs>
           <path
             d={pathD}
-            stroke="url(#pathGradient)"
-            strokeWidth="5"
-            strokeDasharray="25,15"
+            stroke="#10b981"
+            strokeOpacity="0.5"
+            strokeWidth="4"
+            strokeDasharray="20 14"
             fill="none"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -114,7 +107,7 @@ export function TutorialSection() {
           </p>
         </div>
 
-        <div className="space-y-32">
+        <div className="space-y-24">
           {tutorialSteps.map((step, index) => (
             <div
               key={step.key}
@@ -124,7 +117,7 @@ export function TutorialSection() {
             >
               {/* GIF блок */}
               <div className="flex-1 w-full relative z-10" ref={el => { gifRefs.current[index] = el; }}>
-                <div className="relative aspect-video rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-slate-100">
+                <div className="relative aspect-video rounded-2xl overflow-hidden shadow-float border border-slate-200 bg-slate-100">
                   <Image
                     src={step.gifPath}
                     alt={t(`${step.key}.title`)}
@@ -138,13 +131,11 @@ export function TutorialSection() {
               <div className="flex-1 w-full relative z-10">
                 <div
                   ref={el => { badgeRefs.current[index] = el; }}
-                  className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-brand-500 to-blue-500 text-white rounded-full text-2xl font-bold mb-6 shadow-lg relative"
+                  className="inline-flex items-center justify-center w-14 h-14 bg-brand-600 text-white rounded-full font-display text-lg mb-6 shadow-sm"
                 >
                   {index + 1}
-                  {/* Свечение вокруг цифры */}
-                  <div className="absolute inset-0 bg-gradient-to-br from-brand-400 to-blue-400 rounded-full blur-xl opacity-50 -z-10"></div>
                 </div>
-                <h3 className="text-3xl font-bold text-slate-900 mb-4">
+                <h3 className="text-2xl md:text-3xl font-bold text-slate-900 mb-4">
                   {t(`${step.key}.title`)}
                 </h3>
                 <p className="text-lg text-slate-600 leading-relaxed">
