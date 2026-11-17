@@ -1,38 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { evaluateOpeningHoursDetailed } from "@/lib/places/hours";
 import { OpenBadge } from "@/components/places/PlaceCard";
-import {
-  Camera,
-  Coffee,
-  Footprints,
-  Landmark,
-  MapPin,
-  Repeat2,
-  Store,
-  Trees,
-  Utensils,
-  Waves,
-} from "lucide-react";
+import { Footprints, Repeat2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/utils/cn";
+import { MICRO_ICONS, KIND_ICONS, KIND_STYLES } from "./kindIcons";
 import type { WalkStop, WalkStopKind } from "./types";
-
-type IconType = ComponentType<{ size?: number | string; className?: string }>;
-
-const KIND_ICONS: Record<WalkStopKind, IconType> = {
-  park: Trees,
-  cafe: Coffee,
-  food: Utensils,
-  museum: Landmark,
-  viewpoint: Camera,
-  shop: Store,
-  waterfront: Waves,
-  market: Store,
-  other: MapPin,
-};
 
 const KIND_I18N: Record<WalkStopKind, string> = {
   park: "stopKindPark",
@@ -44,20 +20,6 @@ const KIND_I18N: Record<WalkStopKind, string> = {
   waterfront: "stopKindWaterfront",
   market: "stopKindMarket",
   other: "stopKindOther",
-};
-
-/** Каждой категории — свой оттенок круга: таймлайн читается с одного взгляда,
- *  и разные типы мест перестают сливаться в один зелёный список. */
-const KIND_STYLES: Record<WalkStopKind, string> = {
-  park: "bg-green-100 text-green-700",
-  cafe: "bg-amber-100 text-amber-700",
-  food: "bg-orange-100 text-orange-700",
-  museum: "bg-purple-100 text-purple-700",
-  viewpoint: "bg-sky-100 text-sky-700",
-  shop: "bg-pink-100 text-pink-700",
-  waterfront: "bg-cyan-100 text-cyan-700",
-  market: "bg-lime-100 text-lime-700",
-  other: "bg-slate-100 text-slate-600",
 };
 
 export interface StopRowProps {
@@ -141,7 +103,12 @@ export function StopRow({
               )}
             </div>
             <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
-              {t(KIND_I18N[stop.kind])} · {stop.reason}
+              {/* Человекочитаемая причина говорит сама (M5): «Прямо по пути», «Лучший
+                  «кафе» поблизости» — префикс категории рядом с ней был бы тавтологией.
+                  Язык скоринга («лучший скор категории в коридоре») префикс сохраняет. */}
+              {stop.reasonStandalone
+                ? stop.reason
+                : `${t(KIND_I18N[stop.kind])} · ${stop.reason}`}
             </p>
             {reasonChips.length > 0 && (
               <div className="mt-1 flex flex-wrap gap-1">
@@ -178,17 +145,38 @@ export interface WalkLegRowProps {
   walkMin: number;
   /** Свой текст перегона — например, «до старта» для замыкания петли */
   label?: string;
+  /** Микро-стопы «по пути» (S4 волны «Улицы с характером»): имя + зачем
+   *  остановиться; их минуты уже внутри walkMin — строка честная. */
+  microNotes?: { name: string; kind: "viewpoint" | "art" | "water"; reason: string }[];
   className?: string;
 }
 
 /** Перегон между остановками: «N мин пешком» — текст на линии таймлайна
  *  (линию рисует родитель сплошной, как в эксперт-модели; отступ = круг 40px + gap 12px) */
-export function WalkLegRow({ walkMin, label, className }: WalkLegRowProps) {
+export function WalkLegRow({ walkMin, label, microNotes, className }: WalkLegRowProps) {
   const t = useTranslations("WalkUI");
   return (
-    <div className={cn("flex items-center gap-1.5 py-1.5 pl-[52px] text-xs text-slate-500 tabular-nums", className)}>
-      <Footprints size={12} aria-hidden className="shrink-0" />
-      <span>{label ?? t("legWalk", { minutes: walkMin })}</span>
+    <div className={cn("pl-[52px]", className)}>
+      <div className="flex items-center gap-1.5 py-1.5 text-xs text-slate-500 tabular-nums">
+        <Footprints size={12} aria-hidden className="shrink-0" />
+        <span>{label ?? t("legWalk", { minutes: walkMin })}</span>
+      </div>
+      {microNotes?.map((note) => {
+        const Icon = MICRO_ICONS[note.kind];
+        return (
+          <p
+            key={`${note.kind}-${note.name}`}
+            className="flex items-start gap-1.5 py-0.5 text-xs leading-relaxed text-slate-400"
+          >
+            <Icon size={12} aria-hidden className="mt-0.5 shrink-0" />
+            <span>
+              <span className="font-medium text-slate-500">{note.name}</span>
+              {note.reason ? <span aria-hidden> — </span> : null}
+              {note.reason}
+            </span>
+          </p>
+        );
+      })}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import {
   Compass,
   Footprints,
   Info,
+  Route,
   RotateCcw,
   WifiOff,
 } from "lucide-react";
@@ -126,6 +127,19 @@ export function WalkSummaryCard({
             />
           )}
 
+          {/* Уличный интерес (S3 волны «Улицы с характером»): не деградация,
+              а другая формулировка — брендовая плашка вместо amber-заметки. */}
+          {plan.streetInterest && (
+            <StreetInterestNote note={plan.streetInterestNote} />
+          )}
+
+          {/* Честность в UI (R5): отчёты гейтов как есть — одна строка на
+              провал человеческим языком; перерасход бюджета уже показывает
+              бейдж, недобор объясняет строка. */}
+          {plan.gatesSummary && !plan.gatesPass && (
+            <FailedGatesNotes plan={plan} />
+          )}
+
           {/* Таймлайн остановок */}
           <div className="flex flex-col">
             <h4 className="relative z-10 mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">
@@ -144,7 +158,10 @@ export function WalkSummaryCard({
                   {plan.stops.map((stop, index) => (
                     <div key={stop.id} className="relative">
                       {index > 0 && (
-                        <WalkLegRow walkMin={plan.legs[index]?.walkMin ?? 0} />
+                        <WalkLegRow
+                          walkMin={plan.legs[index]?.walkMin ?? 0}
+                          microNotes={plan.legs[index]?.microNotes}
+                        />
                       )}
                       <StopRow
                         stop={stop}
@@ -159,6 +176,7 @@ export function WalkSummaryCard({
                     <WalkLegRow
                       walkMin={plan.legs[plan.legs.length - 1].walkMin}
                       label={t("legWalkBack", { minutes: plan.legs[plan.legs.length - 1].walkMin })}
+                      microNotes={plan.legs[plan.legs.length - 1].microNotes}
                       className="pb-6"
                     />
                   )}
@@ -252,6 +270,61 @@ function DegradationNote({ level, note }: DegradationNoteProps) {
       <Info size={13} className="mt-0.5 shrink-0 text-amber-600" />
       <span>{text}</span>
     </p>
+  );
+}
+
+/**
+ * Заметка уличного интереса (S3): брендовая (не amber) — петля по характерным
+ * улицам не является деградацией. Текст — словарная заметка из данных
+ * (параллельные ru/en адаптера) с фолбэком на словарь WalkUI.
+ */
+function StreetInterestNote({ note }: { note?: { ru: string; en: string } }) {
+  const t = useTranslations("WalkUI");
+  const locale = useLocale();
+  const text =
+    (locale === "en" ? note?.en : note?.ru) ?? t("streetInterestNote");
+  return (
+    <p
+      role="status"
+      className="flex items-start gap-1.5 rounded-xl border border-brand-100 bg-brand-50 px-3 py-2 text-xs leading-relaxed text-brand-800"
+    >
+      <Route size={13} className="mt-0.5 shrink-0 text-brand-600" />
+      <span>{text}</span>
+    </p>
+  );
+}
+
+/**
+ * Отчёты проваленных гейтов (R5, GATE_NOTES): одну строку на провал,
+ * человеческим языком. Рендер сам решает, какую заметку показать:
+ * недобор бюджета объясняет строка («прогулка вышла короче плана»),
+ * перерасход уже виден бейджем; walk_share показывается всегда при провале.
+ */
+function FailedGatesNotes({ plan }: { plan: WalkPlan }) {
+  const t = useTranslations("WalkUI");
+  const failed = new Set((plan.gatesSummary ?? []).filter((g) => !g.pass).map((g) => g.name));
+  if (failed.size === 0) return null;
+  const notes: string[] = [];
+  if (failed.has("budget") && plan.totals.totalMin < plan.budgetMin) {
+    notes.push(t("gateNoteUnderfloor"));
+  }
+  if (failed.has("walk_share")) {
+    notes.push(t("gateNoteWalkShare"));
+  }
+  if (notes.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-1.5">
+      {notes.map((note) => (
+        <p
+          key={note}
+          role="status"
+          className="flex items-start gap-1.5 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800"
+        >
+          <Info size={13} className="mt-0.5 shrink-0 text-amber-600" />
+          <span>{note}</span>
+        </p>
+      ))}
+    </div>
   );
 }
 

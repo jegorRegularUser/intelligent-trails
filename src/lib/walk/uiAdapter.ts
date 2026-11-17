@@ -115,6 +115,21 @@ const CATEGORY_TO_UI_KIND: Record<string, WalkStopKind> = {
   market: 'market',
 };
 
+/**
+ * Маркеры «языка скоринга» (docs/ux-human-wave.md M5): причина, в которой они
+ * встречаются, сама не объясняет «зачем сюда» — карточка оставляет префикс
+ * категории. Человеческие формулы («Прямо по пути (~200 м)», «Лучший «кафе»
+ * поблизости, рейтинг 4.8») идут без префикса: имя и иконка уже называют место.
+ * Поле данных reasonStandalone — не i18n-ключ; формулы reasons.ts остаются в
+ * движке (вне зоны волны), здесь только презентационный вывод.
+ */
+const REASON_JARGON_MARKERS = ['скор', 'score', 'категори', 'коридор', 'радиусе'];
+
+export function isReasonStandalone(reason: string): boolean {
+  const lower = reason.toLowerCase();
+  return !REASON_JARGON_MARKERS.some((marker) => lower.includes(marker));
+}
+
 export function uiKindForCategory(category: string): WalkStopKind {
   return CATEGORY_TO_UI_KIND[category] ?? 'other';
 }
@@ -154,6 +169,8 @@ export function enginePlanToUiPlan(
       kind: uiKindForCategory(place.category),
       stayMin: Math.round(stop.stayMinutes),
       reason: reasonFor(stop, locale),
+      // M5: человекочитаемая причина рендерится без префикса категории.
+      ...(isReasonStandalone(reasonFor(stop, locale)) ? { reasonStandalone: true } : {}),
       coordinates: place.coordinates,
       // Сырьё для локальной замены остановки: категория/рейтинг/теги нужны
       // экшену, чтобы пересобрать сегмент без полной перестройки прогулки.

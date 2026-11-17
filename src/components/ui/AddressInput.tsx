@@ -17,17 +17,37 @@ interface AddressInputProps {
   onSelect: (coords: Coordinates, addressText: string) => void;
   defaultValue?: string;
   onMapPickerClick?: () => void; // Новый проп для активации выбора на карте
+  /** Хук на <input> — фокус из фолбэка «не дали геолокацию» (M6, QuickWalkContent). */
+  inputRef?: React.RefObject<HTMLInputElement | null>;
+  /** Текст инлайн-ошибки геокодера под полем (M6: молчание — тупик). */
+  errorText?: string | null;
 }
 
-export function AddressInput({ placeholder = "Введите адрес...", onSelect, defaultValue = "", onMapPickerClick }: AddressInputProps) {
+export function AddressInput({ placeholder = "Введите адрес...", onSelect, defaultValue = "", onMapPickerClick, inputRef, errorText }: AddressInputProps) {
   const [query, setQuery] = useState(defaultValue);
   const [suggestions, setSuggestions] = useState<YandexSuggestResult[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  // M6: отказ геокодера показывается под полем, а не молчит в console.error.
+  const [geocoderError, setGeocoderError] = useState(false);
 
   const { userLocation } = useRouteStore();
   const debouncedQuery = useDebounce(query, 300); // Уменьшили с 500ms до 300ms
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const innerInputRef = useRef<HTMLInputElement | null>(null);
+  const setInputRef = (node: HTMLInputElement | null) => {
+    innerInputRef.current = node;
+    if (inputRef) inputRef.current = node;
+  };
+
+  // M6: отказ геокодера показывается под полем (Input.errorText), а не молчит
+  // в console.error. Внешний errorText (M6 geoDenied-фолбэк) имеет приоритет.
+  const geocoderErrorText =
+    typeof placeholder === "string" && placeholder.includes("Город")
+      ? "Не нашли такой город — попробуйте уточнить"
+      : "Не нашли этот адрес — попробуйте уточнить";
+  const showError = errorText != null ? Boolean(errorText) : geocoderError;
+  const errorTextValue = errorText ?? (geocoderError ? geocoderErrorText : null);
 
   // Обновляем query когда меняется defaultValue (для синхронизации с выбором на карте)
   useEffect(() => {
@@ -65,23 +85,23 @@ export function AddressInput({ placeholder = "Введите адрес...", onS
   // 2. Обработчик клика по адресу (Вот здесь работает ТВОЙ геокодер!)
   const handleSelect = async (item: YandexSuggestResult) => {
     const fullAddress = `${item.title}, ${item.subtitle}`;
-    
+
     // Закрываем список и показываем выбранный текст
     setQuery(fullAddress);
     setIsOpen(false);
-    
+
     // Включаем лоадер, пока геокодер ищет координаты
     setIsLoading(true);
-    
+
     try {
       // Идем в твой action geocoder.ts
       const coords = await getCoordinatesFromAddress(fullAddress);
 
       if (coords) {
+        setGeocoderError(false);
         onSelect(coords, fullAddress);
       } else {
-        console.error("Не удалось найти координаты для этого адреса");
-        // Здесь в будущем можно показать Toast-уведомление с ошибкой
+        setGeocoderError(true); // M6: инлайн-ошибка вместо молчаливого console.error
       }
     } finally {
       setIsLoading(false);
@@ -99,9 +119,10 @@ export function AddressInput({ placeholder = "Введите адрес...", onS
     try {
       const coords = await getCoordinatesFromAddress(text);
       if (coords) {
+        setGeocoderError(false);
         onSelect(coords, text);
       } else {
-        console.error("Не удалось найти координаты для:", text);
+        setGeocoderError(true);
       }
     } finally {
       setIsLoading(false);
@@ -111,16 +132,20 @@ export function AddressInput({ placeholder = "Введите адрес...", onS
   return (
     <div ref={wrapperRef} className="relative w-full">
       <Input
+        ref={setInputRef}
         onKeyDown={handleKeyDown}
         value={query}
         onChange={(e) => {
           setQuery(e.target.value);
+          setGeocoderError(false);
           setIsOpen(true);
         }}
         onFocus={() => {
           if (query.length >= 2) setIsOpen(true); // Уменьшили с 3 до 2
         }}
         placeholder={placeholder}
+        error={showError}
+        errorText={showError ? errorTextValue ?? undefined : undefined}
         leftIcon={<Search size={20} className="text-slate-400" />}
         rightIcon={
           isLoading ? (

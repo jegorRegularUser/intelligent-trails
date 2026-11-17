@@ -218,6 +218,28 @@ describe('uiAdapter: gatesSummary (честность в UI, R5)', () => {
   });
 });
 
+describe('uiAdapter: reasonStandalone (M5 волны human design)', () => {
+  it('человекочитаемая причина помечается, язык скоринга — нет', () => {
+    const engine = makeEnginePlan();
+    const ui = enginePlanToUiPlan(engine, 60);
+    // фикстурная причина «лучший скор категории в коридоре» — язык скоринга
+    expect(ui.stops[0].reasonStandalone).toBeUndefined();
+
+    const human = enginePlanToUiPlan(
+      { ...makeEnginePlan(), stops: [{ ...makeEnginePlan().stops[0], reason: 'Прямо по пути (~200 м)' }] },
+      60,
+    );
+    expect(human.stops[0].reasonStandalone).toBe(true);
+
+    const en = enginePlanToUiPlan(
+      { ...makeEnginePlan(), stops: [{ ...makeEnginePlan().stops[0], reasonEn: 'The best cafe nearby, rated 4.8' }] },
+      60,
+      'en',
+    );
+    expect(en.stops[0].reasonStandalone).toBe(true);
+  });
+});
+
 describe('uiAdapter: тип прогулки из факта замыкания', () => {
   it('треугольная петля K=1 (1 stop, 3 legs) — loop, бейдж partial, «Идти» замыкается в старт', () => {
     const s: WalkLatLng = [55.75, 37.62];
