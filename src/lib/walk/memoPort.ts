@@ -12,13 +12,16 @@ import type { WalkMatrixCell, WalkRouteSegment, WalkRoutingPort } from './ports'
 import type { WalkLatLng } from './types';
 import {
   readMatrixCache,
+  readRouteAltCache,
   readRouteCache,
   writeMatrixCache,
+  writeRouteAltCache,
   writeRouteCache,
 } from './portDiskCache';
 
 /** Ёмкости кэшей: один план — это ≤3 матрицы и ≤42 ног, с запасом. */
 const ROUTE_CACHE_MAX = 128;
+const ROUTE_ALT_CACHE_MAX = 64;
 const MATRIX_CACHE_MAX = 8;
 
 function pointKey(p: WalkLatLng): string {
@@ -36,6 +39,7 @@ function putFifo<T>(cache: Map<string, T>, max: number, key: string, value: T): 
 
 export function memoizeRoutingPort(port: WalkRoutingPort): WalkRoutingPort {
   const routes = new Map<string, Promise<WalkRouteSegment>>();
+  const routeAlts = new Map<string, Promise<WalkRouteSegment[]>>();
   const matrices = new Map<string, Promise<WalkMatrixCell[]>>();
 
   return {
@@ -57,6 +61,34 @@ export function memoizeRoutingPort(port: WalkRoutingPort): WalkRoutingPort {
           throw e;
         });
       putFifo(routes, ROUTE_CACHE_MAX, key, pending);
+      return pending;
+    },
+    // Проброс routeAlternatives ОБЯЗАТЕЛЕН (R3.b): экшен отдаёт в движок
+    // именно мемо-порт — обёртка без этого метода убивала бы альтернативы
+    // на всех продовых call-site. Отдельный кэш и отдельный дисковый kind
+    // (route-alt): ответ шире одиночного route, ключи смешивать нельзя.
+    routeAlternatives(req) {
+      const key = req.waypoints.map(pointKey).join('->');
+      const hit = routeAlts.get(key);
+      if (hit) return hit;
+      const pending = readRouteAltCache(req.waypoints)
+        .then((disk) => {
+          if (disk) return disk;
+          const fetched = port.routeAlternatives
+            ? port.routeAlternatives(req)
+            : // Порт без метода — альтернатив нет по определению:
+              // основной маршрут тем же route(), деградация честная.
+              port.route(req).then((segment) => [segment]);
+          return Promise.resolve(fetched).then((segments) => {
+            writeRouteAltCache(req.waypoints, segments);
+            return segments;
+          });
+        })
+        .catch((e) => {
+          routeAlts.delete(key);
+          throw e;
+        });
+      putFifo(routeAlts, ROUTE_ALT_CACHE_MAX, key, pending);
       return pending;
     },
     matrix(sources, targets) {

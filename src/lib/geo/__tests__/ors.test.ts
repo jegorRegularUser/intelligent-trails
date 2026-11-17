@@ -144,6 +144,126 @@ describe('ORS route', () => {
   });
 });
 
+describe('ORS routeWithAlternatives (R3.a)', () => {
+  const ALT_BODY = {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: [[37.6184, 55.7512], [37.619, 55.7515]] },
+        properties: { summary: { distance: 1000, duration: 800 } },
+      },
+      {
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: [[37.6184, 55.7512], [37.6180, 55.7518]] },
+        properties: { summary: { distance: 1200, duration: 950 } },
+      },
+    ],
+  };
+
+  it('alternative_routes в body: target_count=3, share_factor/weight_factor явные', async () => {
+    const { fetch, calls } = createFakeFetch(() => jsonResponse(ALT_BODY));
+    const adapter = makeAdapter(fetch);
+
+    const segments = await adapter.routeWithAlternatives([MOSCOW, ZARYADYE], 2);
+
+    expect(calls).toHaveLength(1);
+    const body = parseBody(calls[0].init);
+    expect(body.alternative_routes).toEqual({
+      target_count: 3, // включая основной
+      share_factor: 0.6,
+      weight_factor: 1.3,
+    });
+    // Цикл по всем фичам, основной первым (прежде брали только features[0]).
+    expect(segments).toHaveLength(2);
+    expect(segments[0].distanceMeters).toBe(1000);
+    expect(segments[1].distanceMeters).toBe(1200);
+  });
+
+  it('фич меньше target_count (ORS #2475) → возвращаются все годные', async () => {
+    const { fetch } = createFakeFetch(() =>
+      jsonResponse({
+        type: 'FeatureCollection',
+        features: [ALT_BODY.features[0]],
+      }),
+    );
+    const segments = await makeAdapter(fetch).routeWithAlternatives([MOSCOW, ZARYADYE], 2);
+    expect(segments).toHaveLength(1);
+  });
+
+  it('400/2011 («не смогли построить альтернативы») → деградация «альтернатив нет», не NO_ROUTE', async () => {
+    let calls = 0;
+    const { fetch, calls: recorded } = createFakeFetch(() => {
+      calls += 1;
+      if (calls === 1) {
+        return jsonResponse({ error: { code: 2011, message: 'Cannot find alternative routes' } }, 400);
+      }
+      return jsonResponse(orsRouteBody()); // повторный запрос без alternative_routes
+    });
+    const adapter = makeAdapter(fetch);
+
+    const segments = await adapter.routeWithAlternatives([MOSCOW, ZARYADYE], 2);
+
+    expect(segments).toHaveLength(1);
+    expect(segments[0].distanceMeters).toBe(1234.5);
+    // Второй запрос — обычный роутинг без alternative_routes.
+    expect(recorded).toHaveLength(2);
+    expect(parseBody(recorded[1].init).alternative_routes).toBeUndefined();
+  });
+
+  it('пустой features → деградация на обычный route; одна фича → [основной]', async () => {
+    // Пустой набор → деградация: второй вызов возвращает обычный маршрут.
+    let n = 0;
+    const { fetch, calls } = createFakeFetch(() => {
+      n += 1;
+      return n === 1
+        ? jsonResponse({ type: 'FeatureCollection', features: [] })
+        : jsonResponse(orsRouteBody());
+    });
+    const segments = await makeAdapter(fetch).routeWithAlternatives([MOSCOW, ZARYADYE], 2);
+    expect(segments).toHaveLength(1);
+    expect(segments[0].distanceMeters).toBe(1234.5);
+    expect(calls).toHaveLength(2);
+
+    // Одна фича — легальный ответ «альтернатив не нашлось»: основной и всё.
+    const oneFeature = createFakeFetch(() =>
+      jsonResponse({ type: 'FeatureCollection', features: [ALT_BODY.features[0]] }),
+    );
+    const single = await makeAdapter(oneFeature.fetch).routeWithAlternatives([MOSCOW, ZARYADYE], 2);
+    expect(single).toHaveLength(1);
+    expect(oneFeature.calls).toHaveLength(1);
+  });
+
+  it('не 2 вейпоинта или alternatives=0 → обычный route без alternative_routes', async () => {
+    const { fetch, calls } = createFakeFetch(() => jsonResponse(ALT_BODY));
+    const adapter = makeAdapter(fetch);
+
+    const three = await adapter.routeWithAlternatives([MOSCOW, ZARYADYE, MOSCOW], 2);
+    expect(three).toHaveLength(1);
+    expect(parseBody(calls[0].init).alternative_routes).toBeUndefined();
+
+    const zero = await adapter.routeWithAlternatives([MOSCOW, ZARYADYE], 0);
+    expect(zero).toHaveLength(1);
+    expect(parseBody(calls[1].init).alternative_routes).toBeUndefined();
+  });
+
+  it('429 (квота) при альтернативах остаётся честным броском — деградация не глотает лежку', async () => {
+    const { fetch } = createFakeFetch(() => jsonResponse({}, 429));
+    const err = (await makeAdapter(fetch)
+      .routeWithAlternatives([MOSCOW, ZARYADYE], 2)
+      .catch((e) => e)) as GeoError;
+    expect(err.code).toBe('NO_ROUTE');
+    expect(err.message).toContain('Квота');
+  });
+
+  it('route(waypoints, alternatives) возвращает основной из multi-ответа (одиночная семантика)', async () => {
+    const { fetch, calls } = createFakeFetch(() => jsonResponse(ALT_BODY));
+    const segment = await makeAdapter(fetch).route([MOSCOW, ZARYADYE], 2);
+    expect(segment.distanceMeters).toBe(1000);
+    expect(parseBody(calls[0].init).alternative_routes).toBeDefined();
+  });
+});
+
 describe('ORS matrix: чанкинг ≤40 источников + ВСЕ цели', () => {
   const TARGETS: LatLng[] = Array.from({ length: 7 }, (_, i) => [55.70 + i * 0.01, 37.60] as LatLng);
 

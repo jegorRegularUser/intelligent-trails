@@ -13,6 +13,18 @@ import { OrsKeyPool } from './orsKeyPool';
 /** Лимит источников в одном матричном запросе (бюджет бесплатного тира). */
 export const MATRIX_SOURCES_PER_REQUEST = 40;
 
+/**
+ * Контракт alternative_routes OpenRouteService (docs/walk-loop-quality.md R3.a):
+ * работает только на запросах из 2 координат, target_count ≤ 3 (включая
+ * основной), дистанция ≤ 100 км. Когда параметры неудовлетворимы, ORS отвечает
+ * HTTP 400 с кодом 2011 в теле, а не пустым FeatureCollection; фич может
+ * вернуться меньше target_count (ORS issue #2475).
+ */
+export const ORS_MAX_ALTERNATIVES = 2;
+/** Явные share/weight — дефолты ORS не гарантированы контрактом. */
+const ORS_ALTERNATIVES_SHARE_FACTOR = 0.6;
+const ORS_ALTERNATIVES_WEIGHT_FACTOR = 1.3;
+
 export interface OrsAdapterOptions {
   /** Одиночный ключ (обратная совместимость). Для пула используйте apiKeys. */
   apiKey?: string;
@@ -69,6 +81,17 @@ function mapOrsError(error: unknown, action: string): unknown {
   return error;
 }
 
+/**
+ * «ORS не смог построить альтернативные маршруты» — легальный отказ режима, а
+ * не лежка: 400 с кодом 2011 в теле (statusToCode маппит его в
+ * UPSTREAM_INVALID) и 422 «маршрут не нашли». Квота/ключ/лежка сюда не входят:
+ * там честный throw, который обработает лестница деградации выше.
+ */
+function isAlternativesRefusal(error: unknown): boolean {
+  if (!(error instanceof GeoError)) return false;
+  return upstreamStatus(error) === 400 || error.code === 'NOT_FOUND';
+}
+
 // ---------------------------------------------------------------------------
 // Парсинг
 // ---------------------------------------------------------------------------
@@ -77,20 +100,19 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
-function parseGeojsonRoute(data: OrsGeoJsonResponse): RouteSegment {
-  if (data.type !== 'FeatureCollection' || !Array.isArray(data.features) || data.features.length === 0) {
-    throw new GeoError('NO_ROUTE', 'ORS вернул пустой набор маршрутов');
-  }
-  const feature = data.features[0] as {
-    geometry?: { coordinates?: unknown };
-    properties?: { summary?: { distance?: unknown; duration?: unknown } };
-  };
-  const summary = feature.properties?.summary;
+interface OrsFeature {
+  geometry?: { coordinates?: unknown };
+  properties?: { summary?: { distance?: unknown; duration?: unknown } };
+}
+
+function parseRouteFeature(feature: unknown): RouteSegment {
+  const f = feature as OrsFeature;
+  const summary = f.properties?.summary;
   if (!isFiniteNumber(summary?.distance) || !isFiniteNumber(summary?.duration)) {
     throw new GeoError('UPSTREAM_INVALID', 'ORS: в ответе нет summary.distance/duration');
   }
   let geometry: LatLng[] = [];
-  const coordinates = feature.geometry?.coordinates;
+  const coordinates = f.geometry?.coordinates;
   if (coordinates !== undefined) {
     if (!Array.isArray(coordinates)) {
       throw new GeoError('UPSTREAM_INVALID', 'ORS: geometry.coordinates не массив');
@@ -109,6 +131,43 @@ function parseGeojsonRoute(data: OrsGeoJsonResponse): RouteSegment {
     geometry,
     source: 'cloud',
   };
+}
+
+function parseGeojsonRoute(data: OrsGeoJsonResponse): RouteSegment {
+  if (data.type !== 'FeatureCollection' || !Array.isArray(data.features) || data.features.length === 0) {
+    throw new GeoError('NO_ROUTE', 'ORS вернул пустой набор маршрутов');
+  }
+  return parseRouteFeature(data.features[0]);
+}
+
+/**
+ * Разбор multi-feature ответа (alternative_routes, R3.a): цикл по ВСЕМ фичам,
+ * основной — первая. Ломаная вторичная фича даёт «маршрутов меньше» (ORS
+ * issue #2475 и соседние причуды), а не падение; ломаная ПЕРВАЯ фича или ни
+ * одной годной — пустой массив: вызывающая сторона деградирует на обычный
+ * route, лег всё равно получит честные метрики.
+ */
+function parseGeojsonRoutes(data: OrsGeoJsonResponse): RouteSegment[] {
+  if (data.type !== 'FeatureCollection' || !Array.isArray(data.features)) {
+    throw new GeoError('UPSTREAM_INVALID', 'ORS: ответ не FeatureCollection');
+  }
+  if (data.features.length === 0) return [];
+  const first = parseRouteFeatureSafe(data.features[0]);
+  if (!first) return [];
+  const segments: RouteSegment[] = [first];
+  for (let i = 1; i < data.features.length; i++) {
+    const segment = parseRouteFeatureSafe(data.features[i]);
+    if (segment) segments.push(segment);
+  }
+  return segments;
+}
+
+function parseRouteFeatureSafe(feature: unknown): RouteSegment | null {
+  try {
+    return parseRouteFeature(feature);
+  } catch {
+    return null;
+  }
 }
 
 /** ORS кладёт null в ячейки матрицы для недостижимых пар; мусор трактуем так же. */
@@ -192,16 +251,62 @@ export class OrsRoutingAdapter {
     throw new GeoError('UPSTREAM_UNAVAILABLE', `ORS: все ключи ушли в отказ при «${action}»`);
   }
 
-  async route(waypoints: LatLng[]): Promise<RouteSegment> {
+  async route(waypoints: LatLng[], alternatives = 0): Promise<RouteSegment> {
+    const segments = await this.requestRoutes(waypoints, alternatives);
+    return segments[0];
+  }
+
+  /**
+   * Альтернативные маршруты по ДВУМ вейпоинтам, основной первым (R3.a).
+   * Деградация = «альтернатив нет», не NO_ROUTE: 400/2011, пустой набор,
+   * одна фича — лег строится обычным route; наверх не бросается. Реальные
+   * лежки/квоты (429/5xx/таймаут) бросаются как есть — их лечит лестница выше.
+   */
+  async routeWithAlternatives(waypoints: LatLng[], alternatives: number): Promise<RouteSegment[]> {
+    const alts = Math.max(0, Math.min(Math.floor(alternatives), ORS_MAX_ALTERNATIVES));
+    if (alts <= 0 || waypoints.length !== 2) {
+      // Контракт ORS: alternative_routes только на запросах из 2 координат.
+      return [await this.route(waypoints)];
+    }
+    try {
+      const data = await this.requestDirections(waypoints, alts);
+      const segments = parseGeojsonRoutes(data);
+      if (segments.length > 0) return segments;
+    } catch (error) {
+      if (!isAlternativesRefusal(error)) throw error;
+    }
+    // 400/2011 («не смогли удовлетворить параметры») или пустой набор —
+    // альтернатив нет, но сам маршрут между точками существует.
+    return [await this.route(waypoints)];
+  }
+
+  private async requestRoutes(waypoints: LatLng[], alternatives: number): Promise<RouteSegment[]> {
+    if (alternatives <= 0 || waypoints.length !== 2) {
+      const data = await this.requestDirections(waypoints, 0);
+      return [parseGeojsonRoute(data)];
+    }
+    return this.routeWithAlternatives(waypoints, alternatives);
+  }
+
+  private async requestDirections(waypoints: LatLng[], alternatives: number): Promise<OrsGeoJsonResponse> {
     const url = `${this.options.baseUrl}/v2/directions/foot-walking/geojson`;
-    const body = {
+    const body: Record<string, unknown> = {
       // Округление до 5 знаков (~1.1 м) — согласовано с ключами кэша выше по стеку.
       coordinates: waypoints.map((point) => toLngLat(roundPoint(point))),
       elevation: false,
       instructions: false,
     };
+    if (alternatives > 0) {
+      // target_count включает ОСНОВНОЙ маршрут; weight_factor явный —
+      // дефолт ORS не гарантирован (R3.a).
+      body.alternative_routes = {
+        target_count: Math.min(alternatives + 1, ORS_MAX_ALTERNATIVES + 1),
+        share_factor: ORS_ALTERNATIVES_SHARE_FACTOR,
+        weight_factor: ORS_ALTERNATIVES_WEIGHT_FACTOR,
+      };
+    }
 
-    const data = await this.withKeyRotation('роутинг', (apiKey) =>
+    return this.withKeyRotation('роутинг', (apiKey) =>
       fetchJson<OrsGeoJsonResponse>({
         url,
         timeoutMs: this.options.routeTimeoutMs,
@@ -212,7 +317,6 @@ export class OrsRoutingAdapter {
           body: JSON.stringify(body),
         },
       }));
-    return parseGeojsonRoute(data);
   }
 
   /**

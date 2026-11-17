@@ -57,6 +57,10 @@ export interface WalkLeg {
   durationMinutes: number;
   /** Полилиния [lat,lng]; пустой массив, если источник не дал геометрию. */
   geometry: WalkLatLng[];
+  /** Нога идёт по альтернативному (непересекающемуся) маршруту, а не основному
+   *  — выбор движка среди вариантов порта (docs/walk-loop-quality.md R3.c).
+   *  Не гейт-отчёт: факт маршрута, гейты считаются по геометрии как обычно. */
+  routeVariant?: 'alt';
 }
 
 export type WalkGateName =
@@ -119,6 +123,10 @@ export const MAX_STOPS = 8;
 export const DEFAULT_CATEGORY_LIMIT = 2;
 /** Нет сегмента длиннее ~25 минут без остановки. */
 export const MAX_LEG_MINUTES = 25;
+/** Ноги с матричной оценкой длиннее этого порога запрашивают у порта
+ *  непересекающиеся альтернативы (R3): коротким LegsPlz не нужен — их
+ *  перекрытие не ловит ни один гейт, а квота роутера платится запросом. */
+export const LEG_ALT_MIN_MINUTES = 8;
 /** Бюджет ±10%. */
 export const BUDGET_TOLERANCE = 0.1;
 /** Петля: ходьба — не меньше этой доли бюджета (прогулка, не экскурсия с

@@ -19,17 +19,23 @@ import {
   BUDGET_TOLERANCE,
   DEFAULT_CATEGORY_LIMIT,
   DEFAULT_WALKING_SPEED_KMH,
+  LEG_ALT_MIN_MINUTES,
   MAX_CANDIDATES,
   MAX_LEG_MINUTES,
 } from './types';
 import type { WalkMatrixCell, WalkRouteSegment, WalkRoutingPort } from './ports';
-import { haversineMeters, zoneMetersForBudget } from './internal/geo';
+import {
+  fractionWithinCorridor,
+  haversineMeters,
+  polylineLengthMeters,
+  zoneMetersForBudget,
+} from './internal/geo';
 import { isFiniteLatLng, errMessage, validateWalkCore } from './internal/geo-utils';
 import { resolveStayMinutes } from './internal/stay';
 import { mulberry32 } from './internal/rng';
 import { selectCandidates, type SelectionResult } from './selection';
 import { solveWalkOrder, ringCost } from './ordering';
-import { evaluateGates } from './gates';
+import { evaluateGates, SAME_STREET_CORRIDOR_M } from './gates';
 import { buildAnchorReason, buildAnchorReasonEn } from './reasons';
 
 // --- Параметры вариантов альтернатив (docs/walk-engine.md §11) ---
@@ -48,6 +54,12 @@ const ZONE_VARIANTS = [
 
 /** Доля бюджета под ходьбу при расчёте радиуса петли; остаток — stay и кривизна улиц. */
 const LOOP_WALK_SHARE = 0.6;
+/**
+ * Общий кап route-вызовов порта на одну сборку (R3.c): альтернативы — самая
+ * дорогая часть квоты роутера (до 3 маршрутов одним directions-запросом, но
+ * запрос за запросом). Сверх капа ноги идут обычным route, план не страдает.
+ */
+const MAX_ROUTE_CALLS = 24;
 /** Разнос якорей петли (§4.6): бюджеты от этого порога получают минимальный
  *  зазор между остановками — против «трёх точек в квартале» в плотном центре. */
 const GAP_MIN_BUDGET = 45;
@@ -170,6 +182,7 @@ export async function createWalkPlan(
     times,
     endIndex,
     liveBase,
+    routeCalls: { count: 0 },
   };
   for (const variant of variants) {
     const outcome = await buildPlanForVariant(input, ports, variant, ctx, speedKmh);
@@ -206,6 +219,85 @@ function planSignature(plan: WalkPlan): string {
     .map((stop) => stop.place.id)
     .sort()
     .join(',');
+}
+
+// --- Альтернативные маршруты ноги (docs/walk-loop-quality.md R3.c) ---
+
+export interface LegVariantCandidate {
+  distanceMeters: number;
+  durationMinutes: number;
+  geometry: WalkLatLng[];
+}
+
+/**
+ * Выбор варианта ноги среди ответов routeAlternatives. Правила дока:
+ *  (а) минимум пересечения с уже принятыми ногами — та же механика, что у
+ *      гейта «та же улица» (коридор 30 м, короткая нога в коридоре длинной);
+ *  (б) при равном пересечении — самый длинный, влезающий в потолок 1.1·B
+ *      (fitsCeiling — оценка полного плана с этой ногой);
+ *  (в) тайбрейкер — порядок входа: основной маршрут у порта всегда первый.
+ * Кандидаты без геометрии (<2 точек) из сравнения пересечений исключены:
+ * fractionWithinCorridor на пустой полилинии даёт 0, и такая нога вытесняла
+ * бы честные. Возвращает ИНДЕКС выбранного; -1 — ни один не влезает в
+ * потолок (вызывающая сторона оставляет основной как есть). Чистая функция —
+ * тестируется на синтетических полилиниях без порта.
+ */
+export function chooseLegVariant(
+  candidates: LegVariantCandidate[],
+  acceptedGeometries: WalkLatLng[][],
+  fitsCeiling: (durationMinutes: number) => boolean,
+): number {
+  let best = -1;
+  let bestOverlap = Infinity;
+  let bestMinutes = -1;
+  for (let i = 0; i < candidates.length; i++) {
+    const candidate = candidates[i];
+    if (!fitsCeiling(candidate.durationMinutes)) continue;
+    if (candidate.geometry.length < 2) continue;
+    const overlap = maxOverlapOnAccepted(candidate.geometry, acceptedGeometries);
+    if (
+      overlap < bestOverlap - 1e-9 ||
+      (overlap <= bestOverlap + 1e-9 && candidate.durationMinutes > bestMinutes)
+    ) {
+      best = i;
+      bestOverlap = overlap;
+      bestMinutes = candidate.durationMinutes;
+    }
+  }
+  if (best >= 0) return best;
+  // Сравнимых геометрий нет вовсе — первый влезающий (основной первым).
+  for (let i = 0; i < candidates.length; i++) {
+    if (fitsCeiling(candidates[i].durationMinutes)) return i;
+  }
+  return -1;
+}
+
+/** Максимум доли перекрытия geometry с уже принятыми ногами петли. */
+function maxOverlapOnAccepted(
+  geometry: WalkLatLng[],
+  accepted: WalkLatLng[][],
+): number {
+  let max = 0;
+  for (const other of accepted) {
+    if (other.length < 2) continue;
+    // Замер по КОРОТКОЙ ноге пары — как в гейте улиц (gates.ts): после
+    // ресемплинга плотность точек неравномерна, длина честнее числа точек.
+    const [shorter, longer] =
+      polylineLengthMeters(geometry) <= polylineLengthMeters(other)
+        ? [geometry, other]
+        : [other, geometry];
+    max = Math.max(max, fractionWithinCorridor(shorter, longer, SAME_STREET_CORRIDOR_M));
+  }
+  return max;
+}
+
+function validMetrics(segment: WalkRouteSegment): boolean {
+  return (
+    Number.isFinite(segment.distanceMeters) &&
+    segment.distanceMeters >= 0 &&
+    Number.isFinite(segment.durationSeconds) &&
+    segment.durationSeconds >= 0
+  );
 }
 
 // --- Отказы до порта ---
@@ -258,6 +350,9 @@ export interface VariantContext {
   endIndex: number;
   /** Индексы точек с живой связкой к старту (и финишу в А→Б). */
   liveBase: Set<number>;
+  /** Счётчик вызовов порта на сборку: общий для всех вариантов и зеркал
+   *  (кап MAX_ROUTE_CALLS — квота роутера, R3.c). */
+  routeCalls: { count: number };
 }
 
 /** Максимальная зона из всех вариантов — база единого отбора (§5). */
@@ -429,16 +524,60 @@ async function buildPlanForVariant(
     sequence: number[],
   ): Promise<{ plan: WalkPlan; failure?: undefined } | { plan?: undefined; failure: WalkFailure }> => {
     // 6. Реальные ноги через роутинг (§4.8): «улицы, а не прямые линии».
+    //    Длинные ноги (матричная оценка > LEG_ALT_MIN_MINUTES) просят у порта
+    //    альтернативы (R3.c): берётся маршрут с минимумом пересечения с уже
+    //    принятыми ногами; при равном — длиннейший, влезающий в потолок.
     const legPath = isLoop ? [0, ...sequence, 0] : [0, ...sequence, endIndex];
     const legs: WalkLeg[] = [];
+    const totalStayEstimate = sequence.reduce((sum, bi) => sum + stayOf.get(bi)!, 0);
     for (let i = 0; i < legPath.length - 1; i++) {
       const from = points[legPath[i]];
       const to = points[legPath[i + 1]];
-      let segment: WalkRouteSegment;
-      try {
-        segment = await ports.route({ waypoints: [from, to] });
-      } catch (e) {
-        return { failure: { code: 'NO_ROUTE', detail: `нога ${i + 1} не построена: ${errMessage(e)}` } };
+      const matrixMinutes = times[legPath[i]][legPath[i + 1]];
+      // Оценка потолка §12: матричный план этой сборки, где матричное плечо
+      // замещено реальной ногой-кандидатом.
+      const fitsCeiling = (legMinutes: number): boolean =>
+        finalOrder.walkMinutes + totalStayEstimate - matrixMinutes + legMinutes <= limit + 1e-9;
+
+      let segment: WalkRouteSegment | null = null;
+      let routeVariant: 'alt' | undefined;
+      if (
+        matrixMinutes > LEG_ALT_MIN_MINUTES &&
+        ctx.routeCalls.count < MAX_ROUTE_CALLS &&
+        typeof ports.routeAlternatives === 'function'
+      ) {
+        ctx.routeCalls.count += 1;
+        try {
+          const alternatives = (await ports.routeAlternatives({ waypoints: [from, to] })).filter(
+            validMetrics,
+          );
+          if (alternatives.length > 0) {
+            const chosenIndex = chooseLegVariant(
+              alternatives.map((s) => ({
+                distanceMeters: s.distanceMeters,
+                durationMinutes: s.durationSeconds / 60,
+                geometry: s.geometry ?? [],
+              })),
+              legs.map((leg) => leg.geometry),
+              fitsCeiling,
+            );
+            // Ничего не влезло в потолок — оставляем основной, как есть.
+            const index = chosenIndex >= 0 ? chosenIndex : 0;
+            segment = alternatives[index];
+            routeVariant = index > 0 ? 'alt' : undefined;
+          }
+        } catch {
+          // Отказ альтернативного запроса — не отказ ноги: ниже обычный
+          // route даст либо метрики, либо честный NO_ROUTE наверх.
+        }
+      }
+      if (!segment) {
+        try {
+          segment = await ports.route({ waypoints: [from, to] });
+        } catch (e) {
+          return { failure: { code: 'NO_ROUTE', detail: `нога ${i + 1} не построена: ${errMessage(e)}` } };
+        }
+        ctx.routeCalls.count += 1;
       }
       if (
         !Number.isFinite(segment.distanceMeters) ||
@@ -454,6 +593,7 @@ async function buildPlanForVariant(
         distanceMeters: segment.distanceMeters,
         durationMinutes: segment.durationSeconds / 60,
         geometry: segment.geometry ?? [],
+        ...(routeVariant ? { routeVariant } : {}),
       });
     }
 

@@ -154,6 +154,71 @@ describe('кэши провайдера', () => {
   });
 });
 
+describe('alternatives: кэш-ключ с alternatives и routeAlternatives (R3.a)', () => {
+  it('route с alternatives и без — разные кэш-ключи: два сетевых вызова', async () => {
+    let orsCalls = 0;
+    const fake = createFakeFetch(() => {
+      orsCalls++;
+      return jsonResponse(ORS_ROUTE);
+    });
+    const provider = makeProvider(fake);
+
+    await provider.route({ waypoints: [MOSCOW, ZARYADYE], alternatives: 2 });
+    await provider.route({ waypoints: [MOSCOW, ZARYADYE] });
+    expect(orsCalls).toBe(2); // без alternatives в ключе второй ответ попал бы в чужой кэш
+
+    // Повторы — из кэша.
+    await provider.route({ waypoints: [MOSCOW, ZARYADYE], alternatives: 2 });
+    await provider.route({ waypoints: [MOSCOW, ZARYADYE] });
+    expect(orsCalls).toBe(2);
+  });
+
+  it('routeAlternatives: массив, отдельный кэш, target_count = alternatives+1', async () => {
+    const fake = createFakeFetch(() =>
+      jsonResponse({
+        type: 'FeatureCollection',
+        features: [ORS_ROUTE.features[0], { ...ORS_ROUTE.features[0], properties: { summary: { distance: 500, duration: 400 } } }],
+      }),
+    );
+    const provider = makeProvider(fake);
+
+    const first = await provider.routeAlternatives({ waypoints: [MOSCOW, ZARYADYE] });
+    const second = await provider.routeAlternatives({ waypoints: [MOSCOW, ZARYADYE] });
+
+    expect(fake.calls).toHaveLength(1); // повтор из кэша
+    expect(first).toHaveLength(2);
+    expect(first[0].distanceMeters).toBe(100); // основной первым
+    expect(first[1].distanceMeters).toBe(500);
+    expect(second).toEqual(first);
+    // Дефолт 2 → target_count 3 (включая основной) — потолок контракта ORS.
+    const body = parseBody(fake.calls[0].init);
+    expect(body.alternative_routes).toEqual({ target_count: 3, share_factor: 0.6, weight_factor: 1.3 });
+  });
+
+  it('routeAlternatives с alternatives: 1 → target_count 2', async () => {
+    const fake = createFakeFetch(() =>
+      jsonResponse({ type: 'FeatureCollection', features: [ORS_ROUTE.features[0]] }),
+    );
+    const provider = makeProvider(fake);
+    await provider.routeAlternatives({ waypoints: [MOSCOW, ZARYADYE], alternatives: 1 });
+    expect(parseBody(fake.calls[0].init).alternative_routes).toEqual({
+      target_count: 2,
+      share_factor: 0.6,
+      weight_factor: 1.3,
+    });
+  });
+
+  it('routeAlternatives: alternatives 3 → INVALID_INPUT до сети', async () => {
+    const fake = createFakeFetch(() => jsonResponse(ORS_ROUTE));
+    const provider = makeProvider(fake);
+    const err = (await provider
+      .routeAlternatives({ waypoints: [MOSCOW, ZARYADYE], alternatives: 3 })
+      .catch((e) => e)) as GeoError;
+    expect(err.code).toBe('INVALID_INPUT');
+    expect(fake.calls).toHaveLength(0);
+  });
+});
+
 describe('лестница геокодинга: Photon → Nominatim', () => {
   it('Photon упал → Nominatim отвечает за reverse', async () => {
     const fake = world({

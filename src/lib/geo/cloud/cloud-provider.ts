@@ -14,6 +14,12 @@ import { OverpassPlacesAdapter } from './overpass-places';
 
 const ROUTE_TTL_MS = 10 * 60_000;
 const PLACES_TTL_MS = 10 * 60_000;
+/**
+ * Сколько маршрутов просит routeAlternatives без явного alternatives:
+ * максимум контракта ORS — 3 включая основной (движок выбирает из трёх,
+ * квота платит одним запросом).
+ */
+const ROUTE_ALTERNATIVES_DEFAULT = 2;
 const REVERSE_TTL_MS = 60 * 60_000;
 /** Пустой ответ reverse кэшим короче: «здесь ничего» устаревает быстрее. */
 const REVERSE_NEGATIVE_TTL_MS = 5 * 60_000;
@@ -31,6 +37,8 @@ export class CloudProvider implements GeoProvider {
   private readonly overpass: OverpassPlacesAdapter;
 
   private readonly routeCache = new TtlLruCache<RouteSegment>({ maxEntries: 200, defaultTtlMs: ROUTE_TTL_MS });
+  /** Ответы routeAlternatives: массив маршрутов, основной первым (R3.a). */
+  private readonly routeAltCache = new TtlLruCache<RouteSegment[]>({ maxEntries: 100, defaultTtlMs: ROUTE_TTL_MS });
   private readonly placesCache = new TtlLruCache<GeoPlace[]>({ maxEntries: 200, defaultTtlMs: PLACES_TTL_MS });
   /** V может быть null — кэш честного «здесь ничего не нашли». */
   private readonly reverseCache = new TtlLruCache<ReverseGeocodeResult | null>({ maxEntries: 300, defaultTtlMs: REVERSE_TTL_MS });
@@ -88,14 +96,36 @@ export class CloudProvider implements GeoProvider {
     assertValidWaypoints(req.waypoints);
     assertValidAlternatives(req.alternatives);
 
-    const cacheKey = `route:${req.waypoints.map(pointKey).join('|')}`;
+    // Кэш-ключ включает alternatives (R3.a): без него первый ответ с
+    // альтернативами закэшировался бы для всех последующих запросов без них.
+    const alternatives = req.alternatives ?? 0;
+    const cacheKey = `route:${req.waypoints.map(pointKey).join('|')}:${alternatives}`;
     const cached = this.routeCache.get(cacheKey);
     if (cached) return cached;
 
     // Ошибки не кэшируются: севшая квота не должна «отравить» маршрут на TTL.
-    const segment = await this.ors.route(req.waypoints);
+    const segment = await this.ors.route(req.waypoints, alternatives);
     this.routeCache.set(cacheKey, segment);
     return segment;
+  }
+
+  /**
+   * Альтернативные маршруты, основной первым (R3.a): до 3 одним
+   * directions-запросом — это 1 запрос на ногу, не 3. Отдельный кэш: ответ
+   * шире одиночного route, смешивать ключи нельзя.
+   */
+  async routeAlternatives(req: RouteRequest): Promise<RouteSegment[]> {
+    assertValidWaypoints(req.waypoints);
+    assertValidAlternatives(req.alternatives);
+
+    const alternatives = req.alternatives ?? ROUTE_ALTERNATIVES_DEFAULT;
+    const cacheKey = `route-alt:${req.waypoints.map(pointKey).join('|')}:${alternatives}`;
+    const cached = this.routeAltCache.get(cacheKey);
+    if (cached) return cached;
+
+    const segments = await this.ors.routeWithAlternatives(req.waypoints, alternatives);
+    this.routeAltCache.set(cacheKey, segments);
+    return segments;
   }
 
   async matrix(sources: LatLng[], targets: LatLng[]): Promise<MatrixCell[]> {

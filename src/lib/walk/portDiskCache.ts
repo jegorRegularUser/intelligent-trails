@@ -21,7 +21,7 @@ function cacheDir(): string {
   return process.env.IT_GEO_CACHE_DIR || join(homedir(), '.intelligent-trails', 'geo-cache');
 }
 
-function hashKey(kind: 'route' | 'matrix', key: string): string {
+function hashKey(kind: 'route' | 'matrix' | 'route-alt', key: string): string {
   return `${kind}_${createHash('sha1').update(key).digest('hex').slice(0, 24)}`;
 }
 
@@ -78,6 +78,20 @@ export async function readRouteCache(waypoints: WalkLatLng[]): Promise<WalkRoute
 
 export function writeRouteCache(waypoints: WalkLatLng[], segment: WalkRouteSegment): void {
   void writeEntry(hashKey('route', routeKey(waypoints)), segment);
+}
+
+/**
+ * Альтернативные маршруты (kind route-alt, R3.b): TTL как у route — набор
+ * альтернатив между двумя точками живёт ровно столько же, сколько сам
+ * маршрут. Отдельный kind, чтобы массив альтернатив не прочитался как
+ * одиночный route.
+ */
+export async function readRouteAltCache(waypoints: WalkLatLng[]): Promise<WalkRouteSegment[] | null> {
+  return readEntry<WalkRouteSegment[]>(hashKey('route-alt', routeKey(waypoints)), ROUTE_TTL_DAYS);
+}
+
+export function writeRouteAltCache(waypoints: WalkLatLng[], segments: WalkRouteSegment[]): void {
+  void writeEntry(hashKey('route-alt', routeKey(waypoints)), segments);
 }
 
 export async function readMatrixCache(

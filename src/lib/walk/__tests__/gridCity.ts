@@ -75,13 +75,24 @@ export interface CityPlaceDef {
   island?: boolean;
 }
 
+export interface FakeCityOptions {
+  /**
+   * Порт умеет routeAlternatives (R3): основной Г-путь «сначала долгота»
+   * (как в route) и зеркало «сначала широта» через (b.lat, a.lng). Оба идут
+   * по сетке, метрики совпадают, перекрытие — только стыки в точках a/b.
+   * Опция выключена по умолчанию: существующие сценарии проверяют движение
+   * на одиночных ногах, альтернативный выбор — отдельные тесты.
+   */
+  alternatives?: boolean;
+}
+
 export interface FakeCity {
   port: WalkRoutingPort;
   places: WalkPlace[];
 }
 
 /** Детерминированный фейковый порт маршрутизации по сетке-городу. */
-export function makeCity(defs: CityPlaceDef[]): FakeCity {
+export function makeCity(defs: CityPlaceDef[], options: FakeCityOptions = {}): FakeCity {
   const places: WalkPlace[] = defs.map((def) => ({
     id: def.id,
     name: def.name,
@@ -94,29 +105,57 @@ export function makeCity(defs: CityPlaceDef[]): FakeCity {
   );
   const isIsland = (p: WalkLatLng): boolean => islandKeys.has(keyOf(p));
 
+  const buildSegment = (paths: WalkLatLng[][]): WalkRouteSegment => {
+    // Метрики по манхэттенской длине плеч — так честно и для одиночного
+    // Г-путя, и для цепочки (петли L2/via режут её же по вейпоинтам).
+    const geometry = concatPaths(paths);
+    let totalMeters = 0;
+    for (let i = 1; i < geometry.length; i++) {
+      totalMeters += manhattanMeters(geometry[i - 1], geometry[i]);
+    }
+    return {
+      distanceMeters: totalMeters,
+      durationSeconds: (totalMeters / SPEED_M_PER_MIN) * 60,
+      geometry,
+      source: 'pack',
+    };
+  };
+
+  const routeSegmentFor = (waypoints: WalkLatLng[]): WalkRouteSegment => {
+    const paths: WalkLatLng[][] = [];
+    for (let i = 0; i < waypoints.length - 1; i++) {
+      const a = waypoints[i];
+      const b = waypoints[i + 1];
+      if (samePoint(a, b)) continue;
+      if (isIsland(a) || isIsland(b)) {
+        throw new Error(`NO_ROUTE: нога ${i + 1} проходит через остров`);
+      }
+      paths.push(lPath(a, b));
+    }
+    return buildSegment(paths);
+  };
+
   const port: WalkRoutingPort = {
     async route(req) {
-      const waypoints = req.waypoints;
-      let totalMeters = 0;
-      const paths: WalkLatLng[][] = [];
-      for (let i = 0; i < waypoints.length - 1; i++) {
-        const a = waypoints[i];
-        const b = waypoints[i + 1];
-        if (samePoint(a, b)) continue;
-        if (isIsland(a) || isIsland(b)) {
-          throw new Error(`NO_ROUTE: нога ${i + 1} проходит через остров`);
-        }
-        totalMeters += manhattanMeters(a, b);
-        paths.push(lPath(a, b));
-      }
-      const segment: WalkRouteSegment = {
-        distanceMeters: totalMeters,
-        durationSeconds: (totalMeters / SPEED_M_PER_MIN) * 60,
-        geometry: concatPaths(paths),
-        source: 'pack',
-      };
-      return segment;
+      return routeSegmentFor(req.waypoints);
     },
+
+    ...(options.alternatives
+      ? {
+          async routeAlternatives(req: { waypoints: WalkLatLng[] }) {
+            const [a, b] = req.waypoints;
+            if (!a || !b || req.waypoints.length !== 2) {
+              return [routeSegmentFor(req.waypoints)];
+            }
+            // Островность проверяется тем же route: упал — альтернатив нет,
+            // деградация честная (наверх бросает — движок откатится на route,
+            // который бросит тот же NO_ROUTE).
+            const primary = routeSegmentFor([a, b]);
+            const mirror = routeSegmentFor([a, [b[0], a[1]], b]);
+            return [primary, mirror];
+          },
+        }
+      : {}),
 
     async matrix(sources, targets) {
       const cells: WalkMatrixCell[] = [];

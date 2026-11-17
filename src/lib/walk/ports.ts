@@ -32,6 +32,14 @@ import type { WalkLatLng } from './types';
 export interface WalkRoutingPort {
   /** Маршрут по списку точек. Бросает, если маршрут не построился. */
   route(req: { waypoints: WalkLatLng[] }): Promise<WalkRouteSegment>;
+  /**
+   * До трёх непересекающихся маршрутов по тем же двум вейпоинтам, основной
+   * первым (docs/walk-loop-quality.md R3). Опциональный метод: порт без него
+   * просто не получает альтернатив — движок идёт основным маршрутом.
+   * Реализации обязаны деградировать честно («альтернатив нет» — основной
+   * маршрут), а не бросать NO_ROUTE на отказе альтернативных.
+   */
+  routeAlternatives?(req: { waypoints: WalkLatLng[] }): Promise<WalkRouteSegment[]>;
   /** Плоская матрица ячеек size(sources)×size(targets). */
   matrix(sources: WalkLatLng[], targets: WalkLatLng[]): Promise<WalkMatrixCell[]>;
 }
