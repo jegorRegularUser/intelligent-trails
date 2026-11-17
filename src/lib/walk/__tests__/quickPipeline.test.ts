@@ -4,7 +4,16 @@
 // (collectCandidates) на фейк-провайдере.
 
 import { describe, expect, it } from 'vitest';
-import { collectCandidates, mergeScoreReasons, scoreCandidatePool, searchRadiusMeters } from '../quickPipeline';
+import {
+  collectCandidates,
+  diversifyByAzimuth,
+  mergeScoreReasons,
+  scoreCandidatePool,
+  searchRadiusMeters,
+  SECTOR_CAP,
+} from '../quickPipeline';
+import { candidateScore, PROXIMITY_WEIGHT } from '../selection';
+import { minimalLoopZoneMeters } from '../createWalkPlan';
 import type { GeoPlace, GeoProvider } from '@/lib/geo';
 import type { AdjustedProfile } from '@/lib/vibes/combine';
 import type { WalkScoreReasons } from '@/components/walk/types';
@@ -140,5 +149,76 @@ describe('quickPipeline: гейт «работает сейчас» (отсев 
     ];
     const scored = scoreCandidatePool({ pool, profile: PROFILE, weather: null, timezone: 'UTC', now: NOW });
     expect(scored).toHaveLength(15);
+  });
+});
+
+describe('quickPipeline: азимутная диверсификация (R2)', () => {
+  const START: [number, number] = [55.75, 37.62];
+  const EARTH_M_PER_DEG = 111194.9;
+  /** Точка на азимуте от севера (clockwise) на дистанции d метров. */
+  function atAzimuth(azimuthDeg: number, d: number): [number, number] {
+    const rad = (azimuthDeg * Math.PI) / 180;
+    return [
+      START[0] + (d * Math.cos(rad)) / EARTH_M_PER_DEG,
+      START[1] + (d * Math.sin(rad)) / (EARTH_M_PER_DEG * Math.cos(START[0] * (Math.PI / 180))),
+    ];
+  }
+  const entry = (id: string, coordinates: [number, number]) => ({ id, coordinates });
+
+  it('пул «20 лучших в одном секторе, 8 в других» → шорт-лист содержит ≥2 сектора', () => {
+    // 20 кандидатов строго на север (сектор 0), 8 — на другие румбы.
+    const entries = [
+      ...Array.from({ length: 20 }, (_, i) => entry(`north${i}`, atAzimuth(5, 200 + i * 50))),
+      entry('east', atAzimuth(95, 400)),
+      entry('south', atAzimuth(185, 400)),
+      entry('west', atAzimuth(275, 400)),
+      entry('ne', atAzimuth(50, 400)),
+      entry('se', atAzimuth(140, 400)),
+      entry('sw', atAzimuth(230, 400)),
+      entry('nw', atAzimuth(320, 400)),
+    ];
+    const shortlist = diversifyByAzimuth(entries, START, 24);
+
+    expect(shortlist.length).toBeGreaterThan(0);
+    // Сектор 0 не съел весь cap: SECTOR_CAP из севера + остальные румбы.
+    const northCount = shortlist.filter((e) => e.id.startsWith('north')).length;
+    expect(northCount).toBeLessThanOrEqual(SECTOR_CAP);
+    const sectors = new Set(
+      shortlist
+        .filter((e) => !e.id.startsWith('north'))
+        .map((e) => e.id),
+    );
+    expect(sectors.size).toBeGreaterThanOrEqual(2);
+    // Густой сектор сохраняет представительство, но не доминирует.
+    expect(northCount).toBeGreaterThanOrEqual(2);
+  });
+
+  it('потолок на сектор: 30 кандидатов одного азимута → ровно SECTOR_CAP', () => {
+    const entries = Array.from({ length: 30 }, (_, i) => entry(`n${i}`, atAzimuth(10, 100 + i * 20)));
+    const shortlist = diversifyByAzimuth(entries, START, 24);
+    expect(shortlist).toHaveLength(SECTOR_CAP);
+  });
+
+  it('пул меньше cap — возвращается как есть (порядок сохранён)', () => {
+    const entries = [entry('a', atAzimuth(10, 100)), entry('b', atAzimuth(100, 100))];
+    const shortlist = diversifyByAzimuth(entries, START, 24);
+    expect(shortlist.map((e) => e.id)).toEqual(['a', 'b']);
+  });
+});
+
+describe('selection: вес близости (R2)', () => {
+  it('дальний якорь с высоким весом больше не проигрывает ближнему с низким', () => {
+    // Зона 900 м: ближний (вес 1) против дальнего (вес 3) — при весе близости
+    // 1.0 дальний проигрывал (6 − 0.55 < 2), при 0.25 — выигрывает.
+    const near = candidateScore(1, 0, 100, 900);
+    const far = candidateScore(3, 0, 800, 900);
+    expect(far).toBeGreaterThan(near);
+    expect(PROXIMITY_WEIGHT).toBe(0.25);
+  });
+
+  it('минимальная зона вариантов — самый узкий радиус ZONE_VARIANTS', () => {
+    // 0.6·v·B/делитель: для B=60 делитель 3.8 даёт ≈ 710 м.
+    expect(minimalLoopZoneMeters(60)).toBeCloseTo(710.5, 0);
+    expect(minimalLoopZoneMeters(60)).toBeLessThan(minimalLoopZoneMeters(60, 6));
   });
 });

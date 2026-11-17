@@ -14,7 +14,7 @@ import { evaluateOpeningHoursDetailed } from '@/lib/places/hours';
 import { PLACE_CATEGORIES } from '@/constants/categories';
 import type { WalkScoreReasons } from '@/components/walk/types';
 import { DEFAULT_WALKING_SPEED_KMH } from './types';
-import { zoneMetersForBudget } from './internal/geo';
+import { zoneMetersForBudget, localProjection } from './internal/geo';
 
 /** Границы бюджета главного сценария — едины для сборки и замены. */
 export const MIN_BUDGET = 15;
@@ -31,6 +31,62 @@ export const DEFAULT_TIMEZONE = 'Europe/Moscow';
 export const ENGINE_CANDIDATE_CAP = 24;
 /** Сколько лучших кандидатов уходит в локальную замену остановки. */
 export const REPLACE_CANDIDATE_CAP = 12;
+
+/**
+ * Потолок кандидатов одного азимутного сектора в шорт-листе (R2): без него
+ * весь cap съедает один густой сектор (у парка, вдоль одной улицы) — варианты
+ * листают «одну и ту же прогулку по одной улице». 6 из 24 — густой сектор
+ * сохраняет представительство, но не доминирует.
+ */
+export const SECTOR_CAP = 6;
+/** Число азимутных секторов вокруг старта (Роза 45°: 8 секторов покрывают круг). */
+const AZIMUTH_SECTOR_COUNT = 8;
+
+/**
+ * Азимутная диверсификация шорт-листа (R2): кандидаты уже в скор-порядке;
+ * нарезка идёт раунд-робином по 8 секторам азимута (equirect-проекция вокруг
+ * старта, internal/geo.localProjection — не конус по сырым градусам), с
+ * потолком SECTOR_CAP на сектор. Порядок внутри сектора — скор-порядок входа,
+ * результат детерминирован. Чистая функция — вход presume-отфильтрован
+ * вызывающей стороной (например, минимальной зоной вариантов).
+ */
+export function diversifyByAzimuth<T extends { coordinates: [number, number] }>(
+  entries: T[],
+  start: [number, number],
+  cap: number,
+  sectorCount = AZIMUTH_SECTOR_COUNT,
+): T[] {
+  if (entries.length <= cap) return entries.slice();
+  const proj = localProjection(start);
+  const twoPi = Math.PI * 2;
+  const sectorWidth = twoPi / sectorCount;
+  // Сектора: азимут от севера по часовой (восток = 90°), как в розах ветров.
+  const bySector: T[][] = Array.from({ length: sectorCount }, () => []);
+  for (const entry of entries) {
+    const { x, y } = proj.toMeters(entry.coordinates);
+    // atan2(восток, север) — азимут от севера по часовой; отрицательные
+    // (запад/юг) нормируем в [0, 2π).
+    const azimuth = (Math.atan2(x, y) + twoPi) % twoPi;
+    const sector = Math.min(sectorCount - 1, Math.floor(azimuth / sectorWidth));
+    if (bySector[sector].length < SECTOR_CAP) bySector[sector].push(entry);
+  }
+  // Раунд-робин по секторам в порядке 0..N-1: густой сектор не съедает cap.
+  const out: T[] = [];
+  let cursor = 0;
+  while (out.length < cap) {
+    let advanced = false;
+    for (let sector = 0; sector < sectorCount && out.length < cap; sector++) {
+      const bucket = bySector[sector];
+      if (cursor < bucket.length) {
+        out.push(bucket[cursor]);
+        advanced = true;
+      }
+    }
+    if (!advanced) break; // все сектора исчерпаны
+    cursor += 1;
+  }
+  return out;
+}
 
 /** Доля бюджета под радиус поиска POI: остальное — ходьба туда-обратно и стоянки. */
 const SEARCH_RADIUS_WALK_SHARE = 0.4;
@@ -77,6 +133,15 @@ export interface CollectCandidatesOptions {
 }
 
 /**
+ * Лимит выдачи на категорию (R2): 20 вместо 12 — воронка с диверсификацией
+ * по 8 секторам и потолком 6 на сектор требует сырья; 12 мест в густом
+ * секторе целиком уходили в один-два сектора. Вместе с лимитом растут и
+ * пороги эскалации Overpass (overpass-places), иначе эскалация остановится
+ * на 8–12 и лимит будет no-op.
+ */
+const OVERPASS_LIMIT_PER_CATEGORY = 20;
+
+/**
  * Поиск кандидатов по всем категориям профиля (вес > 0). Категории ходят
  * батчами с паузами, упавшие — один мгновенный ретрай: Overpass режет
  * параллельные серии по rate-лимиту, и без ретрая пул каждый раз разный.
@@ -99,7 +164,7 @@ export async function collectCandidates(
     .filter((c) => c in PLACE_CATEGORIES);
 
   const search = (category: string, radiusMeters: number) =>
-    provider.searchPlaces(start, category, { radiusMeters, limit: 12 });
+    provider.searchPlaces(start, category, { radiusMeters, limit: OVERPASS_LIMIT_PER_CATEGORY });
 
   // 1. Батчи по 3 категории с паузами.
   const settled = new Map<string, PromiseSettledResult<GeoPlace[]>>();

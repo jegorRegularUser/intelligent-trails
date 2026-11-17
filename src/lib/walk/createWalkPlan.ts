@@ -39,7 +39,7 @@ import {
 import { isFiniteLatLng, errMessage, validateWalkCore } from './internal/geo-utils';
 import { resolveStayMinutes } from './internal/stay';
 import { mulberry32 } from './internal/rng';
-import { selectCandidates, type SelectionResult } from './selection';
+import { candidateScore, selectCandidates, type SelectionResult } from './selection';
 import { solveWalkOrder, ringCost } from './ordering';
 import { evaluateGates, SAME_STREET_CORRIDOR_M, SAME_STREET_OVERLAP_THRESHOLD } from './gates';
 import { buildAnchorReason, buildAnchorReasonEn } from './reasons';
@@ -691,6 +691,20 @@ function maxStopsForBudget(budget: number): number {
   return 8;
 }
 
+/**
+ * Минимальная зона вариантов петли (R2): самый узкий радиус из ZONE_VARIANTS.
+ * Экшен режет пул диверсификации этой зоной — иначе сектора зальют шорт-лист
+ * кандидатами, которых узкий вариант отсечёт по зоне (selection.ts), и он
+ * умрёт NO_CANDIDATES. Экспортируется для actions/quickWalk.
+ */
+export function minimalLoopZoneMeters(
+  budgetMinutes: number,
+  speedKmh: number = DEFAULT_WALKING_SPEED_KMH,
+): number {
+  const maxDivider = Math.max(...ZONE_VARIANTS.map((v) => v.radiusDivider));
+  return zoneMetersForBudget(budgetMinutes, speedKmh, LOOP_WALK_SHARE, maxDivider);
+}
+
 async function buildPlanForVariant(
   input: WalkInput,
   ports: WalkRoutingPort,
@@ -729,7 +743,9 @@ async function buildPlanForVariant(
     if (!(prox <= zoneMeters)) continue; // зона варианта
     const w = variant.weightOf(place.category);
     if (!(w > 0)) continue;
-    scored.push({ bi, prox, score: 2 * w + (place.rating ?? 0) / 5 - prox / normDenom });
+    // Вариантный скор — та же формула, что у базового отбора (R2):
+    // единая candidateScore, иначе отбор и вариант разъедутся.
+    scored.push({ bi, prox, score: candidateScore(w, place.rating ?? 0, prox, normDenom) });
   }
   scored.sort((a, b) => b.score - a.score); // стабильная сортировка (детерминизм)
   if (isLoop && scored.length === 0) {

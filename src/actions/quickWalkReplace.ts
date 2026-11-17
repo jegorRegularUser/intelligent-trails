@@ -13,6 +13,7 @@ import { DEFAULT_WALKING_SPEED_KMH } from '@/lib/walk/types';
 import {
   buildScoreReasonsMap,
   collectCandidates,
+  diversifyByAzimuth,
   mergeScoreReasons,
   scoreCandidatePool,
   DEFAULT_TIMEZONE,
@@ -173,8 +174,15 @@ export async function replaceQuickStop(input: QuickWalkReplaceInput): Promise<Qu
         : 'Рядом не нашлось интересных мест — попробуйте пересобрать прогулку',
     };
   }
-  const shortlist = scoreCandidatePool({ pool, profile, weather, hour, timezone: timeZone, now, excludeIds })
-    .slice(0, REPLACE_CANDIDATE_CAP);
+  // Воронка R2: пул замены диверсифицируется по азимуту так же, как шорт-лист
+  // сборки — «другое такое же» не должно лежать в одном секторе с текущим.
+  const shortlist = diversifyByAzimuth(
+    scoreCandidatePool({ pool, profile, weather, hour, timezone: timeZone, now, excludeIds }).map(
+      (entry) => ({ entry, coordinates: entry.place.coordinates }),
+    ),
+    start,
+    REPLACE_CANDIDATE_CAP,
+  ).map((item) => item.entry);
   if (shortlist.length === 0) {
     return { ok: false, error: 'Кандидатов на замену не нашлось — попробуйте пересобрать прогулку' };
   }

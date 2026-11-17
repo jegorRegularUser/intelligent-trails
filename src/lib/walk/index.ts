@@ -2,7 +2,7 @@
 // Публичный API движка прогулок (docs/walk-engine.md).
 // Никакого UI и сети: createWalkPlan(input, ports) → план или честный отказ.
 
-export { createWalkPlan, isUnderfloor } from './createWalkPlan';
+export { createWalkPlan, isUnderfloor, minimalLoopZoneMeters } from './createWalkPlan';
 export { replaceStopInPlan } from './replaceStop';
 export { buildWalkWithFallback } from './fallback';
 export { buildLoopThroughCandidates } from './loopThrough';

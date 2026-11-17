@@ -10,6 +10,30 @@
 import type { WalkLatLng, WalkPlace } from './types';
 import { haversineMeters, localProjection, pointToSegmentMeters } from './internal/geo';
 
+/**
+ * Вес близости в скоринге кандидатов (docs/walk-loop-quality.md R2): раньше
+ * член −proximity/zone имел вес 1.0 и ДОМИНИРОВАЛ — воронка отбирала
+ * «ближайшее подряд», а не ценное. 0.25 оставляет близости голос, но дальний
+ * якорь с высоким весом категории больше не проигрывает соседнему с низким.
+ * Единая формула для двух call-site (базовый отбор и вариантный скор
+ * createWalkPlan) — иначе базовый отбор и вариант разъедутся.
+ */
+export const PROXIMITY_WEIGHT = 0.25;
+
+/**
+ * Скор кандидата зоны прогулки: 2·вес категории + рейтинг/5 −
+ * PROXIMITY_WEIGHT·нормированная близость. Чистая функция — общая для
+ * selectCandidates и вариантного отбора движка.
+ */
+export function candidateScore(
+  weight: number,
+  rating: number,
+  proximity: number,
+  zone: number,
+): number {
+  return 2 * weight + rating / 5 - PROXIMITY_WEIGHT * (proximity / Math.max(zone, 1));
+}
+
 export interface SelectionParams {
   start: WalkLatLng;
   end?: WalkLatLng;
@@ -54,11 +78,10 @@ export function selectCandidates(params: SelectionParams): SelectionResult {
     if (!(weight > 0)) continue; // 0, отрицательный или NaN — категория не нужна
     const proximity = proximityOf(place);
     if (!(proximity <= zoneMeters)) continue;
-    const normalized = proximity / Math.max(zoneMeters, 1);
     scored.push({
       place,
       proximityMeters: proximity,
-      score: 2 * weight + (place.rating ?? 0) / 5 - normalized,
+      score: candidateScore(weight, place.rating ?? 0, proximity, zoneMeters),
     });
   }
 

@@ -10,18 +10,25 @@ import { fetchWeatherContext } from '@/lib/weather';
 import { getArchetype } from '@/lib/vibes/archetypes';
 import { combineContext, seasonalStayMinutes } from '@/lib/vibes/combine';
 import { userLocalHour, userLocalMonth } from '@/lib/vibes/localHour';
-import { createWalkPlan, buildWalkWithFallback, isUnderfloor } from '@/lib/walk';
+import {
+  createWalkPlan,
+  buildWalkWithFallback,
+  isUnderfloor,
+  minimalLoopZoneMeters,
+} from '@/lib/walk';
 import { enginePlansToUiPlans } from '@/lib/walk/uiAdapter';
 import {
   buildScoreReasonsMap,
   collectCandidates,
   scoreCandidatePool,
+  diversifyByAzimuth,
   DEFAULT_TIMEZONE,
   ENGINE_CANDIDATE_CAP,
   MAX_BUDGET,
   MIN_BUDGET,
   SECOND_WAVE_MULTIPLIER,
 } from '@/lib/walk/quickPipeline';
+import { haversineMeters } from '@/lib/walk/internal/geo';
 import type { VibeId } from '@/components/walk/logic';
 import type { WalkPlan as UiWalkPlan } from '@/components/walk/types';
 import type { WalkPlan as EnginePlan } from '@/lib/walk/types';
@@ -142,7 +149,24 @@ export async function buildQuickWalk(input: QuickWalkInput): Promise<QuickWalkRe
     if (scored.length === 0) {
       return { ok: false, error: 'Все найденные места вы исключили — попробуйте пересобрать прогулку' };
     }
-    const shortlist = scored.slice(0, ENGINE_CANDIDATE_CAP);
+    // Воронка R2: сектора азимута отбираются по кандидатам минимальной зоны
+    // вариантов — иначе сектора зальют шорт-лист теми, кого узкий вариант
+    // отсечёт по зоне, и он умрёт NO_CANDIDATES. Разреженный пул (спальный
+    // район) добирается внешними кандидатами по скору: ядро узкого варианта
+    // уже набрано, широкий вариант получает свой радиус.
+    const minZone = minimalLoopZoneMeters(input.budgetMinutes);
+    const withCoords = scored.map((entry) => ({ entry, coordinates: entry.place.coordinates }));
+    const core = diversifyByAzimuth(
+      withCoords.filter((item) => haversineMeters(start, item.coordinates) <= minZone),
+      start,
+      ENGINE_CANDIDATE_CAP,
+    ).map((item) => item.entry);
+    let shortlist = core;
+    if (core.length < ENGINE_CANDIDATE_CAP) {
+      const takenIds = new Set(core.map((entry) => `${entry.place.id}`));
+      shortlist = [...core, ...scored.filter((entry) => !takenIds.has(`${entry.place.id}`))]
+        .slice(0, ENGINE_CANDIDATE_CAP);
+    }
     const candidates = shortlist.map((entry) => entry.place);
     const planResult = await createWalkPlan({ ...engineInputBase, candidates }, routingPort);
 

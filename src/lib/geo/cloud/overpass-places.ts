@@ -14,10 +14,22 @@ import { roundPoint } from '../cache';
 
 /** Дефолтный потолок выдачи, если opts.limit не задан. */
 const DEFAULT_LIMIT = 50;
-/** Стоп эскалации радиуса внутри одной точки поиска. */
+/** Абсолютный минимум результатов для остановки эскалации (при любом лимите). */
 const MIN_RESULTS_PER_CENTER = 8;
-/** Стоп коридорного поиска. */
 const MIN_RESULTS_TOTAL = 12;
+/** Пороги эскалации — доли запрошенного лимита (R2): при limit 20 старые
+ *  константы 8/12 останавливали эскалацию на 8–12 результатах и делали
+ *  подъём лимита no-op. Доли подобраны так, что при прежнем limit 12 пороги
+ *  сходятся к прежним числам (8 и 12). */
+const PER_CENTER_LIMIT_SHARE = 2 / 3;
+const TOTAL_LIMIT_SHARE = 1;
+
+function escalationStops(limit: number): { perCenter: number; total: number } {
+  return {
+    perCenter: Math.min(limit, Math.max(MIN_RESULTS_PER_CENTER, Math.ceil(limit * PER_CENTER_LIMIT_SHARE))),
+    total: Math.min(limit, Math.max(MIN_RESULTS_TOTAL, Math.ceil(limit * TOTAL_LIMIT_SHARE))),
+  };
+}
 
 export interface OverpassAdapterOptions {
   mirrors: readonly string[];
@@ -185,6 +197,7 @@ export class OverpassPlacesAdapter {
     }
 
     const limit = opts?.limit ?? DEFAULT_LIMIT;
+    const stops = escalationStops(limit);
     const radiuses: readonly number[] =
       opts?.radiusMeters !== undefined ? [opts.radiusMeters] : categoryConfig.radiuses;
     // В апстрим уходят округлённые до 5 знаков координаты — как в ключах кэша.
@@ -210,9 +223,9 @@ export class OverpassPlacesAdapter {
           break outer;
         }
         mergePlaces(places, mapElements(elements, category, searchCenter, radius), seenIds, seenNames);
-        if (places.length >= Math.min(limit, MIN_RESULTS_PER_CENTER)) break;
+        if (places.length >= stops.perCenter) break;
       }
-      if (places.length >= Math.min(limit, MIN_RESULTS_TOTAL)) break outer;
+      if (places.length >= stops.total) break outer;
     }
 
     if (places.length === 0 && lastError) throw lastError;
