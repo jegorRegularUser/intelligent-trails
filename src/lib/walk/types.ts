@@ -36,6 +36,13 @@ export interface WalkInput {
   categoryStayMinutes?: Record<string, number>;
   /** Потолок остановок одной категории в плане; нет записи — DEFAULT_CATEGORY_LIMIT. */
   categoryLimits?: Record<string, number>;
+  /**
+   * Фичи улиц (S4/S5): микро-стопы на ногах и интерес-тайбрейкер альтернатив.
+   * Данных нет → поле undefined, НЕ пустой массив (снапшот деградации бит-в-бит).
+   */
+  streetFeatures?: WalkStreetFeature[];
+  /** Интерес-подсказки секторов (S2→S3): питают снап петли L3 через fallback. */
+  streetHints?: WalkStreetHints;
 }
 
 /** Остановка-якорь. */
@@ -61,6 +68,10 @@ export interface WalkLeg {
    *  — выбор движка среди вариантов порта (docs/walk-loop-quality.md R3.c).
    *  Не гейт-отчёт: факт маршрута, гейты считаются по геометрии как обычно. */
   routeVariant?: 'alt';
+  /** Микро-стопы «по пути» (S4): ≤2 на ногу; их минуты уже внутри
+   *  durationMinutes — totals и гейты честны. Не переживают replace
+   *  (пересобранные ноги) и шеринг — задокументированная деградация. */
+  microNotes?: WalkMicroNote[];
 }
 
 export type WalkGateName =
@@ -205,4 +216,17 @@ export interface WalkStreetHints {
   /** Длина SECTOR_COUNT, индекс = сектор розы (не азимут точки). */
   sectors: WalkSectorHint[];
   hasData: boolean;
+}
+
+/** Классы, из которых цепляются микро-стопы «по пути» (S4). */
+export type WalkMicroKind = 'viewpoint' | 'art' | 'water';
+
+/** Микро-стоп на ноге: имя, класс, зачем остановиться (S4). */
+export interface WalkMicroNote {
+  name: string;
+  kind: WalkMicroKind;
+  /** Зачем остановиться — по-русски, из фактов выбора (§9), как у якорей. */
+  reason: string;
+  /** Английский твин причины — для en-локали карточки. */
+  reasonEn?: string;
 }

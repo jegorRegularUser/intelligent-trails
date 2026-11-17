@@ -38,6 +38,7 @@ import {
   zoneMetersForBudget,
 } from './internal/geo';
 import { isFiniteLatLng, errMessage, validateWalkCore } from './internal/geo-utils';
+import { attachMicroNotes } from './internal/microStops';
 import { resolveStayMinutes } from './internal/stay';
 import { mulberry32 } from './internal/rng';
 import { candidateScore, selectCandidates, type SelectionResult } from './selection';
@@ -981,6 +982,17 @@ async function buildPlanForVariant(
     });
     const finalSequence = filled.sequence;
     legs = filled.legs;
+
+    // Микро-стопы «по пути» (S4/B2): минуты цепляются к ногам ДО итогов и
+    // гейтов — кап держит total в потолке 1.1·B, walk_share не перевирается.
+    attachMicroNotes({
+      legs,
+      features: input.streetFeatures,
+      budgetMinutes: budget,
+      currentTotalMinutes:
+        legs.reduce((sum, leg) => sum + leg.durationMinutes, 0) +
+        finalSequence.reduce((sum, bi) => sum + (stayOf.get(bi) ?? 0), 0),
+    });
 
     // 7. Итоги и скор (§10).
     const stops: WalkStop[] = finalSequence.map((bi) => ({

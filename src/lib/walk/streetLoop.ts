@@ -20,7 +20,7 @@
 // с геометрическими вейпоинтами. План с ≥2 снапнутыми секторами несёт
 // streetInterest: true вместо метки loop-only.
 
-import type { WalkFailure, WalkLatLng, WalkLeg, WalkPlan, WalkStreetHints } from './types';
+import type { WalkFailure, WalkLatLng, WalkLeg, WalkPlan, WalkStreetFeature, WalkStreetHints } from './types';
 import { DEFAULT_WALKING_SPEED_KMH, SECTOR_COUNT } from './types';
 import type { WalkRouteSegment, WalkRoutingPort } from './ports';
 import {
@@ -31,6 +31,7 @@ import {
   splitRouteMetrics,
 } from './internal/geo';
 import { errMessage, validateWalkCore } from './internal/geo-utils';
+import { attachMicroNotes } from './internal/microStops';
 import { mulberry32 } from './internal/rng';
 import { evaluateGates, maxStreetOverlap, SAME_STREET_OVERLAP_THRESHOLD } from './gates';
 
@@ -85,6 +86,8 @@ export interface StreetLoopInput {
    * геометрическая роза бит-в-бит (поля undefined, не пустые массивы).
    */
   streetHints?: WalkStreetHints;
+  /** Фичи улиц (S4): микро-стопы «по пути» на ногах петли. */
+  streetFeatures?: WalkStreetFeature[];
   ports: WalkRoutingPort;
 }
 
@@ -354,7 +357,14 @@ export async function buildStreetLoop(input: StreetLoopInput): Promise<StreetLoo
     }
     if (broken) continue;
 
-    const plan = assemblePlan(input.start, segment, built.points, budget, built.snappedIndices.length);
+    const plan = assemblePlan(
+      input.start,
+      segment,
+      built.points,
+      budget,
+      built.snappedIndices.length,
+      input.streetFeatures,
+    );
     const overlap = maxStreetOverlap(plan.legs.map((leg) => leg.geometry));
     if (overlap <= SAME_STREET_OVERLAP_THRESHOLD) {
       // Первый вариант с чистой петлёй закрывает задачу — порядок вариантов
@@ -398,6 +408,7 @@ function assemblePlan(
   waypoints: WalkLatLng[],
   budgetMinutes: number,
   snappedCount: number,
+  streetFeatures?: WalkStreetFeature[],
 ): WalkPlan {
   const path: WalkLatLng[] = [start, ...waypoints, start];
   const segments = splitPolylineByWaypoints(segment.geometry ?? [], waypoints);
@@ -409,6 +420,15 @@ function assemblePlan(
     durationMinutes: metrics[i].durationMinutes,
     geometry: segments[i],
   }));
+
+  // Микро-стопы (S4/B2) — минуты ДО гейтов: attach добавляет их в ноги,
+  // totals пересчитываются после — total и legDurations согласованы.
+  attachMicroNotes({
+    legs,
+    features: streetFeatures,
+    budgetMinutes,
+    currentTotalMinutes: legs.reduce((sum, leg) => sum + leg.durationMinutes, 0),
+  });
 
   const totalWalkMinutes = legs.reduce((sum, leg) => sum + leg.durationMinutes, 0);
   // Гейты считаются честно против реального бюджета: при пустых якорях

@@ -164,6 +164,33 @@ describe('uiAdapter: деградационные планы', () => {
   });
 });
 
+describe('uiAdapter: microNotes (S4 волны «Улицы с характером»)', () => {
+  it('микро-стопы едут в ноги карточки, причина по локали (reasonEn у en), минуты уже в walkMin', () => {
+    const leg: WalkLeg = {
+      ...makeEnginePlan().legs[0],
+      durationMinutes: 14, // 12 ходьба + 2 микро
+      microNotes: [
+        { name: 'Мариинская панорама', kind: 'viewpoint', reason: 'Смотровая площадка по пути', reasonEn: 'A viewpoint right on the way' },
+        { name: 'Фонтан', kind: 'art', reason: 'Арт-объект по пути' },
+      ],
+    };
+    const engine = makeEnginePlan({ legs: [leg, ...makeEnginePlan().legs.slice(1)] });
+    const ru = enginePlanToUiPlan(engine, 60);
+    expect(ru.legs[0].microNotes).toEqual([
+      { name: 'Мариинская панорама', kind: 'viewpoint', reason: 'Смотровая площадка по пути' },
+      { name: 'Фонтан', kind: 'art', reason: 'Арт-объект по пути' },
+    ]);
+    const en = enginePlanToUiPlan(engine, 60, 'en');
+    expect(en.legs[0].microNotes?.[0].reason).toBe('A viewpoint right on the way');
+    expect(en.legs[0].microNotes?.[1].reason).toBe('Арт-объект по пути'); // нет reasonEn → ru-фолбэк
+    // Totals пересчитаны из ног: микро-минуты внутри walkMin честно
+    // (leg[0] заменён: 10 ходьбы + 2 микро = 14 вместо 10 → +4).
+    expect(ru.totals.walkMin).toBe(34);
+    // Ноги без микро-стопов поле не несут (старые планы деградируют честно).
+    expect(ru.legs[1].microNotes).toBeUndefined();
+  });
+});
+
 describe('uiAdapter: gatesSummary (честность в UI, R5)', () => {
   it('отчёты гейтов едут в карточку как есть: имя, pass, detail', () => {
     const gates: GateReport[] = [

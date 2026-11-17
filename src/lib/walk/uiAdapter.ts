@@ -26,6 +26,11 @@ declare module '@/components/walk/types' {
     /** Человекочитаемая заметка streetInterest параллельными ru/en (как degradedNote). */
     streetInterestNote?: { ru: string; en: string };
   }
+  interface WalkLeg {
+    /** Микро-стопы «по пути» (S4 волны «Улицы с характером»): имя, класс и
+     *  причина в локали карточки; минуты уже внутри walkMin ноги. */
+    microNotes?: { name: string; kind: 'viewpoint' | 'art' | 'water'; reason: string }[];
+  }
 }
 
 /**
@@ -163,6 +168,17 @@ export function enginePlanToUiPlan(
   const legs = engine.legs.map((leg) => ({
     walkMin: Math.round(leg.durationMinutes),
     ...(leg.geometry.length > 0 ? { geometry: leg.geometry } : {}),
+    // Микро-стопы «по пути» (S4): причина выбирается локалью карточки
+    // (reason/reasonEn, как у якорных причин), минуты уже в walkMin.
+    ...(leg.microNotes?.length
+      ? {
+          microNotes: leg.microNotes.map((note) => ({
+            name: note.name,
+            kind: note.kind,
+            reason: locale === 'en' ? (note.reasonEn ?? note.reason) : note.reason,
+          })),
+        }
+      : {}),
   }));
 
   const walkMin = legs.reduce((sum, l) => sum + l.walkMin, 0);

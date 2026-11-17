@@ -256,6 +256,41 @@ export function closestPointOnPolyline(p: WalkLatLng, polyline: WalkLatLng[]): C
   return best!;
 }
 
+/** Прямоугольник в градусах: [south, west, north, east] — префильтр фич (S4/S5). */
+export interface BBox {
+  south: number;
+  west: number;
+  north: number;
+  east: number;
+}
+
+/**
+ * bbox полилинии, раздутый на inflateM метров (широта/долгота по центру bbox —
+ * консервативно для городских дистанций). Пустая полилиния → вырожденный
+ * нулевой bbox: с реальными bbox не пересечётся, звонящие фильтруют пустые.
+ */
+export function bboxOf(points: WalkLatLng[], inflateM: number): BBox {
+  let south = Number.POSITIVE_INFINITY;
+  let west = Number.POSITIVE_INFINITY;
+  let north = Number.NEGATIVE_INFINITY;
+  let east = Number.NEGATIVE_INFINITY;
+  for (const [lat, lng] of points) {
+    if (lat < south) south = lat;
+    if (lat > north) north = lat;
+    if (lng < west) west = lng;
+    if (lng > east) east = lng;
+  }
+  if (!Number.isFinite(south)) return { south: 0, west: 0, north: 0, east: 0 };
+  const rad = Math.PI / 180;
+  const dLat = inflateM / (EARTH_RADIUS_M * rad);
+  const dLng = inflateM / (EARTH_RADIUS_M * rad * Math.cos(((south + north) / 2) * rad));
+  return { south: south - dLat, west: west - dLng, north: north + dLat, east: east + dLng };
+}
+
+/** Пересечение bbox'ов (касание считается пересечением — буферы уже учтены). */
+export function bboxIntersects(a: BBox, b: BBox): boolean {
+  return a.south <= b.north && b.south <= a.north && a.west <= b.east && b.west <= a.east;
+}
 /**
  * Равномерная прореживание полилинии по длине до maxPoints точек.
  * Нужно гейту «та же улица»: полилинии роутинга идут плотно в поворотах,
